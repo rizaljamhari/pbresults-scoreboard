@@ -1,0 +1,30 @@
+[
+  {
+    "id": "team-46efa31e-c89f-4264-b514-ee61a3aaa51e",
+    "canonicalName": "Alpha",
+    "shortName": "Alpha",
+    "aliases": [
+      "Alpha"
+    ],
+    "logoAssetId": "asset-522bb3d9-38c2-4dfc-a85b-4a5922f6f41d",
+    "alternateLogoAssetId": null,
+    "notes": "",
+    "active": true,
+    "createdAt": "2026-05-16T15:30:50.510Z",
+    "updatedAt": "2026-05-16T16:13:46.191Z"
+  },
+  {
+    "id": "team-782a68ff-5dcf-4ee1-be9b-4a1ce1b8831c",
+    "canonicalName": "Skuad Budak Jahat",
+    "shortName": "SBJ",
+    "aliases": [
+      "SBJ"
+    ],
+    "logoAssetId": "asset-cf59834b-f8c3-4505-b004-fedfe335503f",
+    "alternateLogoAssetId": null,
+    "notes": "",
+    "active": true,
+    "createdAt": "2026-05-16T15:24:18.539Z",
+    "updatedAt": "2026-05-16T15:25:23.549Z"
+  }
+]
