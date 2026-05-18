@@ -57,8 +57,22 @@ async function buildProject() {
   run("pnpm.cmd", ["build"]);
 }
 
-async function deployProductionApp() {
-  run("pnpm.cmd", ["--filter", ".", "deploy", "--legacy", "--prod", appDir]);
+async function stageProductionApp() {
+  await fs.mkdir(appDir, { recursive: true });
+  await fs.copyFile(path.join(projectDir, "package.json"), path.join(appDir, "package.json"));
+  await fs.copyFile(path.join(projectDir, "pnpm-lock.yaml"), path.join(appDir, "pnpm-lock.yaml"));
+
+  run(
+    "pnpm.cmd",
+    [
+      "install",
+      "--prod",
+      "--frozen-lockfile",
+      "--config.node-linker=hoisted",
+      "--config.package-import-method=copy"
+    ],
+    { cwd: appDir }
+  );
 }
 
 async function copyBuiltArtifacts() {
@@ -90,6 +104,7 @@ async function pruneDeployedApp() {
     "SETUP.md",
     "data",
     "index.html",
+    "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "run.bat",
     "run.command",
@@ -247,7 +262,7 @@ async function main() {
   await ensureWindowsHost();
   await cleanReleaseDir();
   await buildProject();
-  await deployProductionApp();
+  await stageProductionApp();
   await copyBuiltArtifacts();
   await pruneDeployedApp();
   await installBundledNodeRuntime();
