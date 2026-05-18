@@ -1,6 +1,4 @@
 import path from "node:path";
-import { removeBackground } from "@imgly/background-removal-node";
-import sharp from "sharp";
 
 const supportedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const mimeAliases: Record<string, string> = {
@@ -13,16 +11,29 @@ export type BackgroundRemovalResult =
   | { status: "skipped"; reason: string }
   | { status: "failed"; reason: string };
 
+type SharpModule = typeof import("sharp");
+type SharpFactory = SharpModule;
+
+async function loadSharp(): Promise<SharpFactory> {
+  const module = await import("sharp");
+  return ("default" in module ? module.default : module) as SharpFactory;
+}
+
+async function loadRemoveBackground(): Promise<typeof import("@imgly/background-removal-node")["removeBackground"]> {
+  const module = await import("@imgly/background-removal-node");
+  return module.removeBackground;
+}
+
 function outputNameWithPng(originalName: string): string {
   const parsed = path.parse(originalName || "upload");
   return `${parsed.name || "upload"}-nobg.png`;
 }
 
-async function normalizeToPng(buffer: Buffer): Promise<Buffer> {
+async function normalizeToPng(sharp: SharpFactory, buffer: Buffer): Promise<Buffer> {
   return sharp(buffer).ensureAlpha().png().toBuffer();
 }
 
-async function hasTransparentPixels(buffer: Buffer): Promise<boolean> {
+async function hasTransparentPixels(sharp: SharpFactory, buffer: Buffer): Promise<boolean> {
   const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const channels = info.channels;
   if (channels < 4) {
@@ -38,7 +49,11 @@ async function hasTransparentPixels(buffer: Buffer): Promise<boolean> {
   return false;
 }
 
-async function sealInteriorTransparency(originalBuffer: Buffer, processedBuffer: Buffer): Promise<Buffer> {
+async function sealInteriorTransparency(
+  sharp: SharpFactory,
+  originalBuffer: Buffer,
+  processedBuffer: Buffer
+): Promise<Buffer> {
   const original = await sharp(originalBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const processed = await sharp(processedBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
@@ -126,7 +141,7 @@ function normalizeMimeType(mimeType: string): string {
   return mimeAliases[base] ?? base;
 }
 
-async function detectMimeTypeFromBuffer(buffer: Buffer): Promise<string | null> {
+async function detectMimeTypeFromBuffer(sharp: SharpFactory, buffer: Buffer): Promise<string | null> {
   try {
     const metadata = await sharp(buffer).metadata();
     if (!metadata.format) {
@@ -172,10 +187,21 @@ export async function removeImageBackground(
     return { status: "skipped", reason: "Disabled by AUTO_BG_REMOVAL=false" };
   }
 
+  let sharp: SharpFactory;
+  let removeBackground: typeof import("@imgly/background-removal-node")["removeBackground"];
+  try {
+    [sharp, removeBackground] = await Promise.all([loadSharp(), loadRemoveBackground()]);
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error instanceof Error ? error.message : "Image processing runtime could not be loaded"
+    };
+  }
+
   const normalizedMimeType = normalizeMimeType(mimeType);
   let effectiveMimeType = normalizedMimeType;
   if (!supportedImageMimeTypes.has(effectiveMimeType)) {
-    const detected = await detectMimeTypeFromBuffer(buffer);
+    const detected = await detectMimeTypeFromBuffer(sharp, buffer);
     if (detected) {
       effectiveMimeType = detected;
     }
@@ -189,7 +215,7 @@ export async function removeImageBackground(
   }
 
   try {
-    const normalizedInput = await normalizeToPng(buffer);
+    const normalizedInput = await normalizeToPng(sharp, buffer);
     const typedInput = new Blob([new Uint8Array(normalizedInput)], { type: "image/png" });
     const output = await removeBackground(typedInput, {
       output: {
@@ -203,9 +229,9 @@ export async function removeImageBackground(
       return { status: "failed", reason: "Background remover returned an empty image" };
     }
 
-    const processedBuffer = await normalizeToPng(outputBuffer);
-    const stabilizedBuffer = await sealInteriorTransparency(normalizedInput, processedBuffer);
-    const transparent = await hasTransparentPixels(stabilizedBuffer);
+    const processedBuffer = await normalizeToPng(sharp, outputBuffer);
+    const stabilizedBuffer = await sealInteriorTransparency(sharp, normalizedInput, processedBuffer);
+    const transparent = await hasTransparentPixels(sharp, stabilizedBuffer);
     if (!transparent) {
       return {
         status: "failed",
