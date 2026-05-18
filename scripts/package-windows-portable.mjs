@@ -61,6 +61,29 @@ async function deployProductionApp() {
   run("pnpm.cmd", ["--filter", ".", "deploy", "--legacy", "--prod", appDir]);
 }
 
+async function copyBuiltArtifacts() {
+  const sourceDistDir = path.join(projectDir, "dist");
+  const targetDistDir = path.join(appDir, "dist");
+
+  if (!existsSync(sourceDistDir)) {
+    fail(`Built dist directory not found: ${sourceDistDir}`);
+  }
+
+  rmSync(targetDistDir, { recursive: true, force: true });
+  cpSync(sourceDistDir, targetDistDir, { recursive: true });
+
+  const requiredPaths = [
+    path.join(targetDistDir, "client"),
+    path.join(targetDistDir, "server", "server", "index.js")
+  ];
+
+  for (const requiredPath of requiredPaths) {
+    if (!existsSync(requiredPath)) {
+      fail(`Required packaged build artifact not found: ${requiredPath}`);
+    }
+  }
+}
+
 async function pruneDeployedApp() {
   const removablePaths = [
     ".nvmrc",
@@ -225,6 +248,7 @@ async function main() {
   await cleanReleaseDir();
   await buildProject();
   await deployProductionApp();
+  await copyBuiltArtifacts();
   await pruneDeployedApp();
   await installBundledNodeRuntime();
   await writeBootstrapData();
