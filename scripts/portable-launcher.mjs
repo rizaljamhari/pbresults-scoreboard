@@ -17,6 +17,41 @@ const bundledNode = process.execPath;
 const preferredServerPort = Number(process.env.APP_SERVER_PORT ?? 3000);
 const openBrowser = process.env.APP_OPEN_BROWSER !== "0";
 
+function collectNativeRuntimePaths() {
+  const candidates = [
+    path.join(appDir, "node_modules", "@img", "sharp-win32-x64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-win32-ia32", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-win32-arm64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-x64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-ia32", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-arm64", "lib"),
+    path.join(appDir, "node_modules", "sharp", "build", "Release"),
+    path.join(appDir, "node_modules", "sharp", "vendor", "lib")
+  ];
+
+  return candidates.filter((candidate) => fs.existsSync(candidate));
+}
+
+function createRuntimeEnv(serverPort) {
+  const nativeRuntimePaths = collectNativeRuntimePaths();
+  const currentPath = process.env.PATH ?? process.env.Path ?? "";
+  const nextPath = nativeRuntimePaths.length > 0
+    ? [...nativeRuntimePaths, currentPath].filter(Boolean).join(path.delimiter)
+    : currentPath;
+
+  return {
+    ...process.env,
+    PORT: String(serverPort),
+    APP_ROOT_DIR: rootDir,
+    APP_DATA_DIR: dataDir,
+    APP_UPLOADS_DIR: uploadsDir,
+    APP_CLIENT_DIST_DIR: clientDistDir,
+    APP_LOG_DIR: logsDir,
+    PATH: nextPath,
+    Path: nextPath
+  };
+}
+
 function ensureDirectory(target) {
   fs.mkdirSync(target, { recursive: true });
 }
@@ -101,15 +136,7 @@ async function main() {
 
   const child = spawn(bundledNode, [serverEntry], {
     cwd: rootDir,
-    env: {
-      ...process.env,
-      PORT: String(serverPort),
-      APP_ROOT_DIR: rootDir,
-      APP_DATA_DIR: dataDir,
-      APP_UPLOADS_DIR: uploadsDir,
-      APP_CLIENT_DIST_DIR: clientDistDir,
-      APP_LOG_DIR: logsDir
-    },
+    env: createRuntimeEnv(serverPort),
     stdio: ["inherit", "pipe", "pipe"]
   });
 
@@ -147,4 +174,3 @@ main().catch((error) => {
   process.stderr.write(`[portable] ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
 });
-

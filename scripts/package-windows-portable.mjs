@@ -43,6 +43,21 @@ function run(command, args, options = {}) {
   execFileSync(command, args, execOptions);
 }
 
+function collectPackagedNativeRuntimePaths() {
+  const candidates = [
+    path.join(appDir, "node_modules", "@img", "sharp-win32-x64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-win32-ia32", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-win32-arm64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-x64", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-ia32", "lib"),
+    path.join(appDir, "node_modules", "@img", "sharp-libvips-win32-arm64", "lib"),
+    path.join(appDir, "node_modules", "sharp", "build", "Release"),
+    path.join(appDir, "node_modules", "sharp", "vendor", "lib")
+  ];
+
+  return candidates.filter((candidate) => existsSync(candidate));
+}
+
 async function ensureWindowsHost() {
   if (process.platform !== "win32") {
     fail("Windows portable packaging must be run on Windows or Windows CI.");
@@ -218,6 +233,35 @@ async function installBundledNodeRuntime() {
   }
 }
 
+async function validatePackagedRuntime() {
+  const bundledNode = path.join(runtimeDir, "node.exe");
+  if (!existsSync(bundledNode)) {
+    fail(`Bundled Node runtime not found: ${bundledNode}`);
+  }
+
+  const nativeRuntimePaths = collectPackagedNativeRuntimePaths();
+  const currentPath = process.env.PATH ?? process.env.Path ?? "";
+  const nextPath = nativeRuntimePaths.length > 0
+    ? [...nativeRuntimePaths, currentPath].filter(Boolean).join(path.delimiter)
+    : currentPath;
+
+  run(
+    bundledNode,
+    [
+      "-e",
+      "Promise.all([import('fastify'), import('sharp')]).then(() => console.log('[package] bundled runtime validation passed'))"
+    ],
+    {
+      cwd: appDir,
+      env: {
+        ...process.env,
+        PATH: nextPath,
+        Path: nextPath
+      }
+    }
+  );
+}
+
 async function writeBootstrapData() {
   const themeModule = await import(pathToFileURL(path.join(projectDir, "dist", "server", "shared", "theme.js")).href);
   const builtinThemeModule = await import(pathToFileURL(path.join(projectDir, "dist", "server", "shared", "builtinThemes.js")).href);
@@ -315,6 +359,7 @@ async function main() {
   await copyBuiltArtifacts();
   await pruneDeployedApp();
   await installBundledNodeRuntime();
+  await validatePackagedRuntime();
   await writeBootstrapData();
   await writeLauncherFiles();
   await createZipArchive();
