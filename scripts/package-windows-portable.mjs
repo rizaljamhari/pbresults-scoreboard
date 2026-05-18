@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import { existsSync, cpSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -59,20 +60,34 @@ async function buildProject() {
 
 async function stageProductionApp() {
   await fs.mkdir(appDir, { recursive: true });
-  await fs.copyFile(path.join(projectDir, "package.json"), path.join(appDir, "package.json"));
-  await fs.copyFile(path.join(projectDir, "pnpm-lock.yaml"), path.join(appDir, "pnpm-lock.yaml"));
+  const installDir = await fs.mkdtemp(path.join(os.tmpdir(), "pbresults-scoreboard-package-"));
 
-  run(
-    "pnpm.cmd",
-    [
-      "install",
-      "--prod",
-      "--frozen-lockfile",
-      "--config.node-linker=hoisted",
-      "--config.package-import-method=copy"
-    ],
-    { cwd: appDir }
-  );
+  try {
+    await fs.copyFile(path.join(projectDir, "package.json"), path.join(installDir, "package.json"));
+    await fs.copyFile(path.join(projectDir, "pnpm-lock.yaml"), path.join(installDir, "pnpm-lock.yaml"));
+
+    run(
+      "pnpm.cmd",
+      [
+        "install",
+        "--prod",
+        "--frozen-lockfile",
+        "--config.node-linker=hoisted",
+        "--config.package-import-method=copy"
+      ],
+      { cwd: installDir }
+    );
+
+    const installedNodeModulesDir = path.join(installDir, "node_modules");
+    if (!existsSync(installedNodeModulesDir)) {
+      fail(`Temporary production install did not create node_modules: ${installedNodeModulesDir}`);
+    }
+
+    await fs.copyFile(path.join(installDir, "package.json"), path.join(appDir, "package.json"));
+    cpSync(installedNodeModulesDir, path.join(appDir, "node_modules"), { recursive: true });
+  } finally {
+    rmSync(installDir, { recursive: true, force: true });
+  }
 }
 
 async function materializeNodeModules() {
