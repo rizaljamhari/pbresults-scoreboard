@@ -75,6 +75,39 @@ async function stageProductionApp() {
   );
 }
 
+async function materializeNodeModules() {
+  const sourceNodeModulesDir = path.join(appDir, "node_modules");
+  const materializedNodeModulesDir = path.join(releaseDir, ".node_modules-materialized");
+
+  if (!existsSync(sourceNodeModulesDir)) {
+    fail(`Installed node_modules directory not found: ${sourceNodeModulesDir}`);
+  }
+
+  rmSync(materializedNodeModulesDir, { recursive: true, force: true });
+  cpSync(sourceNodeModulesDir, materializedNodeModulesDir, {
+    recursive: true,
+    dereference: true
+  });
+
+  rmSync(sourceNodeModulesDir, { recursive: true, force: true });
+  cpSync(materializedNodeModulesDir, sourceNodeModulesDir, {
+    recursive: true
+  });
+  rmSync(materializedNodeModulesDir, { recursive: true, force: true });
+
+  const requiredRuntimePackages = [
+    path.join(sourceNodeModulesDir, "fastify", "package.json"),
+    path.join(sourceNodeModulesDir, "react", "package.json"),
+    path.join(sourceNodeModulesDir, "sharp", "package.json")
+  ];
+
+  for (const requiredPath of requiredRuntimePackages) {
+    if (!existsSync(requiredPath)) {
+      fail(`Required packaged runtime dependency not found: ${requiredPath}`);
+    }
+  }
+}
+
 async function copyBuiltArtifacts() {
   const sourceDistDir = path.join(projectDir, "dist");
   const targetDistDir = path.join(appDir, "dist");
@@ -263,6 +296,7 @@ async function main() {
   await cleanReleaseDir();
   await buildProject();
   await stageProductionApp();
+  await materializeNodeModules();
   await copyBuiltArtifacts();
   await pruneDeployedApp();
   await installBundledNodeRuntime();
