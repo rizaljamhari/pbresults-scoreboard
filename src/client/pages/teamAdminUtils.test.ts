@@ -6,8 +6,10 @@ function makeTeam(overrides: Partial<TeamRecord>): TeamRecord {
   return {
     id: overrides.id ?? "team-1",
     canonicalName: overrides.canonicalName ?? "SBJ",
+    scoreboardDisplayName: overrides.scoreboardDisplayName ?? "",
     shortName: overrides.shortName ?? "",
     aliases: overrides.aliases ?? [],
+    liveMatchNames: overrides.liveMatchNames ?? [],
     logoAssetId: overrides.logoAssetId ?? null,
     alternateLogoAssetId: overrides.alternateLogoAssetId ?? null,
     notes: overrides.notes ?? "",
@@ -24,12 +26,31 @@ describe("filterAndSortTeams", () => {
     makeTeam({ id: "c", canonicalName: "BRAVO", shortName: "BRV", aliases: ["B-Team"], active: true, updatedAt: "2026-01-02T11:00:00.000Z" })
   ];
 
-  it("filters by search across name, shortName, and aliases", () => {
+  it("filters by search across name, shortName, aliases, and learned live names", () => {
     const byAlias = filterAndSortTeams(teams, "alpha squad", "all", "nameAsc");
     expect(byAlias.map((team) => team.id)).toEqual(["b"]);
 
     const byShort = filterAndSortTeams(teams, "brv", "all", "nameAsc");
     expect(byShort.map((team) => team.id)).toEqual(["c"]);
+
+    const byDisplayName = filterAndSortTeams(
+      [
+        ...teams,
+        makeTeam({ id: "d", canonicalName: "Omega Squad", scoreboardDisplayName: "OSQ", aliases: [] })
+      ],
+      "osq",
+      "all",
+      "nameAsc"
+    );
+    expect(byDisplayName.map((team) => team.id)).toEqual(["d"]);
+
+    const byLearnedLiveName = filterAndSortTeams(
+      [...teams, makeTeam({ id: "e", canonicalName: "Bandits Project", liveMatchNames: ["BANDIT"] })],
+      "bandit",
+      "all",
+      "nameAsc"
+    );
+    expect(byLearnedLiveName.map((team) => team.id)).toEqual(["e"]);
   });
 
   it("filters by active status", () => {

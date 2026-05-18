@@ -5,30 +5,37 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { livePoller } from "./livePoller.js";
+import { clientDistDir, uploadsDir } from "./runtimePaths.js";
 import {
   attachTeamLogo,
   createTeamRecord,
   deleteTheme,
   deleteTeamRecord,
   exportAppPackage,
+  exportTeamRegistryPackage,
   exportThemePackage,
+  getOperationsState,
   getSettings,
   getTheme,
   getTeamRecord,
   importAppPackage,
+  importTeamRegistryPackage,
   importThemePackage,
   listAssets,
   listTeamRecords,
   listThemes,
   matchTeamInput,
   publishTheme,
+  rememberTeamLiveMatchName,
   saveTeamRecord,
+  saveTeamResolutionOverride,
   saveTheme,
   storeAsset,
   updateSettings,
-  createThemeFromClone
+  createThemeFromClone,
+  clearTeamResolutionOverride
 } from "./storage.js";
-import { appExportSchema, settingsSchema, teamRecordSchema, themeExportSchema, themeSchema } from "../shared/theme.js";
+import { appExportSchema, settingsSchema, teamRecordSchema, teamRegistryExportSchema, themeExportSchema, themeSchema } from "../shared/theme.js";
 
 const app = Fastify({
   logger: true,
@@ -38,7 +45,7 @@ const app = Fastify({
 await app.register(cors, { origin: true });
 await app.register(multipart);
 await app.register(fastifyStatic, {
-  root: path.resolve(process.cwd(), "data/uploads"),
+  root: uploadsDir,
   prefix: "/uploads/"
 });
 
@@ -75,10 +82,90 @@ app.put("/api/settings", async (request, reply) => {
   livePoller.reconfigure();
   return reply.send(next);
 });
+app.post("/api/live/poll/start", async () => {
+  const next = updateSettings({
+    ...getSettings(),
+    pollEnabled: true
+  });
+  livePoller.reconfigure();
+  return next;
+});
+app.post("/api/live/poll/stop", async () => {
+  const next = updateSettings({
+    ...getSettings(),
+    pollEnabled: false
+  });
+  livePoller.reconfigure();
+  return next;
+});
+app.post("/api/live/poll/refresh", async () => {
+  livePoller.refreshNow();
+  return { ok: true };
+});
+app.get("/api/operations", async () => getOperationsState());
+app.post("/api/operations/resolve", async (request, reply) => {
+  const body = ((request.body as { teamId?: string; rawInputName?: string; remember?: boolean; forceReassign?: boolean } | undefined) ?? {});
+  if (!body.teamId?.trim() || !body.rawInputName?.trim()) {
+    return reply.code(400).send({ message: "teamId and rawInputName are required" });
+  }
+  const selectedTeam = getTeamRecord(body.teamId);
+  if (!selectedTeam) {
+    return reply.code(404).send({ message: "Team not found" });
+  }
+  if (!selectedTeam.active) {
+    return reply.code(400).send({ message: "Inactive teams cannot be used for live resolution" });
+  }
+  try {
+    const remembered = body.remember ? rememberTeamLiveMatchName(body.teamId, body.rawInputName, { forceReassign: body.forceReassign }) : null;
+    const override = saveTeamResolutionOverride(body.rawInputName, body.teamId);
+    livePoller.reconfigure();
+    return reply.code(201).send({
+      override,
+      rememberedTeam: remembered?.team ?? null,
+      reassignedFromTeam: remembered?.reassignedFromTeam ?? null
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Team not found";
+    if (error instanceof Error && "code" in error) {
+      const details = error as Error & {
+        code: string;
+        conflictTeamId?: string;
+        conflictTeamName?: string;
+        conflictType?: "reassignable" | "blocked";
+      };
+      return reply.code(409).send({
+        message,
+        code: details.code,
+        conflictTeamId: details.conflictTeamId ?? null,
+        conflictTeamName: details.conflictTeamName ?? null,
+        conflictType: details.conflictType ?? null
+      });
+    }
+    return reply.code(404).send({ message });
+  }
+});
+app.delete("/api/operations/resolve/:side", async (request, reply) => {
+  const rawInputName = typeof (request.query as { rawInputName?: string } | undefined)?.rawInputName === "string"
+    ? ((request.query as { rawInputName?: string }).rawInputName ?? "")
+    : "";
+  if (!rawInputName.trim()) {
+    return reply.code(400).send({ message: "rawInputName is required" });
+  }
+  clearTeamResolutionOverride(rawInputName);
+  livePoller.reconfigure();
+  return reply.code(204).send();
+});
 app.get("/api/app/export", async () => exportAppPackage());
 app.post("/api/app/import", async (request, reply) => {
   const pkg = appExportSchema.parse(request.body);
   const restored = await importAppPackage(pkg);
+  livePoller.reconfigure();
+  return reply.code(201).send(restored);
+});
+app.get("/api/teams/export", async () => exportTeamRegistryPackage());
+app.post("/api/teams/import", async (request, reply) => {
+  const pkg = teamRegistryExportSchema.parse(request.body);
+  const restored = await importTeamRegistryPackage(pkg);
   livePoller.reconfigure();
   return reply.code(201).send(restored);
 });
@@ -92,7 +179,11 @@ app.post("/api/teams/match-test", async (request, reply) => {
   return matchTeamInput(body.inputName);
 });
 app.post("/api/teams", async (request, reply) => {
-  const body = (request.body as Partial<{ canonicalName: string; shortName: string; aliases: string[]; notes: string; active: boolean }> | undefined) ?? {};
+  const body = (
+    request.body as
+      | Partial<{ canonicalName: string; scoreboardDisplayName: string; shortName: string; aliases: string[]; notes: string; active: boolean }>
+      | undefined
+  ) ?? {};
   const team = createTeamRecord(body);
   livePoller.reconfigure();
   return reply.code(201).send(team);
@@ -193,11 +284,11 @@ app.post("/api/assets", async (request, reply) => {
     return reply.code(400).send({ message: "Missing file" });
   }
   const buffer = await file.toBuffer();
-  const asset = await storeAsset(buffer, file.filename, file.mimetype);
-  return reply.code(201).send(asset);
+  const result = await storeAsset(buffer, file.filename, file.mimetype);
+  return reply.code(201).send(result);
 });
 
-const clientRoot = path.resolve(process.cwd(), "dist/client");
+const clientRoot = clientDistDir;
 const clientIndex = path.join(clientRoot, "index.html");
 if (fs.existsSync(clientRoot)) {
   await app.register(fastifyStatic, {

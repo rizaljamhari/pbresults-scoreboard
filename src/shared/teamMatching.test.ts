@@ -6,8 +6,10 @@ const teams: TeamRecord[] = [
   {
     id: "team-1",
     canonicalName: "Seattle Uprising",
+    scoreboardDisplayName: "",
     shortName: "SBJ",
     aliases: ["Uprising", "Seattle Uprising"],
+    liveMatchNames: [],
     logoAssetId: null,
     alternateLogoAssetId: null,
     notes: "",
@@ -18,8 +20,10 @@ const teams: TeamRecord[] = [
   {
     id: "team-2",
     canonicalName: "Edmonton Impact",
+    scoreboardDisplayName: "",
     shortName: "Impact",
     aliases: ["Edmonton", "E Impact"],
+    liveMatchNames: [],
     logoAssetId: null,
     alternateLogoAssetId: null,
     notes: "",
@@ -41,6 +45,22 @@ describe("generateTeamAliases", () => {
     expect(aliases).toContain("SU");
     expect(aliases).toContain("SBJ");
   });
+
+  it("includes the scoreboard display name when provided", () => {
+    const aliases = generateTeamAliases({
+      ...teams[0],
+      scoreboardDisplayName: "Seattle Up"
+    });
+    expect(aliases).toContain("Seattle Up");
+  });
+
+  it("includes learned live match names when provided", () => {
+    const aliases = generateTeamAliases({
+      ...teams[0],
+      liveMatchNames: ["BANDIT"]
+    });
+    expect(aliases).toContain("BANDIT");
+  });
 });
 
 describe("matchTeamName", () => {
@@ -59,6 +79,35 @@ describe("matchTeamName", () => {
   it("returns unmatched when no candidates are close enough", () => {
     const result = matchTeamName("Completely Different", teams);
     expect(result.status).toBe("unmatched");
+    expect(result.candidates).toEqual([]);
+  });
+
+  it("treats learned live match names as strong exact matches", () => {
+    const result = matchTeamName("BANDIT", [
+      {
+        ...teams[0],
+        liveMatchNames: ["BANDIT"]
+      },
+      teams[1]
+    ]);
+
+    expect(result.status).toBe("matched");
+    expect(result.team?.id).toBe("team-1");
+    expect(result.matchedAlias).toBe("BANDIT");
+  });
+
+  it("ignores inactive teams even when the alias is an exact match", () => {
+    const result = matchTeamName("BANDIT", [
+      {
+        ...teams[0],
+        active: false,
+        liveMatchNames: ["BANDIT"]
+      },
+      teams[1]
+    ]);
+
+    expect(result.status).toBe("unmatched");
+    expect(result.team).toBeNull();
     expect(result.candidates).toEqual([]);
   });
 });

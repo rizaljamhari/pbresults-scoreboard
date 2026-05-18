@@ -188,6 +188,27 @@ function resolveImageAsset(
   assets: StoredAsset[]
 ) {
   const findAsset = (assetId: string | null | undefined) => (assetId ? assets.find((asset) => asset.id === assetId) ?? null : null);
+  const resolveTeamLogoAsset = (teamAssetId: string | null | undefined, componentAssetId: string | null | undefined, fallbackMode: ThemeDefinition["components"]["homeTeamLogo"]["teamLogoFallbackMode"]) => {
+    const registryAsset = findAsset(teamAssetId);
+    if (registryAsset) {
+      return registryAsset;
+    }
+
+    const slotFallbackAsset = findAsset(componentAssetId);
+    const eventLogoAsset = findAsset(theme.components.eventLogo.assetId);
+
+    switch (fallbackMode) {
+      case "none":
+        return null;
+      case "eventLogo":
+        return eventLogoAsset;
+      case "slotFallbackThenEventLogo":
+        return slotFallbackAsset ?? eventLogoAsset;
+      case "slotFallback":
+      default:
+        return slotFallbackAsset;
+    }
+  };
 
   if (component.kind !== "image") {
     return null;
@@ -199,12 +220,12 @@ function resolveImageAsset(
 
   if (componentId === "homeTeamLogo") {
     const team = live?.displayLeftTeamMatch.team;
-    return findAsset(team?.logoAssetId ?? team?.alternateLogoAssetId ?? component.assetId);
+    return resolveTeamLogoAsset(team?.logoAssetId ?? team?.alternateLogoAssetId ?? null, component.assetId, component.teamLogoFallbackMode);
   }
 
   if (componentId === "awayTeamLogo") {
     const team = live?.displayRightTeamMatch.team;
-    return findAsset(team?.logoAssetId ?? team?.alternateLogoAssetId ?? component.assetId);
+    return resolveTeamLogoAsset(team?.logoAssetId ?? team?.alternateLogoAssetId ?? null, component.assetId, component.teamLogoFallbackMode);
   }
 
   return findAsset(component.assetId);
@@ -243,52 +264,79 @@ export function OverlayRenderer({
   selectedComponentId,
   onSelectComponent
 }: OverlayRendererProps) {
-  const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; until: number; token: string } | null>(null);
+  const overlayGeneral = theme.teamEventOverlay.general;
+  const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; eventType: "towel" | "base"; until: number; token: string } | null>(null);
   const [centerSecondaryAnimationTick, setCenterSecondaryAnimationTick] = useState(0);
-  const previousTowelEventRef = useRef<NormalizedLiveState["towelEvent"]>("none");
+  const previousTeamEventRef = useRef<NormalizedLiveState["teamEvent"]>("none");
   const previousCenterSecondaryVariantRef = useRef<"timer" | "staticText" | "hidden" | null>(null);
+  // Towel animation repeat state
+  const [towelAnimationTick, setTowelAnimationTick] = useState(0);
+  const towelIntervalRef = useRef<number | null>(null);
+  const currentTeamEvent = live?.teamEvent ?? "none";
+  // Repeating towel animation logic
+  useEffect(() => {
+    if (!live || currentTeamEvent === "none") {
+      if (towelIntervalRef.current !== null) {
+        clearInterval(towelIntervalRef.current);
+        towelIntervalRef.current = null;
+      }
+      setTowelAnimationTick(0);
+      return;
+    }
+    // If already running, do nothing
+    if (towelIntervalRef.current !== null) return;
+    // Animation duration: match teamEventOverlay.durationMs or use a default
+    const duration = overlayGeneral.durationMs || 1200;
+    towelIntervalRef.current = window.setInterval(() => {
+      setTowelAnimationTick((tick) => tick + 1);
+    }, duration);
+    // Initial tick
+    setTowelAnimationTick((tick) => tick + 1);
+    return () => {
+      if (towelIntervalRef.current !== null) {
+        clearInterval(towelIntervalRef.current);
+        towelIntervalRef.current = null;
+      }
+    };
+  }, [currentTeamEvent, live, overlayGeneral.durationMs]);
 
   useEffect(() => {
-    if (!live || !theme.concedeState.enabled) {
-      previousTowelEventRef.current = "none";
+    if (!live || !overlayGeneral.enabled) {
+      previousTeamEventRef.current = "none";
+      setActiveConcede(null);
       return;
     }
 
-    const currentEvent = live.towelEvent;
-    const previousEvent = previousTowelEventRef.current;
-    previousTowelEventRef.current = currentEvent;
+    const currentEvent = currentTeamEvent;
+    previousTeamEventRef.current = currentEvent;
 
-    if (currentEvent === "none" || currentEvent === previousEvent) {
+    if (currentEvent === "none") {
+      setActiveConcede(null);
       return;
     }
 
+    // Always keep activeConcede set while a teamEvent is active
+    const isHomeEvent = currentEvent === "towel-home" || currentEvent === "base-home";
     const side =
-      currentEvent === "home"
+      isHomeEvent
         ? live.sidesSwitched === 1
           ? "right"
           : "left"
         : live.sidesSwitched === 1
           ? "left"
           : "right";
+    const eventType = currentEvent === "base-home" || currentEvent === "base-away" ? "base" : "towel";
 
-    const token = `${currentEvent}:${live.round}:${live.sidesSwitched}:${Date.now()}`;
+    const token = `${currentEvent}:${live.round}:${live.sidesSwitched}`;
     setActiveConcede({
       side,
-      until: Date.now() + theme.concedeState.durationMs,
+      eventType,
+      until: 0, // not used anymore
       token
     });
-  }, [live, theme.concedeState.durationMs, theme.concedeState.enabled]);
+  }, [currentTeamEvent, live?.round, live?.sidesSwitched, overlayGeneral.enabled, live]);
 
-  useEffect(() => {
-    if (!activeConcede) {
-      return;
-    }
-    const remainingMs = Math.max(0, activeConcede.until - Date.now());
-    const timeoutId = window.setTimeout(() => {
-      setActiveConcede((current) => (current?.token === activeConcede.token ? null : current));
-    }, remainingMs);
-    return () => window.clearTimeout(timeoutId);
-  }, [activeConcede]);
+  // Remove timeout logic: activeConcede is now persistent while teamEvent is active
 
   const centerSecondaryPresentation = useMemo(() => resolveCenterSecondaryPresentation(theme, live), [theme, live]);
 
@@ -307,48 +355,80 @@ export function OverlayRenderer({
   }, [centerSecondaryPresentation.variant]);
 
   const concedeLabel = useMemo(() => {
-    if (!theme.concedeState.enabled || !activeConcede) {
+    if (!overlayGeneral.enabled || !activeConcede) {
       return null;
     }
 
-    const nameComponent = activeConcede.side === "left" ? theme.components.homeName : theme.components.awayName;
     const logoComponent = activeConcede.side === "left" ? theme.components.homeTeamLogo : theme.components.awayTeamLogo;
-    const group = mergeRects(nameComponent, logoComponent.visible ? logoComponent : null);
-
-    if (theme.concedeState.placementMode === "full-panel") {
+    if (overlayGeneral.followLogoSize && logoComponent.visible) {
+      const inset = Math.max(0, logoComponent.padding);
+      const width = Math.max(1, logoComponent.width - inset * 2);
+      const height = Math.max(1, logoComponent.height - inset * 2);
       return {
-        x: group.x + theme.concedeState.offsetX,
-        y: group.y + theme.concedeState.offsetY,
+        x: logoComponent.x + inset,
+        y: logoComponent.y + inset,
+        width,
+        height,
+        token: activeConcede.token
+      };
+    }
+
+    const nameComponent = activeConcede.side === "left" ? theme.components.homeName : theme.components.awayName;
+    const group = mergeRects(nameComponent, logoComponent.visible ? logoComponent : null);
+    const anchoredY =
+      overlayGeneral.position === "above"
+        ? group.y - overlayGeneral.height + overlayGeneral.offsetY
+        : group.y + overlayGeneral.offsetY;
+
+    if (overlayGeneral.placementMode === "full-panel") {
+      return {
+        x: group.x + overlayGeneral.offsetX,
+        y: group.y + overlayGeneral.offsetY,
         width: group.width,
         height: group.height,
         token: activeConcede.token
       };
     }
 
-    if (theme.concedeState.placementMode === "top-ribbon") {
+    if (overlayGeneral.placementMode === "top-ribbon") {
       return {
-        x: group.x + theme.concedeState.offsetX,
-        y: group.y + theme.concedeState.offsetY,
+        x: group.x + overlayGeneral.offsetX,
+        y: anchoredY,
         width: group.width,
-        height: theme.concedeState.height,
+        height: overlayGeneral.height,
         token: activeConcede.token
       };
     }
 
     const width = Math.max(160, Math.min(group.width, Math.round(group.width * 0.76)));
-    const x = group.x + Math.round((group.width - width) / 2) + theme.concedeState.offsetX;
-    const y = group.y + Math.round((group.height - theme.concedeState.height) / 2) + theme.concedeState.offsetY;
+    const x = group.x + Math.round((group.width - width) / 2) + overlayGeneral.offsetX;
+    const y = anchoredY;
 
     return {
       x,
       y,
       width,
-      height: theme.concedeState.height,
+      height: overlayGeneral.height,
       token: activeConcede.token
     };
-  }, [activeConcede, theme]);
+  }, [activeConcede, overlayGeneral, theme]);
 
-  const concedeSurface = surfaceStyles(theme.concedeState, assets);
+  const activeConcedeTheme = activeConcede?.eventType === "base" ? theme.teamEventOverlay.base : theme.teamEventOverlay.concede;
+  const activeConcedeSurface = activeConcedeTheme
+    ? surfaceStyles(
+        {
+          backgroundColor: activeConcedeTheme.backgroundColor,
+          backgroundImageAssetId: activeConcedeTheme.backgroundImageAssetId,
+          backgroundImageFit: overlayGeneral.backgroundImageFit,
+          backgroundImagePosition: overlayGeneral.backgroundImagePosition,
+          backgroundOverlayColor: activeConcedeTheme.backgroundOverlayColor,
+          backgroundOverlayOpacity: activeConcedeTheme.backgroundOverlayOpacity
+        },
+        assets
+      )
+    : null;
+  const concedeText = activeConcedeTheme?.text ?? "";
+  const concedeTextColor = activeConcedeTheme?.color ?? "#ffffff";
 
   return (
     <div
@@ -465,7 +545,7 @@ export function OverlayRenderer({
         );
       })}
 
-      {concedeLabel ? (
+      {concedeLabel && live && currentTeamEvent !== "none" ? (
         <div
           key={concedeLabel.token}
           className="concede-label"
@@ -474,41 +554,47 @@ export function OverlayRenderer({
             top: concedeLabel.y,
             width: concedeLabel.width,
             height: concedeLabel.height,
-            border: `${theme.concedeState.borderWidth}px solid ${theme.concedeState.borderColor}`,
-            borderRadius: theme.concedeState.borderRadius,
-            boxShadow: theme.concedeState.shadow,
-            animation:
-              theme.concedeState.animationPreset === "none"
-                ? undefined
-                : `${
-                    theme.concedeState.animationPreset === "slide-horizontal"
-                      ? "concede-slide-horizontal"
-                      : "concede-slide-vertical"
-                  } ${theme.concedeState.durationMs}ms ease forwards`
+            border: `${overlayGeneral.borderWidth}px solid ${overlayGeneral.borderColor}`,
+            borderRadius: overlayGeneral.borderRadius,
+            boxShadow: overlayGeneral.shadow
           }}
         >
-          <span className="component-surface" style={concedeSurface.background} />
-          {concedeSurface.overlay ? <span className="component-surface-overlay" style={concedeSurface.overlay} /> : null}
-          <span
-            className="component-content text-content"
+          <div
+            className="concede-label-motion"
             style={{
-              justifyContent:
-                theme.concedeState.textAlign === "left"
-                  ? "flex-start"
-                  : theme.concedeState.textAlign === "right"
-                    ? "flex-end"
-                    : "center",
-              padding: theme.concedeState.padding,
-              color: theme.concedeState.color,
-              fontFamily: `"${theme.concedeState.fontFamily}", sans-serif`,
-              fontSize: theme.concedeState.fontSize,
-              fontWeight: theme.concedeState.fontWeight,
-              letterSpacing: theme.concedeState.letterSpacing,
-              lineHeight: 1
+              animation:
+                overlayGeneral.animationPreset === "none"
+                  ? undefined
+                  : `${
+                      overlayGeneral.animationPreset === "slide-horizontal"
+                        ? "concede-slide-horizontal"
+                        : "concede-slide-vertical"
+                    } ${overlayGeneral.durationMs}ms ease-in-out infinite alternate`
             }}
           >
-            {theme.concedeState.text}
-          </span>
+            <span className="component-surface" style={activeConcedeSurface?.background} />
+            {activeConcedeSurface?.overlay ? <span className="component-surface-overlay" style={activeConcedeSurface.overlay} /> : null}
+            <span
+              className="component-content text-content"
+              style={{
+                justifyContent:
+                  overlayGeneral.textAlign === "left"
+                    ? "flex-start"
+                    : overlayGeneral.textAlign === "right"
+                      ? "flex-end"
+                      : "center",
+                padding: overlayGeneral.padding,
+                color: concedeTextColor,
+                fontFamily: `"${overlayGeneral.fontFamily}", sans-serif`,
+                fontSize: overlayGeneral.fontSize,
+                fontWeight: overlayGeneral.fontWeight,
+                letterSpacing: overlayGeneral.letterSpacing,
+                lineHeight: 1
+              }}
+            >
+              {concedeText}
+            </span>
+          </div>
         </div>
       ) : null}
     </div>

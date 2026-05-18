@@ -1,17 +1,19 @@
-import { Link, useLocation } from "react-router-dom";
-import type { PropsWithChildren } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { ToastViewport } from "./ToastViewport";
 
-export function AppShell({ children }: PropsWithChildren) {
+export function AppShell() {
   const location = useLocation();
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div>
           <p className="eyebrow">PBResults</p>
-          <h1>Scoreboard Theming</h1>
+          <h1>PBResults Scoreboard</h1>
         </div>
         <nav className="sidebar-nav">
+          <Link className={location.pathname === "/admin/operations" ? "active" : ""} to="/admin/operations">
+            Operations
+          </Link>
           <Link className={location.pathname.startsWith("/admin/themes") ? "active" : ""} to="/admin/themes">
             Themes
           </Link>
@@ -26,7 +28,9 @@ export function AppShell({ children }: PropsWithChildren) {
           </a>
         </nav>
       </aside>
-      <main className="content">{children}</main>
+      <main className="content">
+        <Outlet key={location.pathname} />
+      </main>
       <ToastViewport />
     </div>
   );

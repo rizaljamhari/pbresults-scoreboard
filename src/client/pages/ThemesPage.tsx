@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { useSettings, useThemes } from "../hooks";
+import { useAutoCloseRowActionMenus, useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import { filterAndSortThemes, type ThemeKindFilter, type ThemeSort } from "./themeAdminUtils";
 
 export function ThemesPage() {
+  useAutoCloseRowActionMenus();
+  const preferredBuiltinThemeId = "theme-7ad8adb8-e017-4853-93b1-fb608a750253";
   const navigate = useNavigate();
   const themes = useThemes();
   const settings = useSettings();
@@ -25,7 +27,7 @@ export function ThemesPage() {
 
   async function handleCreate() {
     try {
-      const theme = await api.createTheme("builtin-classic-chroma");
+      const theme = await api.createTheme(preferredBuiltinThemeId);
       await refresh();
       showToast({ kind: "success", message: "Theme created." });
       navigate(`/admin/themes/${theme.id}`);
@@ -226,4 +228,3 @@ export function ThemesPage() {
     </section>
   );
 }
-

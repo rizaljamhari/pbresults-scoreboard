@@ -15,6 +15,28 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
 
   useEffect(() => {
     let active = true;
+
+    async function refreshAssets() {
+      try {
+        const next = await api.getAssets();
+        if (active) {
+          assets.setData(next);
+        }
+      } catch {
+        // Keep overlay resilient; best-effort refresh only.
+      }
+    }
+
+    void refreshAssets();
+    const timer = window.setInterval(() => void refreshAssets(), 3000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     async function load() {
       if (mode === "preview" && id) {
         const next = await api.getTheme(id);

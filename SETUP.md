@@ -1,8 +1,8 @@
 # One-Click Setup
 
 ## macOS
-- Double-click [setup.command](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard-theming/setup.command).
-- After setup completes, double-click [run.command](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard-theming/run.command).
+- Double-click [setup.command](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/setup.command).
+- After setup completes, double-click [run.command](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/run.command).
 
 What setup does:
 - installs or activates Node 22 through `fnm` when available

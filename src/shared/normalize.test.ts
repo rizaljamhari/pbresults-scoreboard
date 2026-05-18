@@ -6,8 +6,10 @@ const registry: TeamRecord[] = [
   {
     id: "team-sbj",
     canonicalName: "Seattle Uprising",
+    scoreboardDisplayName: "SBJ Prime",
     shortName: "SBJ",
     aliases: ["Uprising", "Seattle Uprising", "Seattle"],
+    liveMatchNames: [],
     logoAssetId: null,
     alternateLogoAssetId: null,
     notes: "",
@@ -40,19 +42,32 @@ describe("normalizeLiveState", () => {
   });
 
   it("maps towel events from top-level state", () => {
-    expect(
-      normalizeLiveState({
-        state: "TOWEL1",
-        mainGame: [{ name: "H", score: 0 }, { name: "A", score: 0 }]
-      }).towelEvent
-    ).toBe("home");
+    const towel1 = normalizeLiveState({
+      state: "TOWEL1",
+      mainGame: [{ name: "H", score: 0 }, { name: "A", score: 0 }]
+    });
+    expect(towel1.teamEvent).toBe("towel-home");
 
     expect(
       normalizeLiveState({
         state: "TOWEL2",
         mainGame: [{ name: "H", score: 0 }, { name: "A", score: 0 }]
-      }).towelEvent
-    ).toBe("away");
+      }).teamEvent
+    ).toBe("towel-away");
+
+    expect(
+      normalizeLiveState({
+        state: "BASE1",
+        mainGame: [{ name: "H", score: 0 }, { name: "A", score: 0 }]
+      }).teamEvent
+    ).toBe("base-away");
+
+    expect(
+      normalizeLiveState({
+        state: "BASE2",
+        mainGame: [{ name: "H", score: 0 }, { name: "A", score: 0 }]
+      }).teamEvent
+    ).toBe("base-home");
   });
 
   it("resolves team records and reports unmatched names", () => {
@@ -67,9 +82,47 @@ describe("normalizeLiveState", () => {
 
     expect(result.homeTeamMatch.status).toBe("matched");
     expect(result.homeTeamMatch.team?.canonicalName).toBe("Seattle Uprising");
+    expect(result.homeTeam.name).toBe("SBJ Prime");
+    expect(result.displayLeftTeam.name).toBe("SBJ Prime");
     expect(result.displayLeftTeamMatch.team?.canonicalName).toBe("Seattle Uprising");
     expect(result.awayTeamMatch.status).toBe("unmatched");
     expect(result.unresolvedTeamNames).toEqual(["Unknown Squad"]);
+  });
+
+  it("applies manual team overrides to the current raw live names", () => {
+    const overrideTeam: TeamRecord = {
+      id: "team-override",
+      canonicalName: "Override Squad",
+      scoreboardDisplayName: "OVERRIDE",
+      shortName: "OVR",
+      aliases: [],
+      liveMatchNames: [],
+      logoAssetId: null,
+      alternateLogoAssetId: null,
+      notes: "",
+      active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const result = normalizeLiveState(
+      {
+        state: "RUNNING",
+        period: "GAME",
+        mainGame: [{ name: "Unknown Squad", score: 1 }, { name: "SBJ", score: 0 }]
+      },
+      {
+        teams: registry,
+        teamOverrides: {
+          left: overrideTeam
+        }
+      }
+    );
+
+    expect(result.displayLeftTeamMatch.status).toBe("matched");
+    expect(result.displayLeftTeamMatch.resolutionSource).toBe("manual");
+    expect(result.displayLeftTeamMatch.team?.canonicalName).toBe("Override Squad");
+    expect(result.displayLeftTeam.name).toBe("OVERRIDE");
   });
 });
 

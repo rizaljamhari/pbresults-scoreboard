@@ -28,7 +28,9 @@ export function filterAndSortTeams(
     if (!query) {
       return true;
     }
-    return [team.canonicalName, team.shortName, ...team.aliases].some((value) => value.toLowerCase().includes(query));
+    return [team.canonicalName, team.scoreboardDisplayName, team.shortName, ...team.aliases, ...team.liveMatchNames].some((value) =>
+      value.toLowerCase().includes(query)
+    );
   });
 
   base.sort((left, right) => {
@@ -56,8 +58,10 @@ export function toComparableTeam(team: TeamRecord | null) {
 
   return {
     canonicalName: team.canonicalName,
+    scoreboardDisplayName: team.scoreboardDisplayName,
     shortName: team.shortName,
     aliases: [...team.aliases],
+    liveMatchNames: [...team.liveMatchNames],
     notes: team.notes,
     active: team.active,
     logoAssetId: team.logoAssetId,

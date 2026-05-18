@@ -1,5 +1,6 @@
 import { matchTeamName } from "./teamMatching.js";
-import type { NormalizedLiveState, TeamRecord } from "./theme.js";
+import { normalizeTeamName } from "./teamMatching.js";
+import type { NormalizedLiveState, TeamRecord, TeamMatchResult } from "./theme.js";
 
 type RawTimer = { value?: number; state?: number } | null | undefined;
 type RawTeam = {
@@ -45,27 +46,69 @@ function sanitizeTeam(team: RawTeam | undefined) {
   };
 }
 
+function applyScoreboardDisplayName(
+  team: ReturnType<typeof sanitizeTeam>,
+  match: ReturnType<typeof matchTeamName>
+) {
+  const preferred = match.team?.scoreboardDisplayName?.trim();
+  if (!preferred) {
+    return team;
+  }
+  return {
+    ...team,
+    name: preferred
+  };
+}
+
+function createManualMatchResult(inputName: string, team: TeamRecord): TeamMatchResult {
+  return {
+    inputName,
+    normalizedInput: normalizeTeamName(inputName),
+    status: "matched",
+    resolutionSource: "manual",
+    confidence: 1,
+    matchedAlias: "Manual override",
+    teamId: team.id,
+    team,
+    candidates: []
+  };
+}
+
 export function normalizeLiveState(
   raw: RawLiveState | null,
   options?: {
-    sourceStatus?: "idle" | "ok" | "error";
+    sourceStatus?: "idle" | "ok" | "error" | "paused";
     fetchedAt?: string | null;
     errorMessage?: string | null;
     teams?: TeamRecord[];
+    teamOverrides?: {
+      left?: TeamRecord | null;
+      right?: TeamRecord | null;
+    };
   }
 ): NormalizedLiveState {
-  const homeTeam = sanitizeTeam(raw?.mainGame?.[0]);
-  const awayTeam = sanitizeTeam(raw?.mainGame?.[1]);
+  const homeTeamRaw = sanitizeTeam(raw?.mainGame?.[0]);
+  const awayTeamRaw = sanitizeTeam(raw?.mainGame?.[1]);
   const sidesSwitched = Number(raw?.sidesSwitched ?? 0);
-  // Upstream already emits mainGame in display order (left, right).
-  // Keep display slots aligned to payload order to avoid double swapping.
+  const state = raw?.state ?? "STOPPED";
+  const teamEvent =
+    state === "TOWEL1"
+      ? "towel-home"
+      : state === "TOWEL2"
+        ? "towel-away"
+        : state === "BASE1"
+          ? "base-away"
+          : state === "BASE2"
+            ? "base-home"
+            : "none";
+  const teams = options?.teams ?? [];
+  const homeTeamMatch = options?.teamOverrides?.left ? createManualMatchResult(homeTeamRaw.name, options.teamOverrides.left) : matchTeamName(homeTeamRaw.name, teams);
+  const awayTeamMatch = options?.teamOverrides?.right ? createManualMatchResult(awayTeamRaw.name, options.teamOverrides.right) : matchTeamName(awayTeamRaw.name, teams);
+  const homeTeam = applyScoreboardDisplayName(homeTeamRaw, homeTeamMatch);
+  const awayTeam = applyScoreboardDisplayName(awayTeamRaw, awayTeamMatch);
+  // Upstream emits mainGame in display order (left, right).
   const leftTeam = homeTeam;
   const rightTeam = awayTeam;
-  const state = raw?.state ?? "STOPPED";
-  const towelEvent = state === "TOWEL1" ? "home" : state === "TOWEL2" ? "away" : "none";
-  const teams = options?.teams ?? [];
-  const homeTeamMatch = matchTeamName(homeTeam.name, teams);
-  const awayTeamMatch = matchTeamName(awayTeam.name, teams);
   const displayLeftTeamMatch = homeTeamMatch;
   const displayRightTeamMatch = awayTeamMatch;
   const unresolvedTeamNames = [homeTeamMatch, awayTeamMatch]
@@ -92,7 +135,7 @@ export function normalizeLiveState(
     unresolvedTeamNames,
     breakTimer: sanitizeTimer(raw?.breakTimer),
     gameTimer: sanitizeTimer(raw?.gameTimer),
-    towelEvent
+    teamEvent
   };
 }
 

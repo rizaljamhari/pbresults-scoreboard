@@ -1,6 +1,14 @@
 import { normalizeLiveState } from "../shared/normalize.js";
 import type { NormalizedLiveState } from "../shared/theme.js";
-import { getSettings, listTeamRecords } from "./storage.js";
+import { getApplicableTeamResolutionOverrides, getSettings, listTeamRecords } from "./storage.js";
+
+function extractDisplayNames(raw: unknown) {
+  const payload = (raw as { mainGame?: Array<{ name?: string }> } | null) ?? null;
+  return {
+    left: payload?.mainGame?.[0]?.name ?? "",
+    right: payload?.mainGame?.[1]?.name ?? ""
+  };
+}
 
 type PollState = {
   raw: unknown;
@@ -22,16 +30,51 @@ class LivePoller {
   private polling = false;
   private runImmediatelyAfterPoll = false;
   private listeners = new Set<LivePollListener>();
+  private lastActivitySourceStatus: NormalizedLiveState["sourceStatus"] = "idle";
 
   start() {
     if (this.started) {
       return;
     }
     this.started = true;
+    if (!getSettings().pollEnabled) {
+      this.setPausedState();
+      return;
+    }
     this.scheduleNext(0);
   }
 
   reconfigure() {
+    if (!this.started) {
+      return;
+    }
+
+    if (!getSettings().pollEnabled) {
+      this.runImmediatelyAfterPoll = false;
+      if (this.timeoutId) {
+        clearTimeout(this.timeoutId);
+        this.timeoutId = null;
+      }
+      if (this.polling) {
+        return;
+      }
+      this.setPausedState();
+      return;
+    }
+
+    if (this.polling) {
+      this.runImmediatelyAfterPoll = true;
+      if (this.timeoutId) {
+        clearTimeout(this.timeoutId);
+        this.timeoutId = null;
+      }
+      return;
+    }
+
+    this.scheduleNext(0);
+  }
+
+  refreshNow() {
     if (!this.started) {
       return;
     }
@@ -42,6 +85,17 @@ class LivePoller {
         clearTimeout(this.timeoutId);
         this.timeoutId = null;
       }
+      return;
+    }
+
+    if (!getSettings().pollEnabled) {
+      this.polling = true;
+      void this.poll(true).finally(() => {
+        this.polling = false;
+        if (!getSettings().pollEnabled) {
+          this.setPausedState();
+        }
+      });
       return;
     }
 
@@ -62,6 +116,10 @@ class LivePoller {
 
   private scheduleNext(delayMs: number) {
     if (!this.started) {
+      return;
+    }
+    if (!getSettings().pollEnabled) {
+      this.timeoutId = null;
       return;
     }
 
@@ -90,6 +148,11 @@ class LivePoller {
         return;
       }
 
+      if (!getSettings().pollEnabled) {
+        this.setPausedState();
+        return;
+      }
+
       const elapsedMs = Date.now() - startedAt;
       const nextDelayMs = this.runImmediatelyAfterPoll ? 0 : Math.max(0, getSettings().pollIntervalMs - elapsedMs);
       this.runImmediatelyAfterPoll = false;
@@ -97,8 +160,12 @@ class LivePoller {
     }
   }
 
-  private async poll() {
-    const { upstreamBaseUrl } = getSettings();
+  private async poll(ignorePollEnabled = false) {
+    const { upstreamBaseUrl, pollEnabled } = getSettings();
+    if (!pollEnabled && !ignorePollEnabled) {
+      this.setPausedState();
+      return;
+    }
     const teams = listTeamRecords();
     const url = new URL("/live", upstreamBaseUrl).toString();
     try {
@@ -107,27 +174,35 @@ class LivePoller {
         throw new Error(`Upstream responded with ${response.status}`);
       }
       const raw = (await response.json()) as unknown;
+      const overrideNames = extractDisplayNames(raw);
+      const overrides = getApplicableTeamResolutionOverrides(overrideNames.left, overrideNames.right);
       this.state = {
         raw,
         normalized: normalizeLiveState(raw as Record<string, unknown>, {
           sourceStatus: "ok",
           fetchedAt: new Date().toISOString(),
           errorMessage: null,
-          teams
+          teams,
+          teamOverrides: overrides
         })
       };
+      this.lastActivitySourceStatus = "ok";
       this.emit();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown upstream error";
+      const overrideNames = extractDisplayNames(this.state.raw);
+      const overrides = getApplicableTeamResolutionOverrides(overrideNames.left, overrideNames.right);
       this.state = {
         raw: this.state.raw,
         normalized: normalizeLiveState((this.state.raw as Record<string, unknown> | null) ?? null, {
           sourceStatus: "error",
           fetchedAt: this.state.normalized.fetchedAt,
           errorMessage: message,
-          teams
+          teams,
+          teamOverrides: overrides
         })
       };
+      this.lastActivitySourceStatus = "error";
       this.emit();
     }
   }
@@ -136,6 +211,24 @@ class LivePoller {
     for (const listener of this.listeners) {
       listener(this.state);
     }
+  }
+
+  private setPausedState() {
+    const teams = listTeamRecords();
+    const overrideNames = extractDisplayNames(this.state.raw);
+    const overrides = getApplicableTeamResolutionOverrides(overrideNames.left, overrideNames.right);
+    this.state = {
+      raw: this.state.raw,
+      normalized: normalizeLiveState((this.state.raw as Record<string, unknown> | null) ?? null, {
+        sourceStatus: "paused",
+        fetchedAt: this.state.normalized.fetchedAt,
+        errorMessage: null,
+        teams,
+        teamOverrides: overrides
+      })
+    };
+    this.lastActivitySourceStatus = "paused";
+    this.emit();
   }
 }
 

@@ -69,9 +69,13 @@ export function generateTeamAliases(team: TeamRecord): string[] {
   };
 
   push(team.canonicalName);
+  push(team.scoreboardDisplayName);
   push(team.shortName);
   for (const alias of team.aliases) {
     push(alias);
+  }
+  for (const liveMatchName of team.liveMatchNames) {
+    push(liveMatchName);
   }
 
   const normalizedCanonical = normalizeTeamName(team.canonicalName);
@@ -82,6 +86,28 @@ export function generateTeamAliases(team: TeamRecord): string[] {
   }
 
   return [...aliases];
+}
+
+export function listExplicitTeamMatchNames(team: TeamRecord): string[] {
+  const names = new Set<string>();
+  const push = (value: string) => {
+    const clean = value.trim();
+    if (clean) {
+      names.add(clean);
+    }
+  };
+
+  push(team.canonicalName);
+  push(team.scoreboardDisplayName);
+  push(team.shortName);
+  for (const alias of team.aliases) {
+    push(alias);
+  }
+  for (const liveMatchName of team.liveMatchNames) {
+    push(liveMatchName);
+  }
+
+  return [...names];
 }
 
 function buildCandidates(inputName: string, teams: TeamRecord[]): Candidate[] {

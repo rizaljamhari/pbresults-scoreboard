@@ -1,0 +1,47 @@
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-portable:
+    name: Windows portable package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.16.1
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build portable package
+        run: pnpm package:windows:portable
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: pbresults-scoreboard-windows-portable
+          path: release/windows-portable/*.zip
+          if-no-files-found: error
+

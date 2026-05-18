@@ -24,6 +24,7 @@ export const fontFamilies = [
 
 export const backgroundImageFitValues = ["cover", "contain", "stretch"] as const;
 export const backgroundImagePositionValues = ["center", "top", "bottom", "left", "right"] as const;
+export const teamLogoFallbackModeValues = ["none", "eventLogo", "slotFallback", "slotFallbackThenEventLogo"] as const;
 export const concedePositionValues = ["above", "overlapping-top"] as const;
 export const concedeAnimationValues = ["slide-horizontal", "slide-vertical", "none"] as const;
 export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ribbon"] as const;
@@ -64,7 +65,8 @@ export const textComponentSchema = commonFrameSchema.extend({
 
 export const imageComponentSchema = commonFrameSchema.extend({
   kind: z.literal("image"),
-  assetId: z.string().nullable()
+  assetId: z.string().nullable(),
+  teamLogoFallbackMode: z.enum(teamLogoFallbackModeValues).default("slotFallback")
 });
 
 const defaultImageComponentValue = {
@@ -87,28 +89,23 @@ const defaultImageComponentValue = {
   borderRadius: 0,
   padding: 0,
   shadow: "none",
-  assetId: null
+  assetId: null,
+  teamLogoFallbackMode: "slotFallback" as const
 };
 
-export const concedeStateSchema = z.object({
+const teamEventOverlayGeneralSchema = z.object({
   enabled: z.boolean().default(true),
-  text: z.string().default("Conceded"),
   placementMode: z.enum(teamOverlayPlacementValues).default("center-stamp"),
   position: z.enum(concedePositionValues).default("above"),
   offsetX: z.number().default(0),
   offsetY: z.number().default(0),
   height: z.number().positive().default(44),
   padding: z.number().min(0).default(12),
-  backgroundColor: z.string().default("#111111ee"),
-  backgroundImageAssetId: z.string().nullable().default(null),
   backgroundImageFit: z.enum(backgroundImageFitValues).default("cover"),
   backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
-  backgroundOverlayColor: z.string().default("#000000"),
-  backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
   borderColor: z.string().default("#ffffff"),
   borderWidth: z.number().min(0).default(2),
   borderRadius: z.number().min(0).default(12),
-  color: z.string().default("#ffffff"),
   fontFamily: z.enum(fontFamilies).default("Oswald"),
   fontSize: z.number().positive().default(28),
   fontWeight: z.number().min(100).max(900).default(700),
@@ -116,8 +113,128 @@ export const concedeStateSchema = z.object({
   textAlign: z.enum(["left", "center", "right"]).default("center"),
   shadow: z.string().default("none"),
   animationPreset: z.enum(concedeAnimationValues).default("slide-vertical"),
-  durationMs: z.number().positive().default(2000)
+  durationMs: z.number().positive().default(2000),
+  followLogoSize: z.boolean().default(false)
 });
+
+const teamEventOverlayEventSchema = z.object({
+  text: z.string(),
+  color: z.string(),
+  backgroundColor: z.string(),
+  backgroundImageAssetId: z.string().nullable().default(null),
+  backgroundOverlayColor: z.string().default("#000000"),
+  backgroundOverlayOpacity: z.number().min(0).max(1).default(0)
+});
+
+const nestedTeamEventOverlaySchema = z.object({
+  general: teamEventOverlayGeneralSchema.default({}),
+  concede: teamEventOverlayEventSchema
+    .default({
+      text: "Conceded",
+      color: "#ffffff",
+      backgroundColor: "#111111ee"
+    }),
+  base: teamEventOverlayEventSchema
+    .default({
+      text: "Base",
+      color: "#ffd54f",
+      backgroundColor: "#1b3b6fff"
+    })
+});
+
+function migrateLegacyTeamEventOverlay(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const candidate = input as Record<string, unknown>;
+  if ("general" in candidate || "concede" in candidate || "base" in candidate) {
+    return candidate;
+  }
+
+  const legacyKeys = [
+    "enabled",
+    "text",
+    "baseText",
+    "placementMode",
+    "position",
+    "offsetX",
+    "offsetY",
+    "height",
+    "padding",
+    "backgroundColor",
+    "baseBackgroundColor",
+    "backgroundImageAssetId",
+    "baseBackgroundImageAssetId",
+    "backgroundImageFit",
+    "backgroundImagePosition",
+    "backgroundOverlayColor",
+    "backgroundOverlayOpacity",
+    "baseBackgroundOverlayColor",
+    "baseBackgroundOverlayOpacity",
+    "borderColor",
+    "borderWidth",
+    "borderRadius",
+    "color",
+    "baseColor",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "letterSpacing",
+    "textAlign",
+    "shadow",
+    "animationPreset",
+    "durationMs",
+    "followLogoSize"
+  ];
+  if (!legacyKeys.some((key) => key in candidate)) {
+    return candidate;
+  }
+
+  return {
+    general: {
+      enabled: candidate.enabled,
+      placementMode: candidate.placementMode,
+      position: candidate.position,
+      offsetX: candidate.offsetX,
+      offsetY: candidate.offsetY,
+      height: candidate.height,
+      padding: candidate.padding,
+      backgroundImageFit: candidate.backgroundImageFit,
+      backgroundImagePosition: candidate.backgroundImagePosition,
+      borderColor: candidate.borderColor,
+      borderWidth: candidate.borderWidth,
+      borderRadius: candidate.borderRadius,
+      fontFamily: candidate.fontFamily,
+      fontSize: candidate.fontSize,
+      fontWeight: candidate.fontWeight,
+      letterSpacing: candidate.letterSpacing,
+      textAlign: candidate.textAlign,
+      shadow: candidate.shadow,
+      animationPreset: candidate.animationPreset,
+      durationMs: candidate.durationMs,
+      followLogoSize: candidate.followLogoSize
+    },
+    concede: {
+      text: candidate.text,
+      color: candidate.color,
+      backgroundColor: candidate.backgroundColor,
+      backgroundImageAssetId: candidate.backgroundImageAssetId,
+      backgroundOverlayColor: candidate.backgroundOverlayColor,
+      backgroundOverlayOpacity: candidate.backgroundOverlayOpacity
+    },
+    base: {
+      text: candidate.baseText,
+      color: candidate.baseColor,
+      backgroundColor: candidate.baseBackgroundColor,
+      backgroundImageAssetId: candidate.baseBackgroundImageAssetId,
+      backgroundOverlayColor: candidate.baseBackgroundOverlayColor,
+      backgroundOverlayOpacity: candidate.baseBackgroundOverlayOpacity
+    }
+  };
+}
+
+export const teamEventOverlaySchema = z.preprocess(migrateLegacyTeamEventOverlay, nestedTeamEventOverlaySchema);
 
 export const centerSecondarySchema = z.object({
   gameMode: z.enum(centerSecondaryModeValues).default("staticText"),
@@ -171,14 +288,16 @@ export const themeSchema = z.object({
     breakTime: textComponentSchema,
     eventLogo: imageComponentSchema
   }),
-  concedeState: concedeStateSchema.default({}),
+  teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({})
 });
 
 export const settingsSchema = z.object({
   upstreamBaseUrl: z.string().url(),
   publishedThemeId: z.string().nullable(),
-  pollIntervalMs: z.number().int().min(100).max(10000).default(1000)
+  pollEnabled: z.boolean().default(true),
+  pollIntervalMs: z.number().int().min(100).max(10000).default(1000),
+  autoRemoveBackgroundUploads: z.boolean().default(true)
 });
 
 export const timerSchema = z.object({
@@ -204,8 +323,10 @@ export const teamSchema = z.object({
 export const teamRecordSchema = z.object({
   id: z.string(),
   canonicalName: z.string().min(1),
+  scoreboardDisplayName: z.string().default(""),
   shortName: z.string().default(""),
   aliases: z.array(z.string()).default([]),
+  liveMatchNames: z.array(z.string()).default([]),
   logoAssetId: z.string().nullable().default(null),
   alternateLogoAssetId: z.string().nullable().default(null),
   notes: z.string().default(""),
@@ -225,6 +346,7 @@ export const teamMatchResultSchema = z.object({
   inputName: z.string(),
   normalizedInput: z.string(),
   status: z.enum(["matched", "uncertain", "unmatched"]),
+  resolutionSource: z.enum(["automatic", "manual"]).default("automatic"),
   confidence: z.number().min(0).max(1),
   matchedAlias: z.string().nullable(),
   teamId: z.string().nullable(),
@@ -232,8 +354,59 @@ export const teamMatchResultSchema = z.object({
   candidates: z.array(teamMatchCandidateSchema).default([])
 });
 
+export const teamResolutionOverrideSchema = z.object({
+  normalizedInputName: z.string(),
+  rawInputName: z.string(),
+  teamId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+function migrateLegacyOperationsState(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const candidate = input as Record<string, unknown>;
+  if (Array.isArray(candidate.overrides)) {
+    return candidate;
+  }
+
+  const legacyOverrides = candidate.overrides as
+    | {
+        left?: { rawInputName?: string; teamId?: string; createdAt?: string; updatedAt?: string } | null;
+        right?: { rawInputName?: string; teamId?: string; createdAt?: string; updatedAt?: string } | null;
+      }
+    | undefined;
+
+  if (!legacyOverrides || Array.isArray(legacyOverrides) || typeof legacyOverrides !== "object") {
+    return candidate;
+  }
+
+  const migrated = [legacyOverrides.left, legacyOverrides.right]
+    .filter((override): override is NonNullable<typeof override> => Boolean(override?.rawInputName && override.teamId))
+    .map((override) => ({
+      normalizedInputName: override.rawInputName ?? "",
+      rawInputName: override.rawInputName ?? "",
+      teamId: override.teamId ?? "",
+      createdAt: override.createdAt ?? new Date().toISOString(),
+      updatedAt: override.updatedAt ?? override.createdAt ?? new Date().toISOString()
+    }));
+
+  return {
+    overrides: migrated
+  };
+}
+
+export const operationsStateSchema = z.preprocess(
+  migrateLegacyOperationsState,
+  z.object({
+    overrides: z.array(teamResolutionOverrideSchema).default([])
+  })
+);
+
 export const normalizedLiveStateSchema = z.object({
-  sourceStatus: z.enum(["idle", "ok", "error"]),
+  sourceStatus: z.enum(["idle", "ok", "error", "paused"]),
   fetchedAt: z.string().nullable(),
   errorMessage: z.string().nullable(),
   state: z.string(),
@@ -252,7 +425,7 @@ export const normalizedLiveStateSchema = z.object({
   unresolvedTeamNames: z.array(z.string()).default([]),
   breakTimer: timerSchema,
   gameTimer: timerSchema,
-  towelEvent: z.enum(["home", "away", "none"])
+  teamEvent: z.enum(["towel-home", "towel-away", "base-home", "base-away", "none"])
 });
 
 export const assetSchema = z.object({
@@ -260,7 +433,11 @@ export const assetSchema = z.object({
   originalName: z.string(),
   mimeType: z.string(),
   url: z.string(),
-  createdAt: z.string()
+  createdAt: z.string(),
+  role: z.enum(["original", "processed"]).default("processed"),
+  sourceAssetId: z.string().nullable().default(null),
+  hiddenFromPicker: z.boolean().default(false),
+  contentHash: z.string().nullable().default(null)
 });
 
 export const themeExportSchema = z.object({
@@ -289,6 +466,18 @@ export const appExportSchema = z.object({
   )
 });
 
+export const teamRegistryExportSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string(),
+  teams: z.array(teamRecordSchema),
+  assets: z.array(
+    z.object({
+      asset: assetSchema,
+      data: z.string()
+    })
+  )
+});
+
 export type TextThemeComponent = z.infer<typeof textComponentSchema>;
 export type ImageThemeComponent = z.infer<typeof imageComponentSchema>;
 export type ThemeDefinition = z.infer<typeof themeSchema>;
@@ -297,13 +486,18 @@ export type NormalizedLiveState = z.infer<typeof normalizedLiveStateSchema>;
 export type StoredAsset = z.infer<typeof assetSchema>;
 export type TeamRecord = z.infer<typeof teamRecordSchema>;
 export type TeamMatchResult = z.infer<typeof teamMatchResultSchema>;
+export type TeamResolutionOverride = z.infer<typeof teamResolutionOverrideSchema>;
+export type OperationsState = z.infer<typeof operationsStateSchema>;
 export type ThemeExportPackage = z.infer<typeof themeExportSchema>;
 export type AppExportPackage = z.infer<typeof appExportSchema>;
+export type TeamRegistryExportPackage = z.infer<typeof teamRegistryExportSchema>;
 
 export const defaultSettings: AppSettings = {
-  upstreamBaseUrl: "http://192.168.100.67:5000",
-  publishedThemeId: "builtin-classic-chroma",
-  pollIntervalMs: 1000
+  upstreamBaseUrl: "http://127.0.0.1:5000",
+  publishedThemeId: "theme-7ad8adb8-e017-4853-93b1-fb608a750253",
+  pollEnabled: true,
+  pollIntervalMs: 1000,
+  autoRemoveBackgroundUploads: true
 };
 
 export function createThemeId(prefix = "theme"): string {

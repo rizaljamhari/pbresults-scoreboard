@@ -5,6 +5,7 @@ import { useAssets, useTeams } from "../hooks";
 import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { hasTeamUnsavedChanges } from "./teamAdminUtils";
+import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/teamMatching";
 
 function aliasesToText(aliases: string[]) {
   return aliases.join("\n");
@@ -17,6 +18,15 @@ function aliasesFromText(value: string) {
     .filter(Boolean);
 }
 
+function getExplicitMatchNames(team: TeamRecord) {
+  return listExplicitTeamMatchNames(team);
+}
+
+function getGeneratedMatchNames(team: TeamRecord) {
+  const explicit = new Set(getExplicitMatchNames(team).map((name) => name.trim()));
+  return generateTeamAliases(team).filter((name) => !explicit.has(name.trim()));
+}
+
 export function TeamDetailPage() {
   const navigate = useNavigate();
   const params = useParams<{ id: string }>();
@@ -24,20 +34,30 @@ export function TeamDetailPage() {
   const teams = useTeams();
   const assets = useAssets();
   const [draft, setDraft] = useState<TeamRecord | null>(null);
+  const [aliasesText, setAliasesText] = useState("");
   const [saving, setSaving] = useState(false);
 
   const selectedTeam = useMemo(
     () => teams.data?.find((team) => team.id === teamId) ?? null,
     [teamId, teams.data]
   );
+  const explicitMatchNames = useMemo(() => (draft ? getExplicitMatchNames(draft) : []), [draft]);
+  const generatedMatchNames = useMemo(() => (draft ? getGeneratedMatchNames(draft) : []), [draft]);
 
   const hasUnsavedChanges = useMemo(() => {
     return hasTeamUnsavedChanges(draft, selectedTeam);
   }, [draft, selectedTeam]);
 
   useEffect(() => {
-    setDraft(selectedTeam ? structuredClone(selectedTeam) : null);
-  }, [selectedTeam]);
+    if (!selectedTeam) {
+      setDraft(null);
+      setAliasesText("");
+      return;
+    }
+
+    setDraft(structuredClone(selectedTeam));
+    setAliasesText(aliasesToText(selectedTeam.aliases));
+  }, [selectedTeam?.id]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -90,9 +110,14 @@ export function TeamDetailPage() {
 
     setSaving(true);
     try {
-      const saved = await api.saveTeam(draft);
+      const nextDraft = {
+        ...draft,
+        aliases: aliasesFromText(aliasesText)
+      };
+      const saved = await api.saveTeam(nextDraft);
       replaceTeamInCache(saved);
       setDraft(structuredClone(saved));
+      setAliasesText(aliasesToText(saved.aliases));
       showToast({ kind: "success", message: "Team updated." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update team." });
@@ -129,12 +154,45 @@ export function TeamDetailPage() {
     try {
       const result = await api.uploadTeamLogo(selectedTeam.id, file, slot);
       replaceTeamInCache(result.team);
-      setDraft(structuredClone(result.team));
+      setDraft((current) => {
+        if (!current) {
+          return structuredClone(result.team);
+        }
+        return {
+          ...current,
+          logoAssetId: result.team.logoAssetId,
+          alternateLogoAssetId: result.team.alternateLogoAssetId,
+          updatedAt: result.team.updatedAt
+        };
+      });
       assets.setData([result.asset, ...(assets.data ?? []).filter((asset) => asset.id !== result.asset.id)]);
-      showToast({ kind: "success", message: slot === "primary" ? "Primary logo updated." : "Alternate logo updated." });
+      const fallbackMessage =
+        result.processing.status === "processed"
+          ? ""
+          : ` Background removal ${result.processing.status}${result.processing.reason ? `: ${result.processing.reason}` : "."}`;
+      showToast({
+        kind: "success",
+        message: `${slot === "primary" ? "Primary logo updated." : "Alternate logo updated."}${fallbackMessage}`
+      });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to upload team logo." });
     }
+  }
+
+  async function handleCopyTeamId() {
+    try {
+      await navigator.clipboard.writeText(draft.id);
+      showToast({ kind: "success", message: "Team ID copied.", durationMs: 1600 });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to copy Team ID." });
+    }
+  }
+
+  function removeLiveMatchName(name: string) {
+    setDraft({
+      ...draft,
+      liveMatchNames: draft.liveMatchNames.filter((entry) => entry !== name)
+    });
   }
 
   if (teams.loading && !teams.data) {
@@ -206,8 +264,26 @@ export function TeamDetailPage() {
 
           <div className="form-grid">
             <label>
+              Team reference
+              <div className="field-with-action">
+                <input value={draft.id} readOnly />
+                <button className="secondary-button" type="button" onClick={() => void handleCopyTeamId()}>
+                  Copy
+                </button>
+              </div>
+              <span className="hint">Used internally for team import/export and safe identification.</span>
+            </label>
+            <label>
               Canonical name
               <input value={draft.canonicalName} onChange={(event) => setDraft({ ...draft, canonicalName: event.target.value })} />
+            </label>
+            <label>
+              Scoreboard display name
+              <input
+                value={draft.scoreboardDisplayName}
+                onChange={(event) => setDraft({ ...draft, scoreboardDisplayName: event.target.value })}
+                placeholder="Optional override used on scoreboard"
+              />
             </label>
             <label>
               Short name
@@ -217,8 +293,13 @@ export function TeamDetailPage() {
               Aliases (comma or newline separated)
               <textarea
                 rows={7}
-                value={aliasesToText(draft.aliases)}
-                onChange={(event) => setDraft({ ...draft, aliases: aliasesFromText(event.target.value) })}
+                value={aliasesText}
+                onChange={(event) => setAliasesText(event.target.value)}
+                onBlur={() => {
+                  const parsed = aliasesFromText(aliasesText);
+                  setDraft({ ...draft, aliases: parsed });
+                  setAliasesText(aliasesToText(parsed));
+                }}
               />
             </label>
             <label>
@@ -234,45 +315,121 @@ export function TeamDetailPage() {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Logos</p>
-              <h3>Primary and alternate assets</h3>
+        <div className="panel-stack">
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Logos</p>
+                <h3>Primary and alternate assets</h3>
+              </div>
+            </div>
+
+            <div className="team-logo-grid">
+              {([
+                ["Primary logo", draft.logoAssetId, "primary"],
+                ["Alternate logo", draft.alternateLogoAssetId, "alternate"]
+              ] as const).map(([label, assetId, slot]) => {
+                const asset = selectedAsset(assetId);
+                return (
+                  <div key={slot} className="team-logo-card">
+                    <strong>{label}</strong>
+                    <div className="team-logo-preview">
+                      {asset ? <img src={asset.url} alt={asset.originalName} className="team-logo-image" /> : <span>No asset</span>}
+                    </div>
+                    <span className="hint">{asset?.originalName ?? "Upload a PNG, JPG, or GIF."}</span>
+                    <label className="secondary-button">
+                      Upload
+                      <input
+                        hidden
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            void handleUploadLogo(slot, file);
+                          }
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="team-logo-grid">
-            {([
-              ["Primary logo", draft.logoAssetId, "primary"],
-              ["Alternate logo", draft.alternateLogoAssetId, "alternate"]
-            ] as const).map(([label, assetId, slot]) => {
-              const asset = selectedAsset(assetId);
-              return (
-                <div key={slot} className="team-logo-card">
-                  <strong>{label}</strong>
-                  <div className="team-logo-preview">
-                    {asset ? <img src={asset.url} alt={asset.originalName} className="team-logo-image" /> : <span>No asset</span>}
-                  </div>
-                  <span className="hint">{asset?.originalName ?? "Upload a PNG, JPG, or GIF."}</span>
-                  <label className="secondary-button">
-                    Upload
-                    <input
-                      hidden
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void handleUploadLogo(slot, file);
-                        }
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-              );
-            })}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Matching</p>
+                <h3>Entered match names</h3>
+                <p className="hint">
+                  These are the names you entered directly on this team and the matcher will use them exactly.
+                </p>
+              </div>
+            </div>
+
+            <div className="chip-row">
+              {explicitMatchNames.length ? (
+                explicitMatchNames.map((name) => (
+                  <span key={name} className="pill">
+                    {name}
+                  </span>
+                ))
+              ) : (
+                <span className="hint">No names available yet.</span>
+              )}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Live Match Names</p>
+                <h3>Remembered from live resolution</h3>
+                <p className="hint">
+                  These short names were learned from Operations. Remove any that should no longer auto-match this team.
+                </p>
+              </div>
+            </div>
+
+            {draft.liveMatchNames.length ? (
+              <div className="chip-row">
+                {draft.liveMatchNames.map((name) => (
+                  <button key={name} className="pill-button" type="button" onClick={() => removeLiveMatchName(name)}>
+                    <span>{name}</span>
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">No learned live names yet. Use “Use and remember” from Operations to add them.</p>
+            )}
+            <p className="hint">Changes take effect after you save this team.</p>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Generated Shortcuts</p>
+                <h3>Automatic helper names</h3>
+                <p className="hint">
+                  These are derived from the team name automatically, such as initials or shorthand. They help matching but are not manually editable here.
+                </p>
+              </div>
+            </div>
+
+            <div className="chip-row">
+              {generatedMatchNames.length ? (
+                generatedMatchNames.map((name) => (
+                  <span key={name} className="pill">
+                    {name}
+                  </span>
+                ))
+              ) : (
+                <span className="hint">No generated shortcuts for this team.</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

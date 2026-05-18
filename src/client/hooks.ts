@@ -125,6 +125,69 @@ export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollI
 
   return { data: derivedState, error };
 }
+
+export function useAutoCloseRowActionMenus() {
+  useEffect(() => {
+    function closeAll(except?: HTMLDetailsElement | null) {
+      document.querySelectorAll<HTMLDetailsElement>(".row-action-menu[open]").forEach((menu) => {
+        if (menu !== except) {
+          menu.open = false;
+        }
+      });
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      if (!(event.target instanceof HTMLElement)) {
+        return;
+      }
+
+      const menuRoot = event.target.closest(".row-action-menu");
+      if (!(menuRoot instanceof HTMLDetailsElement)) {
+        closeAll();
+        return;
+      }
+
+      closeAll(menuRoot);
+    }
+
+    function onClick(event: MouseEvent) {
+      if (!(event.target instanceof HTMLElement)) {
+        return;
+      }
+
+      const action = event.target.closest(".row-action-menu-list button, .row-action-menu-list a");
+      if (!action) {
+        return;
+      }
+
+      const menuRoot = event.target.closest(".row-action-menu");
+      if (!(menuRoot instanceof HTMLDetailsElement)) {
+        return;
+      }
+
+      window.setTimeout(() => {
+        menuRoot.open = false;
+      }, 0);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      closeAll();
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("click", onClick);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("click", onClick);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+}
+
 function useResource<T>(loader: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);

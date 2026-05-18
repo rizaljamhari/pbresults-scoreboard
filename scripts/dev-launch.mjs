@@ -54,7 +54,7 @@ function openUrl(url) {
 async function main() {
   const clientPort = await findFreePort(preferredClientPort);
   const serverPort = await findFreePort(preferredServerPort === clientPort ? preferredServerPort + 1 : preferredServerPort);
-  const adminUrl = `http://localhost:${clientPort}/admin/settings`;
+  const adminUrl = `http://localhost:${clientPort}/admin/operations`;
 
   process.stdout.write(`[dev] client port: ${clientPort}\n`);
   process.stdout.write(`[dev] server port: ${serverPort}\n`);

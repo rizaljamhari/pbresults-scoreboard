@@ -4,7 +4,9 @@ import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 const sample = {
   upstreamBaseUrl: "http://127.0.0.1:5000",
   publishedThemeId: "theme-1",
-  pollIntervalMs: 1000
+  pollEnabled: true,
+  pollIntervalMs: 1000,
+  autoRemoveBackgroundUploads: true
 };
 
 describe("settingsFormUtils", () => {
@@ -20,6 +22,18 @@ describe("settingsFormUtils", () => {
       areSettingsEqual(sample, {
         ...sample,
         pollIntervalMs: 1200
+      })
+    ).toBe(false);
+    expect(
+      areSettingsEqual(sample, {
+        ...sample,
+        pollEnabled: false
+      })
+    ).toBe(false);
+    expect(
+      areSettingsEqual(sample, {
+        ...sample,
+        autoRemoveBackgroundUploads: false
       })
     ).toBe(false);
   });

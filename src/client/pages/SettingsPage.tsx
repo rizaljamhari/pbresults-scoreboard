@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
-import { useLiveState, useSettings, useThemes } from "../hooks";
+import { useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 export function SettingsPage() {
   const settings = useSettings();
   const themes = useThemes();
-  const live = useLiveState(true, settings.data?.pollIntervalMs);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(settings.data ? createSettingsDraft(settings.data) : null);
 
@@ -29,7 +29,7 @@ export function SettingsPage() {
     if (!hasUnsavedChanges) {
       setDraft(createSettingsDraft(settings.data));
     }
-  }, [settings.data, draft, hasUnsavedChanges]);
+  }, [settings.data, hasUnsavedChanges]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -203,6 +203,42 @@ export function SettingsPage() {
               }
             />
           </label>
+          <label className="checkbox">
+            <input
+              name="pollEnabled"
+              type="checkbox"
+              checked={draft?.pollEnabled ?? settings.data.pollEnabled}
+              onChange={(event) =>
+                setDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        pollEnabled: event.target.checked
+                      }
+                    : current
+                )
+              }
+            />
+            Enable live polling
+          </label>
+          <label className="checkbox">
+            <input
+              name="autoRemoveBackgroundUploads"
+              type="checkbox"
+              checked={draft?.autoRemoveBackgroundUploads ?? settings.data.autoRemoveBackgroundUploads}
+              onChange={(event) =>
+                setDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        autoRemoveBackgroundUploads: event.target.checked
+                      }
+                    : current
+                )
+              }
+            />
+            Automatically remove image backgrounds on upload
+          </label>
           <div className="action-row compact">
             <button disabled={saving || !hasUnsavedChanges} type="submit">
               {saving ? "Saving…" : "Save settings"}
@@ -210,39 +246,6 @@ export function SettingsPage() {
             <span className="hint">Tip: press Ctrl/Cmd+S to save.</span>
           </div>
         </form>
-      </div>
-
-      <div className="panel">
-        <p className="eyebrow">Health</p>
-        <h2>Current live feed</h2>
-        {live.data ? (
-          <div className="stats-grid">
-            <div>
-              <strong>Source status</strong>
-              <span>{live.data.sourceStatus}</span>
-            </div>
-            <div>
-              <strong>State / period</strong>
-              <span>
-                {live.data.state} / {live.data.period}
-              </span>
-            </div>
-            <div>
-              <strong>Round / switched</strong>
-              <span>
-                {live.data.round} / {live.data.sidesSwitched}
-              </span>
-            </div>
-            <div>
-              <strong>Display teams</strong>
-              <span>
-                {live.data.displayLeftTeam.name} vs {live.data.displayRightTeam.name}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <p>{live.error ?? "Waiting for live data…"}</p>
-        )}
       </div>
 
       <div className="panel">

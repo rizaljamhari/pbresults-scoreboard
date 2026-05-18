@@ -2,17 +2,61 @@ import type {
   AppExportPackage,
   AppSettings,
   NormalizedLiveState,
+  OperationsState,
   StoredAsset,
   TeamMatchResult,
   TeamRecord,
+  TeamRegistryExportPackage,
+  TeamResolutionOverride,
   ThemeDefinition,
   ThemeExportPackage
 } from "../shared/theme";
 
+type UploadProcessingInfo = {
+  status: "processed" | "skipped" | "failed";
+  reason: string | null;
+};
+
+export type UploadAssetResponse = {
+  asset: StoredAsset;
+  processing: UploadProcessingInfo;
+};
+
+export type UploadTeamLogoResponse = {
+  team: TeamRecord;
+  asset: StoredAsset;
+  processing: UploadProcessingInfo;
+};
+
+export type ApiErrorPayload = {
+  message?: string;
+  code?: string;
+  conflictTeamId?: string | null;
+  conflictTeamName?: string | null;
+  conflictType?: "reassignable" | "blocked" | null;
+};
+
+export class ApiError extends Error {
+  status: number;
+  payload: ApiErrorPayload | null;
+
+  constructor(message: string, status: number, payload: ApiErrorPayload | null) {
+    super(message);
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
 async function handle<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed with ${response.status}`);
+    let payload: ApiErrorPayload | null = null;
+    let fallbackText = "";
+    try {
+      payload = (await response.json()) as ApiErrorPayload;
+    } catch {
+      fallbackText = await response.text();
+    }
+    throw new ApiError(payload?.message || fallbackText || `Request failed with ${response.status}`, response.status, payload);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -22,12 +66,35 @@ async function handle<T>(response: Response): Promise<T> {
 
 export const api = {
   getSettings: () => fetch("/api/settings").then(handle<AppSettings>),
+  getOperations: () => fetch("/api/operations").then(handle<OperationsState>),
   updateSettings: (settings: AppSettings) =>
     fetch("/api/settings", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(settings)
     }).then(handle<AppSettings>),
+  startLivePolling: () =>
+    fetch("/api/live/poll/start", {
+      method: "POST"
+    }).then(handle<AppSettings>),
+  stopLivePolling: () =>
+    fetch("/api/live/poll/stop", {
+      method: "POST"
+    }).then(handle<AppSettings>),
+  refreshLivePolling: () =>
+    fetch("/api/live/poll/refresh", {
+      method: "POST"
+    }).then(handle<{ ok: boolean }>),
+  resolveLiveTeam: (payload: { teamId: string; rawInputName: string; remember?: boolean; forceReassign?: boolean }) =>
+    fetch("/api/operations/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(handle<{ override: TeamResolutionOverride; rememberedTeam: TeamRecord | null; reassignedFromTeam: TeamRecord | null }>),
+  clearLiveTeamResolution: (side: "left" | "right", rawInputName: string) =>
+    fetch(`/api/operations/resolve/${side}?rawInputName=${encodeURIComponent(rawInputName)}`, {
+      method: "DELETE"
+    }).then(handle<void>),
   exportApp: () => fetch("/api/app/export").then(handle<AppExportPackage>),
   importApp: (payload: AppExportPackage) =>
     fetch("/api/app/import", {
@@ -35,8 +102,15 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload)
     }).then(handle<{ settings: AppSettings; themes: ThemeDefinition[] }>),
+  exportTeams: () => fetch("/api/teams/export").then(handle<TeamRegistryExportPackage>),
+  importTeams: (payload: TeamRegistryExportPackage) =>
+    fetch("/api/teams/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(handle<TeamRecord[]>),
   getTeams: () => fetch("/api/teams").then(handle<TeamRecord[]>),
-  createTeam: (input?: Partial<Pick<TeamRecord, "canonicalName" | "shortName" | "aliases" | "notes" | "active">>) =>
+  createTeam: (input?: Partial<Pick<TeamRecord, "canonicalName" | "scoreboardDisplayName" | "shortName" | "aliases" | "notes" | "active">>) =>
     fetch("/api/teams", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -59,7 +133,7 @@ export const api = {
     return fetch(`/api/teams/${teamId}/logo?slot=${slot}`, {
       method: "POST",
       body: form
-    }).then(handle<{ team: TeamRecord; asset: StoredAsset }>);
+    }).then(handle<UploadTeamLogoResponse>);
   },
   matchTeam: (inputName: string) =>
     fetch("/api/teams/match-test", {
@@ -98,7 +172,7 @@ export const api = {
     return fetch("/api/assets", {
       method: "POST",
       body: form
-    }).then(handle<StoredAsset>);
+    }).then(handle<UploadAssetResponse>);
   },
   exportTheme: (id: string) => fetch(`/api/themes/${id}/export`).then(handle<ThemeExportPackage>),
   importTheme: (payload: ThemeExportPackage) =>
