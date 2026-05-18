@@ -39,7 +39,7 @@ import { appExportSchema, settingsSchema, teamRecordSchema, teamRegistryExportSc
 
 const app = Fastify({
   logger: true,
-  bodyLimit: 20 * 1024 * 1024
+  bodyLimit: 200 * 1024 * 1024
 });
 
 await app.register(cors, { origin: true });
