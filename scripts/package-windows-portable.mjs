@@ -28,11 +28,18 @@ function fail(message) {
 }
 
 function run(command, args, options = {}) {
-  execFileSync(command, args, {
+  const execOptions = {
     cwd: projectDir,
     stdio: "inherit",
     ...options
-  });
+  };
+
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(command)) {
+    execFileSync("cmd.exe", ["/d", "/s", "/c", command, ...args], execOptions);
+    return;
+  }
+
+  execFileSync(command, args, execOptions);
 }
 
 async function ensureWindowsHost() {
