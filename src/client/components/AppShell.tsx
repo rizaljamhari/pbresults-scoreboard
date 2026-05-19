@@ -18,7 +18,7 @@ export function AppShell() {
   const navItems = [
     {
       to: "/admin/operations",
-      label: "Operations",
+      label: "Overview",
       active: location.pathname === "/admin/operations"
     },
     {

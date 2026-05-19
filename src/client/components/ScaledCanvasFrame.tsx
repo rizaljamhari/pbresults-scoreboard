@@ -7,6 +7,10 @@ type ScaledCanvasFrameProps = {
   innerClassName?: string;
   mode?: "contain" | "width";
   zoom?: number;
+  camera?: {
+    x: number;
+    y: number;
+  };
   children: ReactNode | ((scale: number) => ReactNode);
 };
 
@@ -17,6 +21,7 @@ export function ScaledCanvasFrame({
   innerClassName,
   mode = "contain",
   zoom = 1,
+  camera,
   children
 }: ScaledCanvasFrameProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -50,14 +55,16 @@ export function ScaledCanvasFrame({
   }, [containerSize.height, containerSize.width, height, mode, width]);
 
   const appliedScale = useMemo(() => Math.max(0.1, scale * zoom), [scale, zoom]);
+  const viewportWidth = useMemo(() => Math.round(width * scale), [width, scale]);
+  const viewportHeight = useMemo(() => Math.round(height * scale), [height, scale]);
 
   return (
     <div ref={containerRef} className={className}>
       <div
         className={innerClassName}
         style={{
-          width: Math.round(width * appliedScale),
-          height: Math.round(height * appliedScale)
+          width: viewportWidth,
+          height: viewportHeight
         }}
       >
         <div
@@ -65,7 +72,7 @@ export function ScaledCanvasFrame({
             width,
             height,
             position: "relative",
-            transform: `scale(${appliedScale})`,
+            transform: `translate(${camera?.x ?? 0}px, ${camera?.y ?? 0}px) scale(${appliedScale})`,
             transformOrigin: "top left"
           }}
         >

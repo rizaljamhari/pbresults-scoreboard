@@ -577,11 +577,34 @@ details[open]:not(.editor-section-card) > summary::after {
   width: 100%;
 }
 
+.canvas-below-drawers {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.canvas-shortcuts-disclosure {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.canvas-shortcuts-disclosure > summary {
+  justify-self: start;
+}
+
+.canvas-preview-disclosure {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.canvas-preview-disclosure > summary {
+  justify-self: start;
+}
+
 .canvas-shortcut-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.75rem 0.85rem;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
   border-radius: var(--md-radius-m);
   background: var(--md-surface-2);
   border: 1px solid var(--md-outline-soft);
@@ -594,13 +617,13 @@ details[open]:not(.editor-section-card) > summary::after {
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
-  min-height: 34px;
-  padding: 0.42rem 0.7rem;
+  min-height: 30px;
+  padding: 0.34rem 0.58rem;
   border-radius: 999px;
   background: var(--md-surface);
   border: 1px solid var(--md-outline-soft);
   color: var(--md-primary-text);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   white-space: nowrap;
 }
 
@@ -634,10 +657,60 @@ details[open]:not(.editor-section-card) > summary::after {
   overflow: visible;
 }
 
+.canvas-preview-bar--drawer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  align-items: end;
+}
+
+.canvas-preview-bar--drawer .row-action-menu,
+.canvas-preview-bar--drawer > button {
+  justify-self: start;
+}
+
 .canvas-editor-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.canvas-snap-controls {
+  position: relative;
+}
+
+.canvas-snap-controls > summary {
+  list-style: none;
+}
+
+.canvas-snap-controls > summary::-webkit-details-marker {
+  display: none;
+}
+
+.canvas-snap-controls-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 45;
+  display: grid;
+  gap: 0.55rem;
+  min-width: 250px;
+  padding: 0.7rem;
+  border-radius: var(--md-radius-s);
+  border: 1px solid var(--md-outline-soft);
+  background: var(--md-surface);
+  box-shadow: var(--md-shadow-2);
+}
+
+.canvas-snap-controls-panel .checkbox {
+  font-size: 0.85rem;
+}
+
+.canvas-snap-controls-panel label {
+  gap: 0.35rem;
+}
+
+.canvas-snap-controls-panel input[type="range"] {
+  margin-top: 0;
 }
 
 .canvas-preview-toggle {
@@ -744,6 +817,19 @@ details[open]:not(.editor-section-card) > summary::after {
   gap: 1rem;
 }
 
+.inspector-stack--compact {
+  gap: 0.75rem;
+}
+
+.inspector-stack--compact .editor-section-header {
+  padding: 0.85rem;
+}
+
+.inspector-stack--compact .editor-section-body {
+  gap: 0.75rem;
+  padding: 0 0.85rem 0.85rem;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -845,6 +931,36 @@ details[open]:not(.editor-section-card) > summary::after {
   gap: 0.8rem;
 }
 
+.slot-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.slot-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--md-outline-soft);
+  background: var(--md-surface);
+  color: var(--md-primary-text);
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.slot-chip:hover {
+  background: var(--md-surface-3);
+}
+
+.slot-chip--active {
+  background: var(--md-primary-soft);
+  border-color: rgba(0, 95, 163, 0.18);
+  color: var(--md-primary-text);
+}
+
 .block-editor-card {
   display: grid;
   gap: 0.55rem;
@@ -888,6 +1004,35 @@ details[open]:not(.editor-section-card) > summary::after {
   background: var(--md-surface-2);
 }
 
+.operator-guide-disclosure {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.operator-guide-disclosure > summary {
+  justify-self: start;
+}
+
+.row-action-menu-note {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: var(--md-radius-s);
+  border: 1px solid var(--md-outline-soft);
+  background: var(--md-surface-2);
+}
+
+.row-action-menu-note strong {
+  font-size: 0.82rem;
+  color: var(--md-text-muted);
+}
+
+.row-action-menu-note p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--md-text-muted);
+}
+
 .operator-guide-card strong {
   font-size: 0.92rem;
   color: var(--md-text);
@@ -927,7 +1072,20 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .canvas-stage-frame {
   width: 100%;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.canvas-pan-layer {
+  width: 100%;
+  touch-action: none;
+}
+
+.canvas-pan-layer.can-pan {
+  cursor: grab;
+}
+
+.canvas-pan-layer.is-panning {
+  cursor: grabbing;
 }
 
 .canvas-stage {
@@ -953,6 +1111,48 @@ details[open]:not(.editor-section-card) > summary::after {
   right: 0;
   height: 2px;
   background: rgba(0, 95, 163, 0.5);
+}
+
+.canvas-marquee {
+  position: absolute;
+  z-index: 28;
+  border: 1px dashed rgba(0, 95, 163, 0.9);
+  background: rgba(0, 95, 163, 0.12);
+  pointer-events: none;
+}
+
+.canvas-measure-line {
+  position: absolute;
+  z-index: 24;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.canvas-measure-line--horizontal {
+  border-top: 1px dashed rgba(0, 95, 163, 0.65);
+}
+
+.canvas-measure-line--vertical {
+  border-left: 1px dashed rgba(0, 95, 163, 0.65);
+}
+
+.canvas-measure-label {
+  position: absolute;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 20px;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 95, 163, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--md-primary-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .canvas-hud {

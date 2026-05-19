@@ -21,6 +21,7 @@ const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const nudgePresets = [1, 5, 10] as const;
 const safeAreaTopInset = 54;
 const defaultTopInset = 24;
+const previewDrawerStorageKey = "pbresults.themeEditor.previewDrawerOpen";
 
 const componentLabels: Record<ComponentId, string> = {
   homeName: "Left Name",
@@ -245,13 +246,31 @@ function TextField(props: { label: string; value: string; onChange: (value: stri
   );
 }
 
-function SectionCard(props: { title: string; description?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function SectionCard(props: {
+  title: string;
+  description?: string;
+  defaultOpen?: boolean;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const openProps = props.open === undefined ? { open: props.defaultOpen ?? true } : { open: props.open };
+
   return (
-    <details className="editor-section-card" open={props.defaultOpen ?? true}>
+    <details
+      className="editor-section-card"
+      {...openProps}
+      onToggle={
+        props.onToggle
+          ? (event) => {
+              props.onToggle?.(event.currentTarget.open);
+            }
+          : undefined
+      }
+    >
       <summary className="editor-section-header">
         <div>
           <h3>{props.title}</h3>
-          {props.description ? <FieldHint>{props.description}</FieldHint> : null}
         </div>
       </summary>
       <div className="editor-section-body">{props.children}</div>
@@ -378,6 +397,20 @@ function mirroredPairForComponent(id: ComponentId) {
   return mirroredComponentPairs.find(([leftId, rightId]) => leftId === id || rightId === id) ?? null;
 }
 
+type LayoutScopeEntry = {
+  id: ComponentId;
+  component: ThemeDefinition["components"][ComponentId];
+};
+
+function resolveLayoutScopeEntries(
+  draft: ThemeDefinition,
+  ids: ComponentId[]
+): LayoutScopeEntry[] {
+  const all = ids.map((id) => ({ id, component: draft.components[id] }));
+  const visible = all.filter((entry) => entry.component.visible);
+  return visible.length > 0 ? visible : all;
+}
+
 export function ThemeEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -387,6 +420,7 @@ export function ThemeEditorPage() {
   const teams = useTeams();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const [selected, setSelected] = useState<ComponentId | null>("homeName");
+  const [selectedIds, setSelectedIds] = useState<ComponentId[]>(["homeName"]);
   const [selectedSlot, setSelectedSlot] = useState<SlotId>("left");
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<ThemeDefinition[]>([]);
@@ -399,6 +433,12 @@ export function ThemeEditorPage() {
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [nudgeStep, setNudgeStep] = useState<(typeof nudgePresets)[number]>(1);
   const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem(previewDrawerStorageKey) === "1";
+  });
   const [previewPeriod, setPreviewPeriod] = useState<PreviewPeriodMode>("live");
   const [previewEvent, setPreviewEvent] = useState<PreviewEventMode>("live");
   const [previewSidesSwitched, setPreviewSidesSwitched] = useState<PreviewSwitchMode>("live");
@@ -709,11 +749,50 @@ export function ThemeEditorPage() {
     });
   }
 
-  function selectComponent(id: ComponentId) {
+  function selectComponent(id: ComponentId, options?: { additive?: boolean }) {
     setActiveMenu(null);
     setSelectAllMode(false);
-    setSelected(id);
-    setSelectedSlot(slotForComponent(id));
+    const additive = options?.additive === true;
+
+    if (additive) {
+      setSelectedIds((current) => {
+        const exists = current.includes(id);
+        const next = exists ? current.filter((entry) => entry !== id) : [...current, id];
+        setSelected(next.length > 0 ? next[next.length - 1] : null);
+        return next;
+      });
+      setSelectedSlot(slotForComponent(id));
+    } else {
+      setSelected(id);
+      setSelectedIds([id]);
+      setSelectedSlot(slotForComponent(id));
+    }
+
+    setInspectorView("component");
+  }
+
+  function selectComponents(ids: ComponentId[], options?: { additive?: boolean }) {
+    setActiveMenu(null);
+    setSelectAllMode(false);
+
+    const unique = Array.from(new Set(ids));
+    if (options?.additive) {
+      setSelectedIds((current) => {
+        const next = Array.from(new Set([...current, ...unique]));
+        setSelected(next.length > 0 ? next[next.length - 1] : null);
+        if (next.length > 0) {
+          setSelectedSlot(slotForComponent(next[next.length - 1]));
+        }
+        return next;
+      });
+    } else {
+      setSelectedIds(unique);
+      setSelected(unique.length > 0 ? unique[unique.length - 1] : null);
+      if (unique.length > 0) {
+        setSelectedSlot(slotForComponent(unique[unique.length - 1]));
+      }
+    }
+
     setInspectorView("component");
   }
 
@@ -722,7 +801,11 @@ export function ThemeEditorPage() {
     setSelectAllMode(false);
     setSelectedSlot(slot);
     if (!selected || !slotConfig[slot].ids.includes(selected)) {
-      setSelected(slotConfig[slot].ids[0]);
+      const nextId = slotConfig[slot].ids[0];
+      setSelected(nextId);
+      setSelectedIds(nextId ? [nextId] : []);
+    } else {
+      setSelectedIds([selected]);
     }
     setInspectorView("component");
   }
@@ -730,6 +813,10 @@ export function ThemeEditorPage() {
   function selectAllComponents() {
     setActiveMenu(null);
     setSelectAllMode(true);
+    if (themeResource.data) {
+      const ids = Object.keys(themeResource.data.components) as ComponentId[];
+      setSelectedIds(ids);
+    }
     setInspectorView("component");
   }
 
@@ -809,6 +896,131 @@ export function ThemeEditorPage() {
     });
   }
 
+  function getLayoutScopeIds(currentTheme: ThemeDefinition): ComponentId[] {
+    if (selectAllMode) {
+      return Object.keys(currentTheme.components) as ComponentId[];
+    }
+    return selectedSlotConfig.ids;
+  }
+
+  function alignLayoutScope(mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") {
+    if (!themeResource.data) {
+      return;
+    }
+
+    patchTheme((draft) => {
+      const ids = getLayoutScopeIds(draft);
+      const entries = resolveLayoutScopeEntries(draft, ids);
+      if (entries.length <= 1) {
+        return;
+      }
+
+      const minX = Math.min(...entries.map((entry) => entry.component.x));
+      const minY = Math.min(...entries.map((entry) => entry.component.y));
+      const maxX = Math.max(...entries.map((entry) => entry.component.x + entry.component.width));
+      const maxY = Math.max(...entries.map((entry) => entry.component.y + entry.component.height));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      for (const entry of entries) {
+        if (mode === "left") {
+          entry.component.x = minX;
+        } else if (mode === "centerX") {
+          entry.component.x = Math.round(centerX - entry.component.width / 2);
+        } else if (mode === "right") {
+          entry.component.x = Math.round(maxX - entry.component.width);
+        } else if (mode === "top") {
+          entry.component.y = minY;
+        } else if (mode === "centerY") {
+          entry.component.y = Math.round(centerY - entry.component.height / 2);
+        } else if (mode === "bottom") {
+          entry.component.y = Math.round(maxY - entry.component.height);
+        }
+      }
+    });
+    closeMenus();
+  }
+
+  function distributeLayoutScope(axis: "horizontal" | "vertical") {
+    if (!themeResource.data) {
+      return;
+    }
+
+    patchTheme((draft) => {
+      const ids = getLayoutScopeIds(draft);
+      const entries = resolveLayoutScopeEntries(draft, ids);
+      if (entries.length < 3) {
+        return;
+      }
+
+      const sorted = [...entries].sort((left, right) =>
+        axis === "horizontal"
+          ? left.component.x - right.component.x
+          : left.component.y - right.component.y
+      );
+
+      const first = sorted[0].component;
+      const last = sorted[sorted.length - 1].component;
+      const start = axis === "horizontal" ? first.x : first.y;
+      const end =
+        axis === "horizontal"
+          ? last.x + last.width
+          : last.y + last.height;
+      const totalSize = sorted.reduce(
+        (sum, entry) => sum + (axis === "horizontal" ? entry.component.width : entry.component.height),
+        0
+      );
+      const span = end - start;
+      if (span <= totalSize) {
+        return;
+      }
+
+      const gap = (span - totalSize) / (sorted.length - 1);
+      let cursor = start;
+
+      for (const entry of sorted) {
+        if (axis === "horizontal") {
+          entry.component.x = Math.round(cursor);
+          cursor += entry.component.width + gap;
+        } else {
+          entry.component.y = Math.round(cursor);
+          cursor += entry.component.height + gap;
+        }
+      }
+    });
+    closeMenus();
+  }
+
+  function matchLayoutScopeSize(mode: "width" | "height" | "both") {
+    if (!themeResource.data) {
+      return;
+    }
+
+    patchTheme((draft) => {
+      const ids = getLayoutScopeIds(draft);
+      const entries = resolveLayoutScopeEntries(draft, ids);
+      if (entries.length < 2) {
+        return;
+      }
+
+      const referenceId = selected && ids.includes(selected) ? selected : entries[0].id;
+      const reference = draft.components[referenceId];
+
+      for (const entry of entries) {
+        if (entry.id === referenceId) {
+          continue;
+        }
+        if (mode === "width" || mode === "both") {
+          entry.component.width = reference.width;
+        }
+        if (mode === "height" || mode === "both") {
+          entry.component.height = reference.height;
+        }
+      }
+    });
+    closeMenus();
+  }
+
   function syncTeamSlot(direction: "leftToRight" | "rightToLeft") {
     if (!themeResource.data) {
       return;
@@ -833,6 +1045,7 @@ export function ThemeEditorPage() {
           ? mirroredComponentPairs.find(([leftId]) => leftId === selected)?.[1] ?? selected
           : mirroredComponentPairs.find(([, rightId]) => rightId === selected)?.[0] ?? selected;
       setSelected(nextSelected);
+      setSelectedIds([nextSelected]);
       setSelectedSlot(slotForComponent(nextSelected));
     }
   }
@@ -861,6 +1074,7 @@ export function ThemeEditorPage() {
           ? mirroredComponentPairs.find(([leftId]) => leftId === selected)?.[1] ?? selected
           : mirroredComponentPairs.find(([, rightId]) => rightId === selected)?.[0] ?? selected;
       setSelected(nextSelected);
+      setSelectedIds([nextSelected]);
       setSelectedSlot(slotForComponent(nextSelected));
     }
   }
@@ -911,12 +1125,27 @@ export function ThemeEditorPage() {
       return;
     }
 
+    if (selectedIds.length > 1) {
+      patchTheme((draft) => {
+        for (const id of selectedIds) {
+          const component = draft.components[id];
+          if (!component) {
+            continue;
+          }
+          component.x += dx;
+          component.y += dy;
+        }
+      });
+      return;
+    }
+
     nudgeSelected(dx, dy);
   }
 
   function clearSelectionState() {
     setActiveMenu(null);
     setSelectAllMode(false);
+    setSelectedIds([]);
     setSelected(null);
     setInspectorView("component");
   }
@@ -976,13 +1205,16 @@ export function ThemeEditorPage() {
     setInspectorView("component");
 
     if (!selected || !ids.includes(selected)) {
-      setSelected(direction > 0 ? ids[0] : ids[ids.length - 1]);
+      const next = direction > 0 ? ids[0] : ids[ids.length - 1];
+      setSelected(next);
+      setSelectedIds([next]);
       return;
     }
 
     const index = ids.indexOf(selected);
     const nextIndex = (index + direction + ids.length) % ids.length;
     setSelected(ids[nextIndex]);
+    setSelectedIds([ids[nextIndex]]);
   }
 
   function adjustCanvasZoom(direction: 1 | -1) {
@@ -1142,6 +1374,13 @@ export function ThemeEditorPage() {
   }, [previewEnabled, live.data?.displayLeftTeam.score, live.data?.displayRightTeam.score, live.data?.gameTimer.value, live.data?.breakTimer.value]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(previewDrawerStorageKey, previewDrawerOpen ? "1" : "0");
+  }, [previewDrawerOpen]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (isTextEditingTarget(event.target)) {
         return;
@@ -1187,13 +1426,7 @@ export function ThemeEditorPage() {
         return;
       }
 
-      if (event.key === "0" && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        setCanvasZoom(1);
-        return;
-      }
-
-      if (!selectAllMode && !selected) {
+      if (!selectAllMode && !selected && selectedIds.length === 0) {
         return;
       }
 
@@ -1215,13 +1448,20 @@ export function ThemeEditorPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMenu, future, history, nudgeStep, selectAllMode, selected, selectedSlotConfig.ids, themeResource.data]);
+  }, [activeMenu, future, history, nudgeStep, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
 
   if (!theme) {
     return <section className="panel"><FieldHint>Loading theme...</FieldHint></section>;
   }
 
-  const selectedSummaryLabel = selectAllMode ? "Editing all components" : selected ? `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}` : "No piece selected";
+  const selectedSummaryLabel =
+    selectAllMode
+      ? "Editing all components"
+      : selectedIds.length > 1
+        ? `Editing ${selectedIds.length} pieces`
+        : selected
+          ? `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}`
+          : "No piece selected";
 
   return (
     <section className="admin-page panel-stack editor-layout">
@@ -1230,10 +1470,7 @@ export function ThemeEditorPage() {
           <div>
             <p className="eyebrow">Theme Editor</p>
             <h2>{theme.name}</h2>
-            <div className="editor-title-meta">
-              <FieldHint>{theme.builtin ? "Built-in theme. Saving and publishing require confirmation." : "Custom theme draft."}</FieldHint>
-              {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : null}
-            </div>
+            {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : null}
           </div>
           <div className="editor-header-actions">
             <div className="editor-header-cluster">
@@ -1278,6 +1515,49 @@ export function ThemeEditorPage() {
                   <button className={buttonVariants({ variant: "secondary" })} onClick={() => { setCanvasZoom(1); closeMenus(); }} disabled={canvasZoom === 1}>
                     Reset zoom
                   </button>
+                  <div className="row-action-menu-note">
+                    <strong>Align</strong>
+                  </div>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("left")}>
+                    Align left
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerX")}>
+                    Align center X
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("right")}>
+                    Align right
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("top")}>
+                    Align top
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerY")}>
+                    Align center Y
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("bottom")}>
+                    Align bottom
+                  </button>
+                  <div className="row-action-menu-note">
+                    <strong>Distribute</strong>
+                  </div>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("horizontal")}>
+                    Distribute horizontal
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("vertical")}>
+                    Distribute vertical
+                  </button>
+                  <div className="row-action-menu-note">
+                    <strong>Match size</strong>
+                    <span>Uses selected piece as reference when available.</span>
+                  </div>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("width")}>
+                    Match width
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("height")}>
+                    Match height
+                  </button>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("both")}>
+                    Match width + height
+                  </button>
                 </div>
               </details>
             </div>
@@ -1308,34 +1588,13 @@ export function ThemeEditorPage() {
         </div>
 
         <div className="editor-summary-grid">
-          <div className="editor-summary-card">
-            <strong>Mode</strong>
-            <span>{editorMode === "basic" ? "Operator-friendly" : "Full controls"}</span>
-          </div>
-          <div className={`editor-summary-card ${selectAllMode || selected ? "editor-summary-card--active" : ""}`}>
+          <div className={`editor-summary-card ${selectAllMode || selectedIds.length > 0 ? "editor-summary-card--active" : ""}`}>
             <strong>Selected</strong>
             <span>{selectedSummaryLabel}</span>
-            <small>Tab cycle · Arrows move · Shift jump · Alt fine</small>
-          </div>
-          <div className="editor-summary-card">
-            <strong>Canvas</strong>
-            <span>
-              {theme.canvas.width} x {theme.canvas.height}
-            </span>
-            <small>+ / - zoom · 0 reset</small>
           </div>
           <div className={`editor-summary-card ${previewEnabled ? "editor-summary-card--active" : ""}`}>
             <strong>Preview</strong>
             <span>{previewEnabled ? `${previewLive.period} · ${previewLive.teamEvent}` : "Live feed"}</span>
-            <small>{previewEnabled ? "Editor-only preview overrides active" : "Using current live state"}</small>
-          </div>
-          <div className="editor-summary-card">
-            <strong>Concede</strong>
-            <span>
-              {theme.teamEventOverlay.general.enabled
-                ? `${theme.teamEventOverlay.concede.text} / ${theme.teamEventOverlay.general.durationMs}ms`
-                : "Disabled"}
-            </span>
           </div>
         </div>
 
@@ -1347,21 +1606,30 @@ export function ThemeEditorPage() {
               live={previewLive}
               assets={assets.data ?? []}
               selectedId={selected}
+              selectedIds={selectedIds}
               selectAll={selectAllMode}
               zoom={canvasZoom}
-              toolbar={
-                <>
-                  <div className="canvas-shortcut-bar" aria-label="Editor keyboard shortcuts">
-                    <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
-                    <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
-                    <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
-                    <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>0</kbd> reset zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
-                  </div>
-                  <div className="canvas-preview-bar" aria-label="Editor preview states">
+              onZoomChange={setCanvasZoom}
+              onSelect={selectComponent}
+              onMarqueeSelect={selectComponents}
+              onSelectAll={selectAllComponents}
+              onUpdate={updateTheme}
+            />
+            </div>
+            <div className="canvas-below-drawers">
+              <details
+                className="canvas-preview-disclosure"
+                open={previewDrawerOpen}
+                onToggle={(event) => {
+                  const isOpen = event.currentTarget.open;
+                  setPreviewDrawerOpen(isOpen);
+                  if (!isOpen) {
+                    setActiveMenu(null);
+                  }
+                }}
+              >
+                <summary className={buttonVariants({ variant: "secondary" })}>Preview simulator</summary>
+                <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
                     <details className="row-action-menu row-action-menu--up" open={activeMenu === "preview-preset"}>
                       <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("preview-preset"); }}>Preview preset</summary>
                       <div className="row-action-menu-list">
@@ -1468,13 +1736,29 @@ export function ThemeEditorPage() {
                     >
                       Reset preview
                     </button>
-                  </div>
-                </>
-              }
-              onSelect={selectComponent}
-              onSelectAll={selectAllComponents}
-              onUpdate={updateTheme}
-            />
+                </div>
+              </details>
+              <details className="canvas-shortcuts-disclosure">
+                <summary className={buttonVariants({ variant: "secondary" })}>Canvas shortcuts</summary>
+                <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
+                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
+                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
+                  <span className="canvas-shortcut-pill">Drag blank area to pan</span>
+                  <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
+                  <span className="canvas-shortcut-pill">Middle-drag pan</span>
+                  <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
+                  <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
+                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
+                  <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
+                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
+                  <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
+                  <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
+                  <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
+                  <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
+                  <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
+                  <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -1551,20 +1835,28 @@ export function ThemeEditorPage() {
             ) : null}
 
             {inspectorView === "component" ? (
-              <div className="inspector-stack">
-                <SectionCard title="Scoreboard Structure" description="Choose the slot you want to edit. Then pick the piece inside that slot below." defaultOpen>
-                  <div className="block-editor-grid">
+              <div className="inspector-stack inspector-stack--compact">
+                <SectionCard title="Selection" description="Choose a slot, then pick the piece you want to edit." defaultOpen>
+                  <div className="slot-chip-row">
                     {(Object.entries(slotConfig) as Array<[SlotId, (typeof slotConfig)[SlotId]]>).map(([slot, config]) => (
                       <button
                         key={slot}
                         type="button"
-                        className={selectedSlot === slot ? "block-editor-card selected" : "block-editor-card"}
+                        className={selectedSlot === slot ? "slot-chip slot-chip--active" : "slot-chip"}
                         onClick={() => selectSlot(slot)}
                       >
-                        <strong>{config.title}</strong>
-                        <span className="hint">{config.description}</span>
+                        {config.title.replace(" Slot", "")}
                       </button>
                     ))}
+                  </div>
+                  <div className="grid gap-2">
+                    <strong>Pieces</strong>
+                    <ComponentPillRow
+                      ids={selectedSlotConfig.ids}
+                      selected={selected}
+                      onSelect={selectComponent}
+                      labels={componentShortLabels}
+                    />
                   </div>
                   <div className="inline-action-grid">
                     <label className="checkbox">
@@ -1610,31 +1902,18 @@ export function ThemeEditorPage() {
                         <button type="button" className="secondary-button" onClick={() => applyLayoutPreset(builtinThemes[1].id)}>
                           Apply {builtinThemes[1].name} layout
                         </button>
+                        <div className="row-action-menu-note">
+                          <strong>Guide</strong>
+                          <p>
+                            <strong>Sync:</strong> copy full setup (layout, style, visibility, assets) to opposite side.
+                          </p>
+                          <p>
+                            <strong>Mirror:</strong> copy only geometry (position and size), keep that side styling/assets.
+                          </p>
+                        </div>
                       </div>
                     </details>
                   </div>
-                  <div className="operator-guide-card">
-                    <strong>Tool guide</strong>
-                    <div className="operator-guide-grid">
-                      <p>
-                        <span>Sync</span>
-                        Copy the full component setup to the opposite side: layout, styling, visibility, and assets.
-                      </p>
-                      <p>
-                        <span>Mirror</span>
-                        Copy only layout geometry to the opposite side: position and size, while keeping that side’s own style.
-                      </p>
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title={`${selectedSlotConfig.title} Pieces`} description="Choose the piece inside this slot that you want to style." defaultOpen>
-                  <ComponentPillRow
-                    ids={selectedSlotConfig.ids}
-                    selected={selected}
-                    onSelect={selectComponent}
-                    labels={componentShortLabels}
-                  />
                 </SectionCard>
 
                 {selectedSlot === "center" ? (
