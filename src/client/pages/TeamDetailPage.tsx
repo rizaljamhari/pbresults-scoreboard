@@ -6,6 +6,7 @@ import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { hasTeamUnsavedChanges } from "./teamAdminUtils";
 import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/teamMatching";
+import { Button, FieldHint, Input, Textarea, buttonVariants } from "../components/ui";
 
 function aliasesToText(aliases: string[]) {
   return aliases.join("\n");
@@ -180,6 +181,10 @@ export function TeamDetailPage() {
   }
 
   async function handleCopyTeamId() {
+    if (!draft) {
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(draft.id);
       showToast({ kind: "success", message: "Team ID copied.", durationMs: 1600 });
@@ -189,9 +194,15 @@ export function TeamDetailPage() {
   }
 
   function removeLiveMatchName(name: string) {
-    setDraft({
-      ...draft,
-      liveMatchNames: draft.liveMatchNames.filter((entry) => entry !== name)
+    setDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        liveMatchNames: current.liveMatchNames.filter((entry) => entry !== name)
+      };
     });
   }
 
@@ -202,14 +213,14 @@ export function TeamDetailPage() {
   if (!selectedTeam || !draft) {
     return (
       <section className="admin-page panel-stack">
-        <header className="admin-page-header">
+        <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
           <div>
             <p className="eyebrow">Team Registry</p>
             <h2>Team not found</h2>
-            <p className="hint">The selected team no longer exists.</p>
+            <FieldHint>The selected team no longer exists.</FieldHint>
           </div>
           <Link
-            className="secondary-button"
+            className={buttonVariants({ variant: "secondary" })}
             to="/admin/teams"
             onClick={(event) => {
               if (!canLeaveEditor()) {
@@ -226,15 +237,15 @@ export function TeamDetailPage() {
 
   return (
     <section className="admin-page panel-stack">
-      <header className="admin-page-header">
+      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
         <div>
           <p className="eyebrow">Team Registry</p>
           <h2>Edit team</h2>
-          <p className="hint">Update team profile, alias matching, and logo assets.</p>
+          <FieldHint>Update team profile, alias matching, and logo assets.</FieldHint>
         </div>
         <div className="action-row compact">
           <Link
-            className="secondary-button"
+            className={buttonVariants({ variant: "secondary" })}
             to="/admin/teams"
             onClick={(event) => {
               if (!canLeaveEditor()) {
@@ -244,16 +255,16 @@ export function TeamDetailPage() {
           >
             Back to overview
           </Link>
-          <button className="secondary-button" onClick={() => void handleSave()} disabled={saving}>
+          <Button variant="secondary" onClick={() => void handleSave()} disabled={saving}>
             {saving ? "Saving…" : "Save changes"}
-          </button>
-          <button className="danger-button" onClick={() => void handleDelete()}>
+          </Button>
+          <Button variant="danger" onClick={() => void handleDelete()}>
             Delete team
-          </button>
+          </Button>
         </div>
       </header>
 
-      <div className="admin-grid-2">
+      <div className="grid grid-cols-2 items-start gap-4 max-[1200px]:grid-cols-1">
         <div className="panel">
           <div className="panel-header">
             <div>
@@ -265,13 +276,13 @@ export function TeamDetailPage() {
           <div className="form-grid">
             <label>
               Team reference
-              <div className="field-with-action">
-                <input value={draft.id} readOnly />
-                <button className="secondary-button" type="button" onClick={() => void handleCopyTeamId()}>
+              <div className="mt-1 flex items-center gap-2">
+                <Input value={draft.id} readOnly />
+                <Button variant="secondary" type="button" onClick={() => void handleCopyTeamId()}>
                   Copy
-                </button>
+                </Button>
               </div>
-              <span className="hint">Used internally for team import/export and safe identification.</span>
+              <FieldHint>Used internally for team import/export and safe identification.</FieldHint>
             </label>
             <label>
               Canonical name
@@ -291,7 +302,7 @@ export function TeamDetailPage() {
             </label>
             <label>
               Aliases (comma or newline separated)
-              <textarea
+              <Textarea
                 rows={7}
                 value={aliasesText}
                 onChange={(event) => setAliasesText(event.target.value)}
@@ -304,14 +315,14 @@ export function TeamDetailPage() {
             </label>
             <label>
               Notes
-              <textarea rows={5} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+              <Textarea rows={5} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
             </label>
             <label className="checkbox">
               <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
               Active in live matching
             </label>
-            {hasUnsavedChanges ? <p className="hint">You have unsaved changes.</p> : null}
-            <p className="hint">Tip: press Ctrl/Cmd+S to save quickly.</p>
+            {hasUnsavedChanges ? <FieldHint>You have unsaved changes.</FieldHint> : null}
+            <FieldHint>Tip: press Ctrl/Cmd+S to save quickly.</FieldHint>
           </div>
         </div>
 
@@ -336,8 +347,8 @@ export function TeamDetailPage() {
                     <div className="team-logo-preview">
                       {asset ? <img src={asset.url} alt={asset.originalName} className="team-logo-image" /> : <span>No asset</span>}
                     </div>
-                    <span className="hint">{asset?.originalName ?? "Upload a PNG, JPG, or GIF."}</span>
-                    <label className="secondary-button">
+                    <FieldHint>{asset?.originalName ?? "Upload a PNG, JPG, or GIF."}</FieldHint>
+                    <label className={buttonVariants({ variant: "secondary" })}>
                       Upload
                       <input
                         hidden
@@ -363,9 +374,9 @@ export function TeamDetailPage() {
               <div>
                 <p className="eyebrow">Matching</p>
                 <h3>Entered match names</h3>
-                <p className="hint">
+                <FieldHint>
                   These are the names you entered directly on this team and the matcher will use them exactly.
-                </p>
+                </FieldHint>
               </div>
             </div>
 
@@ -377,7 +388,7 @@ export function TeamDetailPage() {
                   </span>
                 ))
               ) : (
-                <span className="hint">No names available yet.</span>
+                <FieldHint>No names available yet.</FieldHint>
               )}
             </div>
           </div>
@@ -387,25 +398,25 @@ export function TeamDetailPage() {
               <div>
                 <p className="eyebrow">Live Match Names</p>
                 <h3>Remembered from live resolution</h3>
-                <p className="hint">
+                <FieldHint>
                   These short names were learned from Operations. Remove any that should no longer auto-match this team.
-                </p>
+                </FieldHint>
               </div>
             </div>
 
             {draft.liveMatchNames.length ? (
               <div className="chip-row">
                 {draft.liveMatchNames.map((name) => (
-                  <button key={name} className="pill-button" type="button" onClick={() => removeLiveMatchName(name)}>
+                  <Button key={name} variant="secondary" size="sm" type="button" className="gap-2" onClick={() => removeLiveMatchName(name)}>
                     <span>{name}</span>
                     <span aria-hidden="true">×</span>
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : (
-              <p className="hint">No learned live names yet. Use “Use and remember” from Operations to add them.</p>
+              <FieldHint>No learned live names yet. Use "Use and remember" from Operations to add them.</FieldHint>
             )}
-            <p className="hint">Changes take effect after you save this team.</p>
+            <FieldHint>Changes take effect after you save this team.</FieldHint>
           </div>
 
           <div className="panel">
@@ -413,9 +424,9 @@ export function TeamDetailPage() {
               <div>
                 <p className="eyebrow">Generated Shortcuts</p>
                 <h3>Automatic helper names</h3>
-                <p className="hint">
+                <FieldHint>
                   These are derived from the team name automatically, such as initials or shorthand. They help matching but are not manually editable here.
-                </p>
+                </FieldHint>
               </div>
             </div>
 
@@ -427,7 +438,7 @@ export function TeamDetailPage() {
                   </span>
                 ))
               ) : (
-                <span className="hint">No generated shortcuts for this team.</span>
+                <FieldHint>No generated shortcuts for this team.</FieldHint>
               )}
             </div>
           </div>

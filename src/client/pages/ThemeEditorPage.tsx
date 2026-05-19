@@ -6,6 +6,7 @@ import { builtinThemes } from "../../shared/builtinThemes";
 import { fontFamilies } from "../../shared/theme";
 import type { ComponentId, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
+import { Badge, Button, FieldHint, buttonVariants } from "../components/ui";
 
 type EditorMode = "basic" | "advanced";
 type InspectorView = "theme" | "component" | "concede";
@@ -172,7 +173,11 @@ function NumberField(props: {
           value={props.value}
           onChange={(event) => props.onChange(Number(event.target.value))}
         />
-        {props.unit ? <span className="field-unit">{props.unit}</span> : null}
+        {props.unit ? (
+          <span className="inline-flex min-h-12 items-center whitespace-nowrap rounded-md3s border border-md3-outline bg-md3-surfaceContainer px-3.5 text-md3-onSurfaceVariant">
+            {props.unit}
+          </span>
+        ) : null}
       </div>
     </label>
   );
@@ -205,13 +210,14 @@ function ColorField(props: { label: string; value: string; onChange: (value: str
   return (
     <label>
       {props.label}
-      <div className="color-field">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-2">
         <input
           type="color"
+          className="mt-0"
           value={normalizePickerColor(props.value)}
           onChange={(event) => props.onChange(mergePickerColor(props.value, event.target.value))}
         />
-        <input value={props.value} onChange={(event) => props.onChange(event.target.value)} />
+        <input className="mt-0" value={props.value} onChange={(event) => props.onChange(event.target.value)} />
       </div>
     </label>
   );
@@ -245,7 +251,7 @@ function SectionCard(props: { title: string; description?: string; defaultOpen?:
       <summary className="editor-section-header">
         <div>
           <h3>{props.title}</h3>
-          {props.description ? <p className="hint">{props.description}</p> : null}
+          {props.description ? <FieldHint>{props.description}</FieldHint> : null}
         </div>
       </summary>
       <div className="editor-section-body">{props.children}</div>
@@ -265,7 +271,11 @@ function ComponentPillRow(props: {
         <button
           key={id}
           type="button"
-          className={props.selected === id ? "chip-button active" : "chip-button"}
+          className={
+            props.selected === id
+              ? "inline-flex min-h-10 items-center justify-center rounded-full border border-[#005fa32e] bg-md3-secondaryContainer px-3.5 py-2.5 text-md3-onPrimaryContainer shadow-none"
+              : "inline-flex min-h-10 items-center justify-center rounded-full border border-md3-outlineVariant bg-md3-surface px-3.5 py-2.5 text-md3-onPrimaryContainer shadow-none hover:bg-md3-surfaceContainerLow"
+          }
           onClick={() => props.onSelect(id)}
         >
           {props.labels?.[id] ?? componentLabels[id]}
@@ -1208,7 +1218,7 @@ export function ThemeEditorPage() {
   }, [activeMenu, future, history, nudgeStep, selectAllMode, selected, selectedSlotConfig.ids, themeResource.data]);
 
   if (!theme) {
-    return <section className="panel">Loading theme…</section>;
+    return <section className="panel"><FieldHint>Loading theme...</FieldHint></section>;
   }
 
   const selectedSummaryLabel = selectAllMode ? "Editing all components" : selected ? `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}` : "No piece selected";
@@ -1221,8 +1231,8 @@ export function ThemeEditorPage() {
             <p className="eyebrow">Theme Editor</p>
             <h2>{theme.name}</h2>
             <div className="editor-title-meta">
-              <p className="hint">{theme.builtin ? "Built-in theme. Saving and publishing require confirmation." : "Custom theme draft."}</p>
-              {hasUnsavedChanges ? <span className="status-badge status-badge--warning">Unsaved changes</span> : null}
+              <FieldHint>{theme.builtin ? "Built-in theme. Saving and publishing require confirmation." : "Custom theme draft."}</FieldHint>
+              {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : null}
             </div>
           </div>
           <div className="editor-header-actions">
@@ -1247,16 +1257,16 @@ export function ThemeEditorPage() {
 
             <div className="editor-header-cluster editor-header-cluster--utility">
               <details className="row-action-menu row-action-menu--header" open={activeMenu === "header-canvas-tools"}>
-                <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("header-canvas-tools"); }}>Canvas tools</summary>
+                <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("header-canvas-tools"); }}>Canvas tools</summary>
                 <div className="row-action-menu-list">
-                  <button className="secondary-button" onClick={() => { undo(); closeMenus(); }} disabled={history.length <= 1}>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { undo(); closeMenus(); }} disabled={history.length <= 1}>
                     Undo
                   </button>
-                  <button className="secondary-button" onClick={() => { redo(); closeMenus(); }} disabled={future.length === 0}>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { redo(); closeMenus(); }} disabled={future.length === 0}>
                     Redo
                   </button>
                   <label className="inline-select">
-                    <span className="hint">Zoom</span>
+                    <FieldHint>Zoom</FieldHint>
                     <select value={String(canvasZoom)} onChange={(event) => setCanvasZoom(Number(event.target.value))}>
                       {zoomPresets.map((preset) => (
                         <option key={preset} value={String(preset)}>
@@ -1265,7 +1275,7 @@ export function ThemeEditorPage() {
                       ))}
                     </select>
                   </label>
-                  <button className="secondary-button" onClick={() => { setCanvasZoom(1); closeMenus(); }} disabled={canvasZoom === 1}>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { setCanvasZoom(1); closeMenus(); }} disabled={canvasZoom === 1}>
                     Reset zoom
                   </button>
                 </div>
@@ -1273,22 +1283,22 @@ export function ThemeEditorPage() {
             </div>
 
             <div className="editor-header-cluster editor-header-cluster--primary">
-              <button className="secondary-button" onClick={() => void save()}>
+              <Button variant="secondary" onClick={() => void save()}>
                 {saving ? "Saving…" : "Save"}
-              </button>
-              <button onClick={() => void publish()}>Publish</button>
+              </Button>
+              <Button onClick={() => void publish()}>Publish</Button>
               <details className="row-action-menu row-action-menu--header" open={activeMenu === "header-more"}>
-                <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("header-more"); }}>More</summary>
+                <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("header-more"); }}>More</summary>
                 <div className="row-action-menu-list">
-                  <button className="secondary-button" onClick={() => { navigate("/admin/themes"); closeMenus(); }}>
+                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { navigate("/admin/themes"); closeMenus(); }}>
                     Back
                   </button>
                   {theme.builtin ? (
-                    <button className="secondary-button" onClick={() => { void saveAsCopy(); closeMenus(); }}>
+                    <button className={buttonVariants({ variant: "secondary" })} onClick={() => { void saveAsCopy(); closeMenus(); }}>
                       {saving ? "Saving…" : "Save as Copy"}
                     </button>
                   ) : null}
-                  <a className="secondary-button" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer" onClick={closeMenus}>
+                  <a className={buttonVariants({ variant: "secondary" })} href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer" onClick={closeMenus}>
                     Open preview
                   </a>
                 </div>
@@ -1353,27 +1363,27 @@ export function ThemeEditorPage() {
                   </div>
                   <div className="canvas-preview-bar" aria-label="Editor preview states">
                     <details className="row-action-menu row-action-menu--up" open={activeMenu === "preview-preset"}>
-                      <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("preview-preset"); }}>Preview preset</summary>
+                      <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("preview-preset"); }}>Preview preset</summary>
                       <div className="row-action-menu-list">
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("live"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); closeMenus(); }}>
                           Live
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("game"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); closeMenus(); }}>
                           Game
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("break"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); closeMenus(); }}>
                           Break
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("towelHome"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); closeMenus(); }}>
                           Towel home
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("towelAway"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); closeMenus(); }}>
                           Towel away
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("baseHome"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); closeMenus(); }}>
                           Base home
                         </button>
-                        <button type="button" className="secondary-button" onClick={() => { applyPreviewPreset("baseAway"); closeMenus(); }}>
+                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); closeMenus(); }}>
                           Base away
                         </button>
                       </div>
@@ -1453,7 +1463,7 @@ export function ThemeEditorPage() {
                     </label>
                     <button
                       type="button"
-                      className="secondary-button"
+                      className={buttonVariants({ variant: "secondary" })}
                       onClick={resetPreviewState}
                     >
                       Reset preview
@@ -1629,7 +1639,7 @@ export function ThemeEditorPage() {
 
                 {selectedSlot === "center" ? (
                   <SectionCard title="Center Behavior" description="Choose what the lower center line shows during game time and during breaks." defaultOpen={false}>
-                    <div className="form-grid two-column-grid">
+                    <div className="form-grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
                       <label>
                         Game mode
                         <select

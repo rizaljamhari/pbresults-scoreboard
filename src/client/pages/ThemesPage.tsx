@@ -3,6 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAutoCloseRowActionMenus, useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
+import {
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  FieldHint,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableShell,
+  buttonVariants
+} from "../components/ui";
 import { filterAndSortThemes, type ThemeKindFilter, type ThemeSort } from "./themeAdminUtils";
 
 export function ThemesPage() {
@@ -100,14 +121,14 @@ export function ThemesPage() {
 
   return (
     <section className="admin-page panel-stack">
-      <header className="admin-page-header">
+      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
         <div>
           <p className="eyebrow">Theme Library</p>
           <h2>Overview and publishing</h2>
-          <p className="hint">Manage built-in and custom themes with clear publish and lifecycle actions.</p>
+          <FieldHint>Manage built-in and custom themes with clear publish and lifecycle actions.</FieldHint>
         </div>
         <div className="action-row">
-          <label className="secondary-button">
+          <label className={buttonVariants({ variant: "secondary" })}>
             Import theme
             <input
               type="file"
@@ -122,15 +143,15 @@ export function ThemesPage() {
               }}
             />
           </label>
-          <button onClick={() => void handleCreate()}>Create Theme</button>
+          <Button onClick={() => void handleCreate()}>Create Theme</Button>
         </div>
       </header>
 
-      <div className="panel">
-        <div className="table-toolbar">
+      <Card>
+        <div className="mb-3.5 grid grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_auto] items-end gap-3.5 max-[1200px]:grid-cols-1 max-[1200px]:items-stretch">
           <label>
             Search themes
-            <input
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by name, description, or id"
@@ -138,93 +159,99 @@ export function ThemesPage() {
           </label>
           <label>
             Kind
-            <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as ThemeKindFilter)}>
+            <Select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as ThemeKindFilter)}>
               <option value="all">All</option>
               <option value="builtin">Built-in</option>
               <option value="custom">Custom</option>
-            </select>
+            </Select>
           </label>
           <label>
             Sort
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as ThemeSort)}>
+            <Select value={sortBy} onChange={(event) => setSortBy(event.target.value as ThemeSort)}>
               <option value="nameAsc">Name (A-Z)</option>
               <option value="nameDesc">Name (Z-A)</option>
-            </select>
+            </Select>
           </label>
-          <label className="checkbox table-compact-toggle">
-            <input type="checkbox" checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
+          <label className="checkbox justify-self-end whitespace-nowrap pb-1 max-[1200px]:justify-self-start">
+            <Checkbox checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
             Compact rows
           </label>
         </div>
 
-        <div className="table-shell">
-          <table className={compactRows ? "data-table data-table--compact" : "data-table"}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Kind</th>
-                <th>Description</th>
-                <th>Canvas</th>
-                <th>Status</th>
-                <th className="align-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <TableShell>
+          <Table
+            className={
+              compactRows
+                ? "max-[1200px]:min-w-[780px] [&_td]:px-2.5 [&_td]:py-2 [&_th]:px-2.5 [&_th]:py-2"
+                : "max-[1200px]:min-w-[780px]"
+            }
+          >
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Canvas</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {visibleThemes.length ? (
                 visibleThemes.map((theme) => (
-                  <tr key={theme.id}>
-                    <td>
+                  <TableRow key={theme.id}>
+                    <TableCell>
                       <strong>{theme.name}</strong>
-                    </td>
-                    <td>
-                      <span className={theme.builtin ? "status-pill" : "status-pill status-pill--ok"}>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={theme.builtin ? "default" : "success"}>
                         {theme.builtin ? "Built-in" : "Custom"}
-                      </span>
-                    </td>
-                    <td>{theme.description || "—"}</td>
-                    <td>
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{theme.description || "—"}</TableCell>
+                    <TableCell>
                       {theme.canvas.width}x{theme.canvas.height}
-                    </td>
-                    <td>
-                      {settings.data?.publishedThemeId === theme.id ? <span className="status-badge">Published</span> : "—"}
-                    </td>
-                    <td>
-                      <div className="table-actions">
-                        <button className="secondary-button" onClick={() => navigate(`/admin/themes/${theme.id}`)}>
+                    </TableCell>
+                    <TableCell>
+                      {settings.data?.publishedThemeId === theme.id ? <Badge variant="success">Published</Badge> : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="secondary" onClick={() => navigate(`/admin/themes/${theme.id}`)}>
                           Edit
-                        </button>
-                        <button onClick={() => void handlePublish(theme.id)}>Publish</button>
+                        </Button>
+                        <Button onClick={() => void handlePublish(theme.id)}>Publish</Button>
                         <details className="row-action-menu">
-                          <summary className="secondary-button">More</summary>
+                          <summary className={buttonVariants({ variant: "secondary" })}>More</summary>
                           <div className="row-action-menu-list">
-                            <button className="secondary-button" onClick={() => void handleClone(theme.id)}>
+                            <Button variant="secondary" onClick={() => void handleClone(theme.id)}>
                               Clone
-                            </button>
-                            <button className="secondary-button" onClick={() => void handleExport(theme.id)}>
+                            </Button>
+                            <Button variant="secondary" onClick={() => void handleExport(theme.id)}>
                               Export
-                            </button>
+                            </Button>
                             {!theme.builtin ? (
-                              <button className="danger-button" onClick={() => void handleDelete(theme.id, theme.name)}>
+                              <Button variant="danger" onClick={() => void handleDelete(theme.id, theme.name)}>
                                 Delete
-                              </button>
+                              </Button>
                             ) : null}
                           </div>
                         </details>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={6} className="table-empty">
+                <TableRow>
+                  <TableEmpty colSpan={6}>
                     {(themes.data ?? []).length ? "No themes match the current filters." : "No themes found."}
-                  </td>
-                </tr>
+                  </TableEmpty>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </TableShell>
+      </Card>
     </section>
   );
 }

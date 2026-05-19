@@ -11,6 +11,7 @@ import type {
 import { ApiError, api } from "../api";
 import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams, useThemes } from "../hooks";
 import { showToast } from "../toast";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FieldHint, Select, buttonVariants } from "../components/ui";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -85,22 +86,81 @@ function eventLabel(event: NormalizedLiveState["teamEvent"]) {
 
 function matchTone(match: TeamMatchResult) {
   if (match.status === "matched") {
-    return "status-pill status-pill--ok";
+    return "success" as const;
   }
   if (match.status === "uncertain") {
-    return "status-pill status-pill--warning";
+    return "warning" as const;
   }
-  return "status-pill status-pill--critical";
+  return "critical" as const;
 }
 
 function confidenceTone(confidence: number) {
   if (confidence >= 0.95) {
-    return "status-pill status-pill--ok";
+    return "success" as const;
   }
   if (confidence >= 0.75) {
-    return "status-pill status-pill--warning";
+    return "warning" as const;
   }
-  return "status-pill status-pill--info";
+  return "info" as const;
+}
+
+function sourceStatusTone(sourceStatus: NormalizedLiveState["sourceStatus"] | undefined) {
+  if (sourceStatus === "ok") {
+    return "success" as const;
+  }
+  if (sourceStatus === "error") {
+    return "critical" as const;
+  }
+  if (sourceStatus === "paused") {
+    return "info" as const;
+  }
+  return "warning" as const;
+}
+
+function logoTone(logo: LogoResolution) {
+  if (logo.tone === "ok") {
+    return "success" as const;
+  }
+  if (logo.tone === "warning") {
+    return "warning" as const;
+  }
+  return "info" as const;
+}
+
+function resolutionNoteClass(tone: "ok" | "warning" | "critical" | "info") {
+  if (tone === "ok") {
+    return "grid gap-1 rounded-md3m border border-[#245b3224] bg-[var(--md3-success-container)] px-4 py-3";
+  }
+  if (tone === "warning") {
+    return "grid gap-1 rounded-md3m border border-[#b8800038] bg-[#fff9e8] px-4 py-3";
+  }
+  if (tone === "critical") {
+    return "grid gap-1 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] px-4 py-3";
+  }
+  return "grid gap-1 rounded-md3m border border-[#005fa32e] bg-[#eef7ff] px-4 py-3";
+}
+
+function warningCardClass(severity: WarningItem["severity"]) {
+  if (severity === "critical") {
+    return "grid gap-2 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] p-4";
+  }
+  if (severity === "warning") {
+    return "grid gap-2 rounded-md3m border border-[#b8800038] bg-[#fff9e8] p-4";
+  }
+  return "grid gap-2 rounded-md3m border border-[#005fa32e] bg-[#eef7ff] p-4";
+}
+
+function severityIconClass(severity: WarningItem["severity"] | "ok") {
+  if (severity === "ok") {
+    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--md3-success-container)] text-[0.76rem] font-extrabold text-[#245b32]";
+  }
+  if (severity === "warning") {
+    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#fff0c2] text-[0.76rem] font-extrabold text-[#7a4b00]";
+  }
+  if (severity === "critical") {
+    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#fde4e1] text-[0.76rem] font-extrabold text-[#962b22]";
+  }
+  return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#dceeff] text-[0.76rem] font-extrabold text-[#0d4a7c]";
 }
 
 function resolveLogoSource(
@@ -340,7 +400,7 @@ function ResolutionCard({
 }) {
   const title = side === "left" ? "Left side on screen" : "Right side on screen";
   const needsResolution = match.status !== "matched" || match.resolutionSource === "manual";
-  const rememberedLiveName = match.resolutionSource === "automatic" && match.team?.liveMatchNames.includes(match.matchedAlias ?? "");
+  const rememberedLiveName = Boolean(match.resolutionSource === "automatic" && match.team?.liveMatchNames.includes(match.matchedAlias ?? ""));
   const showSuggestedTeams = match.candidates.length > 0 && (match.status !== "matched" || match.resolutionSource === "manual");
   const resolutionState = describeResolutionState(match, rememberedLiveName);
   const activeTeams = teams.filter((team) => team.active);
@@ -366,79 +426,82 @@ function ResolutionCard({
   ];
 
   return (
-    <div className="match-result-card">
-      <div className="panel-header">
+    <Card className="grid min-h-full content-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4 [grid-template-rows:auto_auto_auto_auto_1fr]">
+      <div className="panel-header items-start">
         <strong>{title}</strong>
-        <div className="action-row compact match-result-badges">
-          <span className={matchTone(match)}>{match.status}</span>
-          {match.resolutionSource === "manual" ? <span className="status-pill status-pill--info">temporary override</span> : null}
+        <div className="action-row compact justify-end max-[780px]:justify-start">
+          <Badge variant={matchTone(match)}>{match.status}</Badge>
+          {match.resolutionSource === "manual" ? <Badge variant="info">temporary override</Badge> : null}
           {rememberedLiveName ? (
-            <span className="status-pill status-pill--ok">remembered live name</span>
+            <Badge variant="success">remembered live name</Badge>
           ) : null}
         </div>
       </div>
-      <div className="operations-meta-list operations-meta-list--compact operations-meta-list--resolution">
+      <div className="grid items-stretch gap-3 sm:grid-cols-2">
         {summaryItems.map(([label, value]) => (
           <div key={label}>
             <strong>{label}</strong>
-            <span>{value}</span>
+            <span className="text-md3-onSurfaceVariant">{value}</span>
           </div>
         ))}
       </div>
-      <details className="operations-disclosure operations-disclosure--inline">
-        <summary className="operations-disclosure-summary operations-disclosure-summary--compact">
+      <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface">
+        <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
           <div>
             <strong>Match details</strong>
-            <p className="hint">Show normalized input, match source, and confidence.</p>
+            <FieldHint>Show normalized input, match source, and confidence.</FieldHint>
           </div>
         </summary>
-        <div className="operations-disclosure-body">
-          <div className="operations-meta-list operations-meta-list--compact">
+        <div className="grid gap-4 px-4 pb-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             {detailItems.map(([label, value]) => (
               <div key={label}>
                 <strong>{label}</strong>
-                <span>{value}</span>
+                <span className="text-md3-onSurfaceVariant">{value}</span>
               </div>
             ))}
           </div>
         </div>
       </details>
-      <div className="operations-resolution-state">
-        <strong>Current resolution</strong>
-        <div className={`operations-resolution-note operations-resolution-note--${resolutionState.tone}`}>
+      <div className="grid gap-2">
+        <strong className="text-xs font-bold uppercase tracking-wide text-md3-onSurfaceVariant">Current resolution</strong>
+        <div className={resolutionNoteClass(resolutionState.tone)}>
           <strong>{resolutionState.title}</strong>
-          <p>{resolutionState.detail}</p>
+          <p className="m-0 text-sm text-md3-onSurfaceVariant">{resolutionState.detail}</p>
         </div>
       </div>
-      <div className="operations-resolution-actions">
+      <div className="grid content-start gap-3">
         {showSuggestedTeams ? (
-          <div className="team-candidate-list">
+          <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4">
             <div className="panel-header">
               <div>
                 <strong>Best suggestions</strong>
-                <p className="hint">Top candidates first. Use manual selection only if these are wrong.</p>
+                <FieldHint>Top candidates first. Use manual selection only if these are wrong.</FieldHint>
               </div>
             </div>
             {match.candidates.slice(0, 3).map((candidate, index) => (
-              <div key={`${candidate.teamId}-${candidate.matchedAlias}`} className={`team-candidate-card ${index === 0 ? "team-candidate-card--primary" : ""}`}>
-                <div className="team-candidate-copy">
+              <div
+                key={`${candidate.teamId}-${candidate.matchedAlias}`}
+                className={`grid gap-3 rounded-md3s border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-3 ${index === 0 ? "border-[#005fa33d] shadow-md31" : ""}`}
+              >
+                <div className="grid gap-1.5">
                   <strong>{candidate.teamName}</strong>
-                  <div className="team-candidate-meta">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className={confidenceTone(candidate.confidence)}>{Math.round(candidate.confidence * 100)}% confidence</span>
-                    <span>{candidate.matchedAlias ? `Matched by ${candidate.matchedAlias}` : "Suggested candidate"}</span>
+                    <span className="text-md3-onSurfaceVariant">{candidate.matchedAlias ? `Matched by ${candidate.matchedAlias}` : "Suggested candidate"}</span>
                   </div>
                 </div>
-                <div className="team-candidate-actions">
-                  <button className="secondary-button" type="button" onClick={() => onApply(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="secondary" type="button" onClick={() => onApply(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
                     Match now
-                  </button>
+                  </Button>
                   <details className="row-action-menu">
-                    <summary className="secondary-button">More</summary>
+                    <summary className={buttonVariants({ variant: "secondary" })}>More</summary>
                     <div className="row-action-menu-list">
-                      <button className="secondary-button" type="button" onClick={() => onApplyAndRemember(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
+                      <Button variant="secondary" type="button" onClick={() => onApplyAndRemember(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
                         Match and remember
-                      </button>
-                      <Link className="secondary-button" to={`/admin/teams/${candidate.teamId}`}>
+                      </Button>
+                      <Link className={buttonVariants({ variant: "secondary" })} to={`/admin/teams/${candidate.teamId}`}>
                         Open team
                       </Link>
                     </div>
@@ -448,46 +511,46 @@ function ResolutionCard({
             ))}
           </div>
         ) : (
-          <div className="operations-resolution-placeholder">
+          <div className="grid gap-1 rounded-md3m border border-dashed border-md3-outline bg-md3-surface px-4 py-3">
             <strong>No suggested action needed</strong>
-            <p>{needsResolution ? "Use manual selection below to choose a team." : "This side is already stable for the current live name."}</p>
+            <p className="m-0 text-sm text-md3-onSurfaceVariant">{needsResolution ? "Use manual selection below to choose a team." : "This side is already stable for the current live name."}</p>
           </div>
         )}
-        <details className="operations-disclosure operations-disclosure--inline operations-manual-disclosure" open={needsResolution}>
-          <summary className="operations-disclosure-summary operations-disclosure-summary--compact">
+        <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface data-[state=open]:bg-md3-surfaceContainer" open={needsResolution}>
+          <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
             <div>
               <strong>{needsResolution ? "Manual selection" : "Change match"}</strong>
-              <p className="hint">
+              <FieldHint>
                 {needsResolution ? "Use this when the suggested teams are wrong or missing." : "Choose a different team or save a new remembered live name."}
-              </p>
+              </FieldHint>
             </div>
           </summary>
-          <div className="operations-disclosure-body">
-            <div className="operations-manual-resolution">
-              <div className="action-row compact operations-manual-resolution-row">
-                <select value={selectedTeamId} onChange={(event) => onChangeSelection(event.target.value)}>
+          <div className="grid gap-4 px-4 pb-4">
+            <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
+              <div className="action-row compact items-end">
+                <Select value={selectedTeamId} onChange={(event) => onChangeSelection(event.target.value)}>
                   <option value="">Select a team…</option>
                   {activeTeams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {teamOptionLabel(team)}
                     </option>
                   ))}
-                </select>
-                <button className="secondary-button" type="button" onClick={() => onApply()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
+                </Select>
+                <Button variant="secondary" type="button" onClick={() => onApply()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
                   {resolving ? "Applying…" : "Match now"}
-                </button>
+                </Button>
                 <details className="row-action-menu row-action-menu--up">
-                  <summary className="secondary-button">{resolving ? "Applying…" : "More"}</summary>
+                  <summary className={buttonVariants({ variant: "secondary" })}>{resolving ? "Applying…" : "More"}</summary>
                   <div className="row-action-menu-list">
-                    <button className="secondary-button" type="button" onClick={() => onApplyAndRemember()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
+                    <Button variant="secondary" type="button" onClick={() => onApplyAndRemember()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
                       Match and remember
-                    </button>
+                    </Button>
                     {match.resolutionSource === "manual" ? (
-                      <button className="secondary-button" type="button" onClick={onClear} disabled={clearing}>
+                      <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
                         {clearing ? "Clearing…" : "Back to automatic"}
-                      </button>
+                      </Button>
                     ) : null}
-                    <Link className="secondary-button" to="/admin/teams">
+                    <Link className={buttonVariants({ variant: "secondary" })} to="/admin/teams">
                       Manage teams
                     </Link>
                   </div>
@@ -497,7 +560,7 @@ function ResolutionCard({
           </div>
         </details>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -720,89 +783,81 @@ export function OperationsPage() {
   }
 
   if (!settings.data || !themes.data || !teams.data) {
-    return <section className="panel">Loading operations…</section>;
+    return (
+      <Card>
+        <CardContent>Loading operations…</CardContent>
+      </Card>
+    );
   }
 
   return (
-    <section className="admin-page panel-stack operations-page">
-      <header className="admin-page-header operations-header">
+    <section className="admin-page panel-stack w-[min(90vw,1800px)] max-w-none gap-4">
+      <header className="flex items-end justify-between gap-5 py-1 max-[1200px]:flex-col max-[1200px]:items-start">
         <div>
           <p className="eyebrow">Operations</p>
           <h2>Live operator overview</h2>
-          <p className="hint">Keep the live feed healthy, fix team matching fast, and confirm the scoreboard is ready for air.</p>
+          <FieldHint>Keep the live feed healthy, fix team matching fast, and confirm the scoreboard is ready for air.</FieldHint>
         </div>
-        <div className="action-row compact operations-header-actions">
-          <button className="secondary-button" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
+        <div className="action-row compact items-center">
+          <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh now"}
-          </button>
-          <button
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
-            onClick={() => void handleSetPolling(!settings.data.pollEnabled)}
+            onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
             disabled={togglingPoll}
           >
-            {togglingPoll ? "Updating…" : settings.data.pollEnabled ? "Stop polling" : "Start polling"}
-          </button>
+            {togglingPoll ? "Updating…" : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
+          </Button>
         </div>
       </header>
 
-      <div className="operations-status-grid">
-        <div className="operations-status-card">
+      <div className="grid grid-cols-4 gap-4 max-[1200px]:grid-cols-1">
+        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
           <strong>Live feed</strong>
-          <div className="operations-status-value">
-            <span
-              className={`status-pill ${
-                live.data?.sourceStatus === "ok"
-                  ? "status-pill--ok"
-                  : live.data?.sourceStatus === "error"
-                    ? "status-pill--critical"
-                    : live.data?.sourceStatus === "paused"
-                      ? "status-pill--info"
-                      : "status-pill--warning"
-              }`}
-            >
-              {live.data?.sourceStatus ?? "loading"}
-            </span>
-            <span>{live.data?.errorMessage ?? "Live feed available"}</span>
+          <div className="grid gap-1">
+            <Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>
+            <span className="text-sm text-md3-onSurfaceVariant">{live.data?.errorMessage ?? "Live feed available"}</span>
           </div>
         </div>
-        <div className="operations-status-card">
+        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
           <strong>Polling</strong>
-          <div className="operations-status-value">
-            <span className={settings.data.pollEnabled ? "status-pill status-pill--ok" : "status-pill status-pill--warning"}>
+          <div className="grid gap-1">
+            <Badge variant={settings.data.pollEnabled ? "success" : "warning"}>
               {settings.data.pollEnabled ? "Active" : "Paused"}
-            </span>
-            <span>{settings.data.pollIntervalMs} ms interval</span>
+            </Badge>
+            <span className="text-sm text-md3-onSurfaceVariant">{settings.data.pollIntervalMs} ms interval</span>
           </div>
         </div>
-        <div className="operations-status-card">
+        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
           <strong>Last update</strong>
-          <div className="operations-status-value">
+          <div className="grid gap-1">
             <span>{formatAge(live.data?.fetchedAt ?? null)}</span>
-            <span>{formatTimestamp(live.data?.fetchedAt ?? null)}</span>
+            <span className="text-sm text-md3-onSurfaceVariant">{formatTimestamp(live.data?.fetchedAt ?? null)}</span>
           </div>
         </div>
-        <div className="operations-status-card">
+        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
           <strong>Published theme</strong>
-          <div className="operations-status-value">
+          <div className="grid gap-1">
             <span>{publishedTheme?.name ?? "None selected"}</span>
-            <span>{publishedTheme ? "Ready for overlay" : "Choose one in Themes"}</span>
+            <span className="text-sm text-md3-onSurfaceVariant">{publishedTheme ? "Ready for overlay" : "Choose one in Themes"}</span>
           </div>
         </div>
       </div>
 
-      <div className="operations-shell">
-        <div className="operations-main-column panel-stack">
-          <div className="panel">
-            <div className="panel-header">
+      <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)] items-start gap-4 max-[1200px]:grid-cols-1">
+        <div className="panel-stack min-w-0 gap-4">
+          <Card>
+            <CardHeader>
               <div>
                 <p className="eyebrow">Team resolution</p>
-                <h3>Resolve live team names</h3>
-                <p className="hint">Start here when a name is uncertain or unmatched. Overrides only apply to the current raw live name.</p>
+                <CardTitle className="text-xl">Resolve live team names</CardTitle>
+                <CardDescription>Start here when a name is uncertain or unmatched. Overrides only apply to the current raw live name.</CardDescription>
               </div>
-            </div>
+            </CardHeader>
             {live.data ? (
-              <div className="card-grid">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
                 <ResolutionCard
                   side="left"
                   match={live.data.displayLeftTeamMatch}
@@ -812,8 +867,8 @@ export function OperationsPage() {
                   resolving={resolvingSide === "left"}
                   clearing={clearingSide === "left"}
                   onChangeSelection={(teamId) => setResolutionDrafts((current) => ({ ...current, left: teamId }))}
-                  onApply={(teamId) => void handleApplyResolution("left", live.data.displayLeftTeamMatch, teamId)}
-                  onApplyAndRemember={(teamId) => void handleApplyResolution("left", live.data.displayLeftTeamMatch, teamId, true)}
+                  onApply={(teamId) => void handleApplyResolution("left", live.data!.displayLeftTeamMatch, teamId)}
+                  onApplyAndRemember={(teamId) => void handleApplyResolution("left", live.data!.displayLeftTeamMatch, teamId, true)}
                   onClear={() => void handleClearResolution("left")}
                 />
                 <ResolutionCard
@@ -825,26 +880,26 @@ export function OperationsPage() {
                   resolving={resolvingSide === "right"}
                   clearing={clearingSide === "right"}
                   onChangeSelection={(teamId) => setResolutionDrafts((current) => ({ ...current, right: teamId }))}
-                  onApply={(teamId) => void handleApplyResolution("right", live.data.displayRightTeamMatch, teamId)}
-                  onApplyAndRemember={(teamId) => void handleApplyResolution("right", live.data.displayRightTeamMatch, teamId, true)}
+                  onApply={(teamId) => void handleApplyResolution("right", live.data!.displayRightTeamMatch, teamId)}
+                  onApplyAndRemember={(teamId) => void handleApplyResolution("right", live.data!.displayRightTeamMatch, teamId, true)}
                   onClear={() => void handleClearResolution("right")}
                 />
               </div>
             ) : (
               <p>{live.error ?? "Waiting for live data…"}</p>
             )}
-          </div>
+          </Card>
 
-          <div className="panel">
-            <div className="panel-header">
+          <Card>
+            <CardHeader>
               <div>
                 <p className="eyebrow">Match snapshot</p>
-                <h3>Current scoreboard state</h3>
-                <p className="hint">This is the live state currently driving the overlay.</p>
+                <CardTitle className="text-xl">Current scoreboard state</CardTitle>
+                <CardDescription>This is the live state currently driving the overlay.</CardDescription>
               </div>
-            </div>
+            </CardHeader>
             {live.data ? (
-              <div className="operations-summary-grid">
+              <div className="grid grid-cols-3 gap-3 max-[1200px]:grid-cols-1">
                 <div>
                   <strong>Teams on screen</strong>
                   <span>
@@ -891,90 +946,84 @@ export function OperationsPage() {
             ) : (
               <p>{live.error ?? "Waiting for live data…"}</p>
             )}
-          </div>
+          </Card>
         </div>
 
-        <div className="operations-side-column panel-stack">
-          <div className="panel">
-            <div className="panel-header">
+        <div className="panel-stack sticky top-4 min-w-0 gap-4 max-[1200px]:static">
+          <Card>
+            <CardHeader>
               <div>
                 <p className="eyebrow">Readiness</p>
-                <h3>Live checklist</h3>
+                <CardTitle className="text-xl">Live checklist</CardTitle>
               </div>
-              <span
-                className={
-                  readinessChecks.every((check) => check.ok)
-                    ? "status-pill status-pill--ok"
-                    : "status-pill status-pill--warning"
-                }
-              >
+              <Badge variant={readinessChecks.every((check) => check.ok) ? "success" : "warning"}>
                 {readinessChecks.every((check) => check.ok) ? "Ready for live" : "Needs attention"}
-              </span>
-            </div>
-            <div className="operations-readiness-list">
+              </Badge>
+            </CardHeader>
+            <div className="grid gap-3">
               {readinessChecks.map((check) => (
-                <div key={check.label} className="operations-readiness-item">
-                  <span className={`operations-severity-icon ${check.ok ? "operations-severity-icon--ok" : "operations-severity-icon--warning"}`}>
+                <div key={check.label} className="grid items-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer p-4 [grid-template-columns:auto_minmax(0,1fr)]">
+                  <span className={severityIconClass(check.ok ? "ok" : "warning")}>
                     {severityIcon(check.ok ? "ok" : "warning")}
                   </span>
                   <div>
                     <strong>{check.label}</strong>
-                    <p>{check.detail}</p>
+                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{check.detail}</p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
-          <div className="panel">
-            <div className="panel-header">
+          <Card>
+            <CardHeader>
               <div>
                 <p className="eyebrow">Warnings</p>
-                <h3>Operator alerts</h3>
+                <CardTitle className="text-xl">Operator alerts</CardTitle>
               </div>
-              <span className={warnings.length ? "status-pill status-pill--warning" : "status-pill status-pill--ok"}>
+              <Badge variant={warnings.length ? "warning" : "success"}>
                 {warnings.length ? `${warnings.length} active` : "All clear"}
-              </span>
-            </div>
+              </Badge>
+            </CardHeader>
             {warnings.length ? (
-              <div className="operations-warning-list">
+              <div className="grid gap-3">
                 {warnings.map((warning) => (
-                  <div key={`${warning.severity}-${warning.title}`} className={`operations-warning-card operations-warning-card--${warning.severity}`}>
-                    <div className="operations-warning-heading">
-                      <span className={`operations-severity-icon operations-severity-icon--${warning.severity}`}>{severityIcon(warning.severity)}</span>
+                  <div key={`${warning.severity}-${warning.title}`} className={warningCardClass(warning.severity)}>
+                    <div className="flex items-start gap-3">
+                      <span className={severityIconClass(warning.severity)}>{severityIcon(warning.severity)}</span>
                       <strong>{warning.title}</strong>
                     </div>
-                    <p>{warning.detail}</p>
+                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{warning.detail}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="hint">No active operator warnings. The live setup looks healthy.</p>
+              <FieldHint>No active operator warnings. The live setup looks healthy.</FieldHint>
             )}
-          </div>
+          </Card>
 
-          <div className="panel">
-            <details className="operations-disclosure">
-              <summary className="operations-disclosure-summary">
+          <Card>
+            <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer data-[state=open]:bg-md3-surface">
+              <summary className="flex list-none items-start justify-between gap-4 px-4 py-4">
                 <div>
                   <p className="eyebrow">Overlay details</p>
                   <h3>On-air details</h3>
                 </div>
-                <span className="status-pill status-pill--info">Optional</span>
+                <Badge variant="info">Optional</Badge>
               </summary>
-              <div className="operations-disclosure-body">
-                <div className="operations-meta-list">
+              <div className="grid gap-4 px-4 pb-4">
+                <div className="grid gap-3">
                   <div>
                     <strong>Published theme</strong>
                     <span>{publishedTheme?.name ?? "None selected"}</span>
                   </div>
                   <div>
                     <strong>Left logo source</strong>
-                    <span className={`status-pill status-pill--${leftLogo.tone}`}>{leftLogo.label}</span>
+                    <Badge variant={logoTone(leftLogo)}>{leftLogo.label}</Badge>
                   </div>
                   <div>
                     <strong>Right logo source</strong>
-                    <span className={`status-pill status-pill--${rightLogo.tone}`}>{rightLogo.label}</span>
+                    <Badge variant={logoTone(rightLogo)}>{rightLogo.label}</Badge>
                   </div>
                   <div>
                     <strong>Lower line mode</strong>
@@ -997,48 +1046,48 @@ export function OperationsPage() {
                 </div>
               </div>
             </details>
-          </div>
+          </Card>
 
-          <div className="panel">
-            <details className="operations-disclosure">
-              <summary className="operations-disclosure-summary">
+          <Card>
+            <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer data-[state=open]:bg-md3-surface">
+              <summary className="flex list-none items-start justify-between gap-4 px-4 py-4">
                 <div>
                   <p className="eyebrow">Quick links</p>
                   <h3>Shortcuts</h3>
                 </div>
-                <span className="status-pill status-pill--info">Optional</span>
+                <Badge variant="info">Optional</Badge>
               </summary>
-              <div className="operations-disclosure-body">
+              <div className="grid gap-4 px-4 pb-4">
                 <div className="action-row compact">
-                  <a className="secondary-button" href={liveUrl} target="_blank" rel="noreferrer">
+                  <a className={buttonVariants({ variant: "secondary" })} href={liveUrl} target="_blank" rel="noreferrer">
                     Open live overlay
                   </a>
-                  <button className="secondary-button" type="button" onClick={() => void handleCopyOverlayUrl(liveUrl)}>
+                  <Button variant="secondary" type="button" onClick={() => void handleCopyOverlayUrl(liveUrl)}>
                     Copy live URL
-                  </button>
+                  </Button>
                   {previewUrl ? (
-                    <a className="secondary-button" href={previewUrl} target="_blank" rel="noreferrer">
+                    <a className={buttonVariants({ variant: "secondary" })} href={previewUrl} target="_blank" rel="noreferrer">
                       Open preview
                     </a>
                   ) : null}
                   {publishedTheme ? (
-                    <Link className="secondary-button" to={`/admin/themes/${publishedTheme.id}`}>
+                    <Link className={buttonVariants({ variant: "secondary" })} to={`/admin/themes/${publishedTheme.id}`}>
                       Open theme editor
                     </Link>
                   ) : null}
-                  <Link className="secondary-button" to="/admin/teams">
+                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/teams">
                     Manage teams
                   </Link>
-                  <Link className="secondary-button" to="/admin/themes">
+                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/themes">
                     Manage themes
                   </Link>
-                  <Link className="secondary-button" to="/admin/settings">
+                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/settings">
                     Open settings
                   </Link>
                 </div>
               </div>
             </details>
-          </div>
+          </Card>
         </div>
       </div>
     </section>

@@ -6,6 +6,7 @@ import "@fontsource/oswald/400.css";
 import "@fontsource/oswald/700.css";
 import "@fontsource/barlow-condensed/400.css";
 import "@fontsource/barlow-condensed/700.css";
+import "./tailwind.css";
 import "./styles.css";
 import { App } from "./App";
 

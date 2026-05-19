@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
+import { Badge, Button, Card, Checkbox, FieldHint, Input, Select, buttonVariants } from "../components/ui";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 export function SettingsPage() {
@@ -90,7 +91,11 @@ export function SettingsPage() {
   }
 
   if (!settings.data) {
-    return <section className="panel">Loading settings…</section>;
+    return (
+      <Card>
+        <FieldHint>Loading settings…</FieldHint>
+      </Card>
+    );
   }
 
   async function handleExportApp() {
@@ -122,17 +127,17 @@ export function SettingsPage() {
 
   return (
     <section className="admin-page panel-stack">
-      <div className="panel">
+      <Card>
         <div className="panel-header">
           <div>
             <p className="eyebrow">Runtime</p>
             <h2>Source and publishing settings</h2>
           </div>
           <div className="action-row compact">
-            {hasUnsavedChanges ? <span className="status-pill">Unsaved changes</span> : <span className="status-pill status-pill--ok">Saved</span>}
-            <button className="secondary-button" type="button" onClick={() => handleDiscardChanges()} disabled={!hasUnsavedChanges || saving}>
+            {hasUnsavedChanges ? <Badge variant="default">Unsaved changes</Badge> : <Badge variant="success">Saved</Badge>}
+            <Button variant="secondary" type="button" onClick={() => handleDiscardChanges()} disabled={!hasUnsavedChanges || saving}>
               Discard changes
-            </button>
+            </Button>
           </div>
         </div>
         <form
@@ -144,7 +149,7 @@ export function SettingsPage() {
         >
           <label>
             Upstream base URL
-            <input
+            <Input
               name="upstreamBaseUrl"
               value={draft?.upstreamBaseUrl ?? ""}
               onChange={(event) =>
@@ -161,7 +166,7 @@ export function SettingsPage() {
           </label>
           <label>
             Published theme
-            <select
+            <Select
               name="publishedThemeId"
               value={draft?.publishedThemeId ?? ""}
               onChange={(event) =>
@@ -181,11 +186,11 @@ export function SettingsPage() {
                   {theme.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Poll interval (ms)
-            <input
+            <Input
               name="pollIntervalMs"
               type="number"
               min={100}
@@ -204,7 +209,7 @@ export function SettingsPage() {
             />
           </label>
           <label className="checkbox">
-            <input
+            <Checkbox
               name="pollEnabled"
               type="checkbox"
               checked={draft?.pollEnabled ?? settings.data.pollEnabled}
@@ -222,7 +227,7 @@ export function SettingsPage() {
             Enable live polling
           </label>
           <label className="checkbox">
-            <input
+            <Checkbox
               name="autoRemoveBackgroundUploads"
               type="checkbox"
               checked={draft?.autoRemoveBackgroundUploads ?? settings.data.autoRemoveBackgroundUploads}
@@ -240,23 +245,23 @@ export function SettingsPage() {
             Automatically remove image backgrounds on upload
           </label>
           <div className="action-row compact">
-            <button disabled={saving || !hasUnsavedChanges} type="submit">
+            <Button disabled={saving || !hasUnsavedChanges} type="submit">
               {saving ? "Saving…" : "Save settings"}
-            </button>
-            <span className="hint">Tip: press Ctrl/Cmd+S to save.</span>
+            </Button>
+            <FieldHint>Tip: press Ctrl/Cmd+S to save.</FieldHint>
           </div>
         </form>
-      </div>
+      </Card>
 
-      <div className="panel">
+      <Card>
         <p className="eyebrow">Portability</p>
         <h2>Full app backup and restore</h2>
-        <p className="hint">Export settings, themes, and uploaded logo assets as one JSON bundle.</p>
+        <FieldHint>Export settings, themes, and uploaded logo assets as one JSON bundle.</FieldHint>
         <div className="action-row compact">
-          <button className="secondary-button" type="button" onClick={() => void handleExportApp()}>
+          <Button variant="secondary" type="button" onClick={() => void handleExportApp()}>
             Export full app backup
-          </button>
-          <label className="secondary-button">
+          </Button>
+          <label className={buttonVariants({ variant: "secondary" })}>
             Import full app backup
             <input
               hidden
@@ -272,7 +277,7 @@ export function SettingsPage() {
             />
           </label>
         </div>
-      </div>
+      </Card>
     </section>
   );
 }

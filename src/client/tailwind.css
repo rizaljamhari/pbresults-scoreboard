@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	.admin-root {
+		color: var(--md3-on-background);
+		background-color: var(--md3-background);
+		font-family: "Roboto", "Segoe UI", sans-serif;
+	}
+
+	.admin-root * {
+		transition-timing-function: var(--md3-easing-standard);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.admin-root *,
+	.admin-root *::before,
+	.admin-root *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

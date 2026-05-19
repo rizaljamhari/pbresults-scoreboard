@@ -3,6 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams } from "../hooks";
 import { showToast } from "../toast";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  FieldHint,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableShell,
+  buttonVariants
+} from "../components/ui";
 import { filterAndSortTeams, formatUpdatedAt, type TeamSort, type TeamStatusFilter } from "./teamAdminUtils";
 
 export function TeamsPage() {
@@ -167,22 +187,26 @@ export function TeamsPage() {
   }
 
   if (teams.loading && !teams.data) {
-    return <section className="panel">Loading teams…</section>;
+    return (
+      <Card>
+        <FieldHint>Loading teams…</FieldHint>
+      </Card>
+    );
   }
 
   return (
     <section className="admin-page panel-stack">
-      <header className="admin-page-header">
+      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
         <div>
           <p className="eyebrow">Team Registry</p>
           <h2>Overview</h2>
-          <p className="hint">Review all teams in one table. Open a team to edit profile, aliases, and logos.</p>
+          <FieldHint>Review all teams in one table. Open a team to edit profile, aliases, and logos.</FieldHint>
         </div>
         <div className="action-row compact">
-          <button className="secondary-button" onClick={() => void handleExportTeams()}>
+          <Button variant="secondary" onClick={() => void handleExportTeams()}>
             Export Teams
-          </button>
-          <label className="secondary-button">
+          </Button>
+          <label className={buttonVariants({ variant: "secondary" })}>
             Import Teams
             <input
               hidden
@@ -197,15 +221,15 @@ export function TeamsPage() {
               }}
             />
           </label>
-          <button onClick={() => void handleCreate()}>Create Team</button>
+          <Button onClick={() => void handleCreate()}>Create Team</Button>
         </div>
       </header>
 
-      <div className="panel">
-        <div className="table-toolbar">
+      <Card>
+        <div className="mb-3.5 grid grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_auto] items-end gap-3.5 max-[1200px]:grid-cols-1 max-[1200px]:items-stretch">
           <label>
             Search teams
-            <input
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by canonical name, short name, or alias"
@@ -213,63 +237,69 @@ export function TeamsPage() {
           </label>
           <label>
             Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TeamStatusFilter)}>
+            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TeamStatusFilter)}>
               <option value="all">All</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-            </select>
+            </Select>
           </label>
           <label>
             Sort
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as TeamSort)}>
+            <Select value={sortBy} onChange={(event) => setSortBy(event.target.value as TeamSort)}>
               <option value="nameAsc">Name (A-Z)</option>
               <option value="nameDesc">Name (Z-A)</option>
               <option value="updatedDesc">Updated (Newest)</option>
               <option value="updatedAsc">Updated (Oldest)</option>
-            </select>
+            </Select>
           </label>
-          <label className="checkbox table-compact-toggle">
-            <input type="checkbox" checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
+          <label className="checkbox justify-self-end whitespace-nowrap pb-1 max-[1200px]:justify-self-start">
+            <Checkbox checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
             Compact rows
           </label>
         </div>
-        <div className="table-bulk-bar">
-          <div className="table-bulk-summary">
-            <strong>{selectedCount}</strong>
-            <span>{selectedCount === 1 ? "team selected" : "teams selected"}</span>
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-3">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <strong className="text-base text-md3-onBackground">{selectedCount}</strong>
+            <span className="text-md3-onSurfaceVariant">{selectedCount === 1 ? "team selected" : "teams selected"}</span>
           </div>
           <div className="action-row compact">
-            <button
-              className="secondary-button"
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => setSelectedIds([])}
               disabled={!selectedCount || bulkBusy}
             >
               Clear selection
-            </button>
+            </Button>
             <details className="row-action-menu">
-              <summary className="secondary-button">{bulkBusy ? "Working…" : "Bulk actions"}</summary>
+              <summary className={buttonVariants({ variant: "secondary" })}>{bulkBusy ? "Working…" : "Bulk actions"}</summary>
               <div className="row-action-menu-list">
-                <button className="secondary-button" type="button" onClick={() => void handleBulkSetActive(true)} disabled={!selectedCount || bulkBusy}>
+                <Button variant="secondary" type="button" onClick={() => void handleBulkSetActive(true)} disabled={!selectedCount || bulkBusy}>
                   Activate selected
-                </button>
-                <button className="secondary-button" type="button" onClick={() => void handleBulkSetActive(false)} disabled={!selectedCount || bulkBusy}>
+                </Button>
+                <Button variant="secondary" type="button" onClick={() => void handleBulkSetActive(false)} disabled={!selectedCount || bulkBusy}>
                   Deactivate selected
-                </button>
-                <button className="danger-button" type="button" onClick={() => void handleBulkDelete()} disabled={!selectedCount || bulkBusy}>
+                </Button>
+                <Button variant="danger" type="button" onClick={() => void handleBulkDelete()} disabled={!selectedCount || bulkBusy}>
                   Delete selected
-                </button>
+                </Button>
               </div>
             </details>
           </div>
         </div>
-        <div className="table-shell">
-          <table className={compactRows ? "data-table data-table--compact" : "data-table"}>
-            <thead>
-              <tr>
-                <th className="table-select-cell">
-                  <label className="checkbox table-select-all">
-                    <input
+        <TableShell>
+          <Table
+            className={
+              compactRows
+                ? "max-[1200px]:min-w-[780px] [&_td]:px-2.5 [&_td]:py-2 [&_th]:px-2.5 [&_th]:py-2"
+                : "max-[1200px]:min-w-[780px]"
+            }
+          >
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-14 text-center">
+                  <label className="checkbox m-0 inline-flex w-full justify-center">
+                    <Checkbox
                       type="checkbox"
                       checked={allFilteredSelected}
                       ref={(node) => {
@@ -280,67 +310,67 @@ export function TeamsPage() {
                       onChange={(event) => toggleSelectAllFiltered(event.target.checked)}
                     />
                   </label>
-                </th>
-                <th>Team Name</th>
-                <th>Display Name</th>
-                <th>Short Name</th>
-                <th>Aliases</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th className="align-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead>Team Name</TableHead>
+                <TableHead>Display Name</TableHead>
+                <TableHead>Short Name</TableHead>
+                <TableHead>Aliases</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredTeams.length ? (
                 filteredTeams.map((team) => (
-                  <tr key={team.id}>
-                    <td className="table-select-cell">
-                      <label className="checkbox table-row-select">
-                        <input
+                  <TableRow key={team.id}>
+                    <TableCell className="w-14 text-center">
+                      <label className="checkbox m-0 inline-flex w-full justify-center">
+                        <Checkbox
                           type="checkbox"
                           checked={selectedIds.includes(team.id)}
                           onChange={(event) => toggleTeamSelection(team.id, event.target.checked)}
                         />
                       </label>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <strong>{team.canonicalName}</strong>
-                    </td>
-                    <td>{team.scoreboardDisplayName || "—"}</td>
-                    <td>{team.shortName || "—"}</td>
-                    <td>{team.aliases.length}</td>
-                    <td>
-                      <span className={team.active ? "status-pill status-pill--ok" : "status-pill"}>{team.active ? "Active" : "Inactive"}</span>
-                    </td>
-                    <td>{formatUpdatedAt(team.updatedAt)}</td>
-                    <td>
-                      <div className="table-actions">
-                        <button className="secondary-button" onClick={() => navigate(`/admin/teams/${team.id}`)}>
+                    </TableCell>
+                    <TableCell>{team.scoreboardDisplayName || "—"}</TableCell>
+                    <TableCell>{team.shortName || "—"}</TableCell>
+                    <TableCell>{team.aliases.length}</TableCell>
+                    <TableCell>
+                      <Badge variant={team.active ? "success" : "default"}>{team.active ? "Active" : "Inactive"}</Badge>
+                    </TableCell>
+                    <TableCell>{formatUpdatedAt(team.updatedAt)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="secondary" onClick={() => navigate(`/admin/teams/${team.id}`)}>
                           Edit
-                        </button>
-                        <button className="danger-button" onClick={() => void handleDelete(team.id, team.canonicalName)}>
+                        </Button>
+                        <Button variant="danger" onClick={() => void handleDelete(team.id, team.canonicalName)}>
                           Delete
-                        </button>
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={8} className="table-empty">
+                <TableRow>
+                  <TableEmpty colSpan={8}>
                     {(teams.data ?? []).length
                       ? "No teams match the current filters."
                       : "No teams yet. Create one to start building your team registry."}
-                  </td>
-                </tr>
+                  </TableEmpty>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </TableShell>
+      </Card>
 
-      <div className="admin-grid-2">
-        <div className="panel">
+      <div className="grid grid-cols-2 items-start gap-4 max-[1200px]:grid-cols-1">
+        <Card>
           <div className="panel-header">
             <div>
               <p className="eyebrow">Match Tester</p>
@@ -350,27 +380,27 @@ export function TeamsPage() {
           <div className="form-grid">
             <label>
               Input name
-              <input value={testerInput} onChange={(event) => setTesterInput(event.target.value)} placeholder="e.g. SBJ or Seattle Uprising" />
+              <Input value={testerInput} onChange={(event) => setTesterInput(event.target.value)} placeholder="e.g. SBJ or Seattle Uprising" />
             </label>
             <div className="action-row compact">
-              <button className="secondary-button" onClick={() => void handleMatchTest()} disabled={!testerInput.trim()}>
+              <Button variant="secondary" onClick={() => void handleMatchTest()} disabled={!testerInput.trim()}>
                 Test match
-              </button>
+              </Button>
             </div>
           </div>
           {testerResult ? (
-            <div className="match-result-card">
+            <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
               <strong>
                 {testerResult.status} {testerResult.team ? `· ${testerResult.team.canonicalName}` : ""}
               </strong>
-              <span>Normalized: {testerResult.normalizedInput || "n/a"}</span>
-              <span>Matched words: {testerResult.matchedAlias ?? (testerResult.normalizedInput || "n/a")}</span>
-              <span>Confidence: {(testerResult.confidence * 100).toFixed(1)}%</span>
-              {testerResult.matchedAlias ? <span>Matched alias: {testerResult.matchedAlias}</span> : null}
+              <span className="text-md3-onSurfaceVariant">Normalized: {testerResult.normalizedInput || "n/a"}</span>
+              <span className="text-md3-onSurfaceVariant">Matched words: {testerResult.matchedAlias ?? (testerResult.normalizedInput || "n/a")}</span>
+              <span className="text-md3-onSurfaceVariant">Confidence: {(testerResult.confidence * 100).toFixed(1)}%</span>
+              {testerResult.matchedAlias ? <span className="text-md3-onSurfaceVariant">Matched alias: {testerResult.matchedAlias}</span> : null}
               {testerResult.candidates.length ? (
-                <div className="team-candidate-list">
+                <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
                   {testerResult.candidates.map((candidate) => (
-                    <span key={`${candidate.teamId}:${candidate.matchedAlias ?? "candidate"}`}>
+                    <span key={`${candidate.teamId}:${candidate.matchedAlias ?? "candidate"}`} className="text-md3-onSurfaceVariant">
                       {candidate.teamName} · {(candidate.confidence * 100).toFixed(1)}%{candidate.matchedAlias ? ` · ${candidate.matchedAlias}` : ""}
                     </span>
                   ))}
@@ -378,9 +408,9 @@ export function TeamsPage() {
               ) : null}
             </div>
           ) : null}
-        </div>
+        </Card>
 
-        <div className="panel">
+        <Card>
           <div className="panel-header">
             <div>
               <p className="eyebrow">Live Feed</p>
@@ -388,34 +418,34 @@ export function TeamsPage() {
             </div>
           </div>
           {live.data ? (
-            <div className="stats-grid">
-              <div>
-                <strong>Left slot match</strong>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
+                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Left slot match</strong>
                 <span>{live.data.displayLeftTeamMatch.status}</span>
                 <span>{live.data.displayLeftTeamMatch.team?.canonicalName ?? (live.data.displayLeftTeam.name || "Unknown")}</span>
                 <span>Matched words: {live.data.displayLeftTeamMatch.matchedAlias ?? "—"}</span>
               </div>
-              <div>
-                <strong>Right slot match</strong>
+              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
+                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Right slot match</strong>
                 <span>{live.data.displayRightTeamMatch.status}</span>
                 <span>{live.data.displayRightTeamMatch.team?.canonicalName ?? (live.data.displayRightTeam.name || "Unknown")}</span>
                 <span>Matched words: {live.data.displayRightTeamMatch.matchedAlias ?? "—"}</span>
               </div>
-              <div>
-                <strong>Unresolved</strong>
+              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
+                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Unresolved</strong>
                 <span>{live.data.unresolvedTeamNames.length ? live.data.unresolvedTeamNames.join(", ") : "None"}</span>
               </div>
-              <div>
-                <strong>Displayed teams</strong>
+              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
+                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Displayed teams</strong>
                 <span>
                   {live.data.displayLeftTeam.name} vs {live.data.displayRightTeam.name}
                 </span>
               </div>
             </div>
           ) : (
-            <p className="hint">{live.error ?? "Waiting for live data…"}</p>
+            <FieldHint>{live.error ?? "Waiting for live data…"}</FieldHint>
           )}
-        </div>
+        </Card>
       </div>
     </section>
   );
