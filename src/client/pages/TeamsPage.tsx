@@ -409,43 +409,6 @@ export function TeamsPage() {
             </div>
           ) : null}
         </Card>
-
-        <Card>
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Live Feed</p>
-              <h3>Current team resolution status</h3>
-            </div>
-          </div>
-          {live.data ? (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
-              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Left slot match</strong>
-                <span>{live.data.displayLeftTeamMatch.status}</span>
-                <span>{live.data.displayLeftTeamMatch.team?.canonicalName ?? (live.data.displayLeftTeam.name || "Unknown")}</span>
-                <span>Matched words: {live.data.displayLeftTeamMatch.matchedAlias ?? "—"}</span>
-              </div>
-              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Right slot match</strong>
-                <span>{live.data.displayRightTeamMatch.status}</span>
-                <span>{live.data.displayRightTeamMatch.team?.canonicalName ?? (live.data.displayRightTeam.name || "Unknown")}</span>
-                <span>Matched words: {live.data.displayRightTeamMatch.matchedAlias ?? "—"}</span>
-              </div>
-              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Unresolved</strong>
-                <span>{live.data.unresolvedTeamNames.length ? live.data.unresolvedTeamNames.join(", ") : "None"}</span>
-              </div>
-              <div className="grid gap-1.5 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-                <strong className="text-[0.84rem] font-semibold uppercase tracking-[0.06em] text-md3-onSurfaceVariant">Displayed teams</strong>
-                <span>
-                  {live.data.displayLeftTeam.name} vs {live.data.displayRightTeam.name}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <FieldHint>{live.error ?? "Waiting for live data…"}</FieldHint>
-          )}
-        </Card>
       </div>
     </section>
   );

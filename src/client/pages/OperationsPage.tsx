@@ -1,3 +1,61 @@
+
+// Overlay preview with zoom controls (persisted in localStorage)
+function OverlayPreviewWithZoom({ liveUrl }: { liveUrl: string }) {
+  const [zoom, setZoom] = useState(() => {
+    const stored = window.localStorage.getItem("overlayPreviewZoom");
+    const parsed = stored ? parseFloat(stored) : 2;
+    return isNaN(parsed) ? 2 : Math.min(3, Math.max(1, parsed));
+  });
+  useEffect(() => {
+    window.localStorage.setItem("overlayPreviewZoom", String(zoom));
+  }, [zoom]);
+
+  function handleZoomIn() {
+    setZoom((z: number) => Math.min(3, Math.round((z + 0.25) * 100) / 100));
+  }
+  function handleZoomOut() {
+    setZoom((z: number) => Math.max(1, Math.round((z - 0.25) * 100) / 100));
+  }
+
+  return (
+    <div
+      className="group/zoom relative overflow-hidden rounded-md3m border border-md3-outlineVariant bg-black"
+      tabIndex={0}
+    >
+      <div
+        className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 opacity-0 transition-opacity group-hover/zoom:opacity-100 group-focus-within/zoom:opacity-100"
+        style={{ pointerEvents: "auto" }}
+      >
+        <button
+          type="button"
+          aria-label="Zoom out"
+          className="rounded border border-md3-outlineVariant bg-md3-surface px-2 py-0.5 text-lg font-bold text-md3-onSurfaceVariant disabled:opacity-50"
+          onClick={handleZoomOut}
+          disabled={zoom <= 1}
+        >
+          –
+        </button>
+        <span className="min-w-[2.5em] text-center text-xs font-semibold text-md3-onSurfaceVariant">{zoom.toFixed(2)}x</span>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          className="rounded border border-md3-outlineVariant bg-md3-surface px-2 py-0.5 text-lg font-bold text-md3-onSurfaceVariant disabled:opacity-50"
+          onClick={handleZoomIn}
+          disabled={zoom >= 3}
+        >
+          +
+        </button>
+      </div>
+      <iframe
+        title="Live scoreboard overlay"
+        src={liveUrl}
+        className={`h-[220px] w-full origin-center border-0 pointer-events-none transition-transform duration-200`}
+        style={{ transform: `scale(${zoom})` }}
+        loading="lazy"
+      />
+    </div>
+  );
+}
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatClock } from "../../shared/normalize";
@@ -28,6 +86,12 @@ type LogoResolution = {
 type ReadinessCheck = {
   label: string;
   ok: boolean;
+  detail: string;
+};
+
+type OperatorPriority = {
+  tone: "success" | "warning" | "critical";
+  title: string;
   detail: string;
 };
 
@@ -162,6 +226,41 @@ function severityIconClass(severity: WarningItem["severity"] | "ok") {
   }
   return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#dceeff] text-[0.76rem] font-extrabold text-[#0d4a7c]";
 }
+
+function dataTileClassName() {
+  return "grid gap-1.5 rounded-md3s border border-md3-outlineVariant bg-md3-surface px-3.5 py-3";
+}
+
+function dataTileLabelClassName() {
+  return "text-[0.72rem] font-bold uppercase tracking-[0.06em] text-md3-onSurfaceVariant";
+}
+
+function dataTileValueClassName() {
+  return "text-sm leading-snug text-md3-onBackground";
+}
+
+function priorityBannerClassName(tone: OperatorPriority["tone"]) {
+  if (tone === "success") {
+    return "grid gap-2 rounded-md3m border border-[#245b3224] bg-[var(--md3-success-container)] px-4 py-4";
+  }
+  if (tone === "critical") {
+    return "grid gap-2 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] px-4 py-4";
+  }
+  return "grid gap-2 rounded-md3m border border-[#b8800038] bg-[#fff9e8] px-4 py-4";
+}
+
+function riskCardClassName(hasRisk: boolean) {
+  if (hasRisk) {
+    return "border-[#c93a2c38] bg-[#fff7f5]";
+  }
+  return "border-md3-outlineVariant bg-md3-surface";
+}
+
+type GoLiveIssue = {
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail: string;
+};
 
 function resolveLogoSource(
   side: "left" | "right",
@@ -399,84 +498,89 @@ function ResolutionCard({
   onClear: () => void;
 }) {
   const title = side === "left" ? "Left side on screen" : "Right side on screen";
-  const needsResolution = match.status !== "matched" || match.resolutionSource === "manual";
+  const manualOverrideActive = match.resolutionSource === "manual";
+  const needsResolution = match.status !== "matched" || manualOverrideActive;
   const rememberedLiveName = Boolean(match.resolutionSource === "automatic" && match.team?.liveMatchNames.includes(match.matchedAlias ?? ""));
-  const showSuggestedTeams = match.candidates.length > 0 && (match.status !== "matched" || match.resolutionSource === "manual");
+  const showSuggestedTeams = needsResolution && match.candidates.length > 0;
   const resolutionState = describeResolutionState(match, rememberedLiveName);
   const activeTeams = teams.filter((team) => team.active);
-  const summaryItems = [
-    ["Name from /live", match.inputName || "—"],
-    ["Name shown on overlay", renderedName || "—"],
-    ["Selected team", match.team?.canonicalName ?? "Not resolved"],
-    [
-      "Current source",
-      match.resolutionSource === "manual"
-        ? "Temporary override"
-        : rememberedLiveName
-          ? "Remembered live name"
-          : match.status === "matched"
-            ? "Automatic match"
-            : "Needs operator review"
-    ]
-  ];
+  const statusLabel = manualOverrideActive
+    ? "Override active"
+    : match.status === "matched"
+      ? "Matched"
+      : match.status === "uncertain"
+        ? "Needs review"
+        : "Unmatched";
+  const statusVariant = manualOverrideActive ? "info" : matchTone(match);
+  const verdict = manualOverrideActive
+    ? "Temporary decision is active. Confirm this is still correct for on-air output."
+    : match.status === "matched"
+      ? "No action required. This side is currently stable."
+      : match.status === "uncertain"
+        ? "Confirm team before going on air."
+        : "Assignment required before this side is safe for on-air.";
   const detailItems = [
-    ["Normalized", match.normalizedInput || "—"],
-    ["Matched by", match.matchedAlias ?? (match.resolutionSource === "manual" ? "Manual override" : "—")],
-    ["Match confidence", `${Math.round(match.confidence * 100)}%`]
+    ["Normalized live input", match.normalizedInput || "—"],
+    ["Matched alias", match.matchedAlias ?? (manualOverrideActive ? "Manual override" : "—")],
+    ["Confidence", `${Math.round(match.confidence * 100)}%`]
   ];
+  const [manualSelectionOpen, setManualSelectionOpen] = useState(() => !manualOverrideActive && needsResolution);
+
+  useEffect(() => {
+    if (!needsResolution) {
+      setManualSelectionOpen(false);
+      return;
+    }
+    if (!manualOverrideActive) {
+      setManualSelectionOpen(true);
+    }
+  }, [manualOverrideActive, needsResolution]);
 
   return (
-    <Card className="grid min-h-full content-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4 [grid-template-rows:auto_auto_auto_auto_1fr]">
+    <Card className="grid min-h-full content-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
       <div className="panel-header items-start">
         <strong>{title}</strong>
         <div className="action-row compact justify-end max-[780px]:justify-start">
-          <Badge variant={matchTone(match)}>{match.status}</Badge>
-          {match.resolutionSource === "manual" ? <Badge variant="info">temporary override</Badge> : null}
+          <Badge variant={statusVariant}>{statusLabel}</Badge>
           {rememberedLiveName ? (
             <Badge variant="success">remembered live name</Badge>
           ) : null}
         </div>
       </div>
-      <div className="grid items-stretch gap-3 sm:grid-cols-2">
-        {summaryItems.map(([label, value]) => (
-          <div key={label}>
-            <strong>{label}</strong>
-            <span className="text-md3-onSurfaceVariant">{value}</span>
-          </div>
-        ))}
+      <div className={resolutionNoteClass(needsResolution ? resolutionState.tone : "ok")}>
+        <strong>{needsResolution ? resolutionState.title : "Stable"}</strong>
+        <p className="m-0 text-sm text-md3-onSurfaceVariant">{verdict}</p>
       </div>
-      <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface">
-        <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
-          <div>
-            <strong>Match details</strong>
-            <FieldHint>Show normalized input, match source, and confidence.</FieldHint>
-          </div>
-        </summary>
-        <div className="grid gap-4 px-4 pb-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {detailItems.map(([label, value]) => (
-              <div key={label}>
-                <strong>{label}</strong>
-                <span className="text-md3-onSurfaceVariant">{value}</span>
-              </div>
-            ))}
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className={dataTileClassName()}>
+          <strong className={dataTileLabelClassName()}>Live input</strong>
+          <span className={dataTileValueClassName()}>{match.inputName || "—"}</span>
         </div>
-      </details>
-      <div className="grid gap-2">
-        <strong className="text-xs font-bold uppercase tracking-wide text-md3-onSurfaceVariant">Current resolution</strong>
-        <div className={resolutionNoteClass(resolutionState.tone)}>
-          <strong>{resolutionState.title}</strong>
-          <p className="m-0 text-sm text-md3-onSurfaceVariant">{resolutionState.detail}</p>
+        <div className={dataTileClassName()}>
+          <strong className={dataTileLabelClassName()}>Assigned team</strong>
+          <span className={dataTileValueClassName()}>{match.team?.canonicalName ?? "Not resolved"}</span>
+        </div>
+        <div className={dataTileClassName()}>
+          <strong className={dataTileLabelClassName()}>Mode</strong>
+          <span className={dataTileValueClassName()}>
+            {manualOverrideActive
+              ? "Manual override"
+              : rememberedLiveName
+                ? "Remembered live name"
+                : match.status === "matched"
+                  ? "Automatic"
+                  : "Needs operator review"}
+          </span>
         </div>
       </div>
+
       <div className="grid content-start gap-3">
         {showSuggestedTeams ? (
           <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4">
             <div className="panel-header">
               <div>
-                <strong>Best suggestions</strong>
-                <FieldHint>Top candidates first. Use manual selection only if these are wrong.</FieldHint>
+                <strong>Step 1: Quick suggestions</strong>
+                <FieldHint>Choose the best candidate if it matches what should be on air.</FieldHint>
               </div>
             </div>
             {match.candidates.slice(0, 3).map((candidate, index) => (
@@ -495,6 +599,11 @@ function ResolutionCard({
                   <Button variant="secondary" type="button" onClick={() => onApply(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
                     Match now
                   </Button>
+                  {manualOverrideActive ? (
+                    <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
+                      {clearing ? "Clearing…" : "Back to automatic"}
+                    </Button>
+                  ) : null}
                   <details className="row-action-menu">
                     <summary className={buttonVariants({ variant: "secondary" })}>More</summary>
                     <div className="row-action-menu-list">
@@ -512,16 +621,33 @@ function ResolutionCard({
           </div>
         ) : (
           <div className="grid gap-1 rounded-md3m border border-dashed border-md3-outline bg-md3-surface px-4 py-3">
-            <strong>No suggested action needed</strong>
-            <p className="m-0 text-sm text-md3-onSurfaceVariant">{needsResolution ? "Use manual selection below to choose a team." : "This side is already stable for the current live name."}</p>
+            <strong>No action required</strong>
+            <p className="m-0 text-sm text-md3-onSurfaceVariant">
+              {manualOverrideActive
+                ? "Override is active. Use Change assignment only if this needs correction."
+                : needsResolution
+                  ? "Use manual selection if suggestions are not correct."
+                  : "This side is stable for current live input."}
+            </p>
           </div>
         )}
-        <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface data-[state=open]:bg-md3-surfaceContainer" open={needsResolution}>
+        {manualOverrideActive && !manualSelectionOpen ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" type="button" onClick={() => setManualSelectionOpen(true)}>
+              Change assignment
+            </Button>
+          </div>
+        ) : null}
+        <details
+          className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface data-[state=open]:bg-md3-surfaceContainer"
+          open={manualSelectionOpen}
+          onToggle={(event) => setManualSelectionOpen(event.currentTarget.open)}
+        >
           <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
             <div>
-              <strong>{needsResolution ? "Manual selection" : "Change match"}</strong>
+              <strong>{needsResolution ? "Step 2: Manual selection" : "Change assignment"}</strong>
               <FieldHint>
-                {needsResolution ? "Use this when the suggested teams are wrong or missing." : "Choose a different team or save a new remembered live name."}
+                {needsResolution ? "Use this only if suggestions are wrong or missing." : "Use this if you need to change the current assignment."}
               </FieldHint>
             </div>
           </summary>
@@ -539,22 +665,44 @@ function ResolutionCard({
                 <Button variant="secondary" type="button" onClick={() => onApply()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
                   {resolving ? "Applying…" : "Match now"}
                 </Button>
+                {manualOverrideActive ? (
+                  <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
+                    {clearing ? "Clearing…" : "Back to automatic"}
+                  </Button>
+                ) : null}
                 <details className="row-action-menu row-action-menu--up">
                   <summary className={buttonVariants({ variant: "secondary" })}>{resolving ? "Applying…" : "More"}</summary>
                   <div className="row-action-menu-list">
                     <Button variant="secondary" type="button" onClick={() => onApplyAndRemember()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
                       Match and remember
                     </Button>
-                    {match.resolutionSource === "manual" ? (
-                      <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
-                        {clearing ? "Clearing…" : "Back to automatic"}
-                      </Button>
-                    ) : null}
                     <Link className={buttonVariants({ variant: "secondary" })} to="/admin/teams">
                       Manage teams
                     </Link>
                   </div>
                 </details>
+              </div>
+            </div>
+          </div>
+        </details>
+        <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface">
+          <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
+            <div>
+              <strong>Why this match?</strong>
+              <FieldHint>Technical details for verification.</FieldHint>
+            </div>
+          </summary>
+          <div className="grid gap-4 px-4 pb-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {detailItems.map(([label, value]) => (
+                <div key={label} className={dataTileClassName()}>
+                  <strong className={dataTileLabelClassName()}>{label}</strong>
+                  <span className={dataTileValueClassName()}>{value}</span>
+                </div>
+              ))}
+              <div className={dataTileClassName()}>
+                <strong className={dataTileLabelClassName()}>Shown on overlay</strong>
+                <span className={dataTileValueClassName()}>{renderedName || "—"}</span>
               </div>
             </div>
           </div>
@@ -601,6 +749,54 @@ export function OperationsPage() {
     }
     return buildWarnings(settings.data, live.data, publishedTheme, leftLogo, rightLogo);
   }, [leftLogo, live.data, publishedTheme, settings.data, rightLogo]);
+
+  const operatorPriority = useMemo<OperatorPriority>(() => {
+    if (!settings.data?.pollEnabled) {
+      return {
+        tone: "critical",
+        title: "Polling is paused",
+        detail: "Start polling first so every other checklist item can update in real time."
+      };
+    }
+
+    if (!publishedTheme) {
+      return {
+        tone: "critical",
+        title: "No published theme selected",
+        detail: "Publish or select a theme before going on air to avoid incomplete overlays."
+      };
+    }
+
+    if (!live.data) {
+      return {
+        tone: "warning",
+        title: "Waiting for live feed data",
+        detail: "Keep this page open until the first successful /live fetch arrives."
+      };
+    }
+
+    if (live.data.displayLeftTeamMatch.status !== "matched" || live.data.displayRightTeamMatch.status !== "matched") {
+      return {
+        tone: "warning",
+        title: "Team name resolution needs attention",
+        detail: "Use the Team resolution section below and confirm both sides are matched before on-air."
+      };
+    }
+
+    if (warnings.length) {
+      return {
+        tone: "warning",
+        title: "Non-blocking operator warnings",
+        detail: "Review the Warnings panel for potential quality issues before broadcast."
+      };
+    }
+
+    return {
+      tone: "success",
+      title: "System ready for live operation",
+      detail: "Feed health, matching, and published theme checks are all green."
+    };
+  }, [live.data, publishedTheme, settings.data?.pollEnabled, warnings.length]);
 
   const readinessChecks = useMemo<ReadinessCheck[]>(() => {
     if (!settings.data) {
@@ -656,6 +852,32 @@ export function OperationsPage() {
       }
     ];
   }, [leftLogo, live.data, publishedTheme, rightLogo, settings.data]);
+
+  const goLiveIssues = useMemo<GoLiveIssue[]>(() => {
+    const issuesFromWarnings = warnings.map((warning) => ({
+      severity: warning.severity,
+      title: warning.title,
+      detail: warning.detail
+    }));
+    const issuesFromReadiness = readinessChecks
+      .filter((check) => !check.ok)
+      .map((check) => ({
+        severity: "warning" as const,
+        title: check.label,
+        detail: check.detail
+      }));
+    return [...issuesFromWarnings, ...issuesFromReadiness];
+  }, [readinessChecks, warnings]);
+
+  const goLiveStatus = useMemo(() => {
+    if (goLiveIssues.some((issue) => issue.severity === "critical")) {
+      return { label: "Blocked", variant: "critical" as const };
+    }
+    if (goLiveIssues.length > 0) {
+      return { label: "Needs review", variant: "warning" as const };
+    }
+    return { label: "Ready", variant: "success" as const };
+  }, [goLiveIssues]);
 
   useEffect(() => {
     const leftRaw = live.data?.displayLeftTeamMatch.inputName ?? "";
@@ -791,16 +1013,16 @@ export function OperationsPage() {
   }
 
   return (
-    <section className="admin-page panel-stack w-[min(90vw,1800px)] max-w-none gap-4">
+    <section className="admin-page panel-stack !w-[90%] !max-w-none mx-auto gap-4">
       <header className="flex items-end justify-between gap-5 py-1 max-[1200px]:flex-col max-[1200px]:items-start">
         <div>
           <p className="eyebrow">Operations</p>
           <h2>Live operator overview</h2>
-          <FieldHint>Keep the live feed healthy, fix team matching fast, and confirm the scoreboard is ready for air.</FieldHint>
+          <FieldHint>Prioritize Go-live status first, then Team resolution. Everything else is secondary.</FieldHint>
         </div>
-        <div className="action-row compact items-center">
+        <div className="action-row compact items-center max-[1200px]:w-full max-[1200px]:justify-start">
           <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
-            {refreshing ? "Refreshing…" : "Refresh now"}
+            {refreshing ? "Refreshing..." : "Refresh now"}
           </Button>
           <Button
             variant="secondary"
@@ -808,21 +1030,30 @@ export function OperationsPage() {
             onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
             disabled={togglingPoll}
           >
-            {togglingPoll ? "Updating…" : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
+            {togglingPoll ? "Updating..." : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
           </Button>
         </div>
       </header>
 
+      <Card>
+        <CardContent className="grid gap-3">
+          <div className={priorityBannerClassName(operatorPriority.tone)}>
+            <strong>{operatorPriority.title}</strong>
+            <p className="m-0 text-sm text-md3-onSurfaceVariant">{operatorPriority.detail}</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-4 gap-4 max-[1200px]:grid-cols-1">
         <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong>Live feed</strong>
+          <strong className={dataTileLabelClassName()}>Live feed</strong>
           <div className="grid gap-1">
             <Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>
             <span className="text-sm text-md3-onSurfaceVariant">{live.data?.errorMessage ?? "Live feed available"}</span>
           </div>
         </div>
         <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong>Polling</strong>
+          <strong className={dataTileLabelClassName()}>Polling</strong>
           <div className="grid gap-1">
             <Badge variant={settings.data.pollEnabled ? "success" : "warning"}>
               {settings.data.pollEnabled ? "Active" : "Paused"}
@@ -831,14 +1062,14 @@ export function OperationsPage() {
           </div>
         </div>
         <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong>Last update</strong>
+          <strong className={dataTileLabelClassName()}>Last update</strong>
           <div className="grid gap-1">
             <span>{formatAge(live.data?.fetchedAt ?? null)}</span>
             <span className="text-sm text-md3-onSurfaceVariant">{formatTimestamp(live.data?.fetchedAt ?? null)}</span>
           </div>
         </div>
         <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong>Published theme</strong>
+          <strong className={dataTileLabelClassName()}>Published theme</strong>
           <div className="grid gap-1">
             <span>{publishedTheme?.name ?? "None selected"}</span>
             <span className="text-sm text-md3-onSurfaceVariant">{publishedTheme ? "Ready for overlay" : "Choose one in Themes"}</span>
@@ -853,7 +1084,7 @@ export function OperationsPage() {
               <div>
                 <p className="eyebrow">Team resolution</p>
                 <CardTitle className="text-xl">Resolve live team names</CardTitle>
-                <CardDescription>Start here when a name is uncertain or unmatched. Overrides only apply to the current raw live name.</CardDescription>
+                <CardDescription>When in doubt: use quick suggestions first, then manual selection if needed. Overrides apply only to the current raw live name.</CardDescription>
               </div>
             </CardHeader>
             {live.data ? (
@@ -895,53 +1126,60 @@ export function OperationsPage() {
               <div>
                 <p className="eyebrow">Match snapshot</p>
                 <CardTitle className="text-xl">Current scoreboard state</CardTitle>
-                <CardDescription>This is the live state currently driving the overlay.</CardDescription>
+                <CardDescription>This is exactly what currently drives the on-air overlay output.</CardDescription>
               </div>
             </CardHeader>
             {live.data ? (
-              <div className="grid grid-cols-3 gap-3 max-[1200px]:grid-cols-1">
-                <div>
-                  <strong>Teams on screen</strong>
-                  <span>
-                    {live.data.displayLeftTeam.name || "Left"} vs {live.data.displayRightTeam.name || "Right"}
-                  </span>
+              <div className="grid gap-3">
+                <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Teams on screen</strong>
+                    <span className={dataTileValueClassName()}>
+                      {live.data.displayLeftTeam.name || "Left"} vs {live.data.displayRightTeam.name || "Right"}
+                    </span>
+                  </div>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Score</strong>
+                    <span className={dataTileValueClassName()}>
+                      {live.data.displayLeftTeam.score} - {live.data.displayRightTeam.score}
+                    </span>
+                  </div>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Main clock</strong>
+                    <span className={dataTileValueClassName()}>{formatClock(live.data.gameTimer.value)}</span>
+                  </div>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>State / period</strong>
+                    <span className={dataTileValueClassName()}>
+                      {live.data.state} / {live.data.period}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <strong>Score</strong>
-                  <span>
-                    {live.data.displayLeftTeam.score} - {live.data.displayRightTeam.score}
-                  </span>
-                </div>
-                <div>
-                  <strong>Main clock</strong>
-                  <span>{formatClock(live.data.gameTimer.value)}</span>
-                </div>
-                <div>
-                  <strong>Break clock</strong>
-                  <span>{formatClock(live.data.breakTimer.value)}</span>
-                </div>
-                <div>
-                  <strong>State / period</strong>
-                  <span>
-                    {live.data.state} / {live.data.period}
-                  </span>
-                </div>
-                <div>
-                  <strong>Round</strong>
-                  <span>{live.data.round}</span>
-                </div>
-                <div>
-                  <strong>Side switch</strong>
-                  <span>{live.data.sidesSwitched ? "On" : "Off"}</span>
-                </div>
-                <div>
-                  <strong>Current event</strong>
-                  <span>{eventLabel(live.data.teamEvent)}</span>
-                </div>
-                <div>
-                  <strong>Second game</strong>
-                  <span>{Array.isArray(live.data.secondGame) ? "Available" : "None"}</span>
-                </div>
+                <details className="rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-md3-onSurfaceVariant">More scoreboard details</summary>
+                  <div className="mt-3 grid grid-cols-2 gap-3 max-[1200px]:grid-cols-1">
+                    <div className={dataTileClassName()}>
+                      <strong className={dataTileLabelClassName()}>Break clock</strong>
+                      <span className={dataTileValueClassName()}>{formatClock(live.data.breakTimer.value)}</span>
+                    </div>
+                    <div className={dataTileClassName()}>
+                      <strong className={dataTileLabelClassName()}>Round</strong>
+                      <span className={dataTileValueClassName()}>{live.data.round}</span>
+                    </div>
+                    <div className={dataTileClassName()}>
+                      <strong className={dataTileLabelClassName()}>Side switch</strong>
+                      <span className={dataTileValueClassName()}>{live.data.sidesSwitched ? "On" : "Off"}</span>
+                    </div>
+                    <div className={dataTileClassName()}>
+                      <strong className={dataTileLabelClassName()}>Current event</strong>
+                      <span className={dataTileValueClassName()}>{eventLabel(live.data.teamEvent)}</span>
+                    </div>
+                    <div className={dataTileClassName()}>
+                      <strong className={dataTileLabelClassName()}>Second game</strong>
+                      <span className={dataTileValueClassName()}>{Array.isArray(live.data.secondGame) ? "Available" : "None"}</span>
+                    </div>
+                  </div>
+                </details>
               </div>
             ) : (
               <p>{live.error ?? "Waiting for live data…"}</p>
@@ -953,52 +1191,39 @@ export function OperationsPage() {
           <Card>
             <CardHeader>
               <div>
-                <p className="eyebrow">Readiness</p>
-                <CardTitle className="text-xl">Live checklist</CardTitle>
+                <p className="eyebrow">On-air now</p>
+                <CardTitle className="text-xl">Live overlay view</CardTitle>
+                <CardDescription>Current scoreboard overlay render.</CardDescription>
               </div>
-              <Badge variant={readinessChecks.every((check) => check.ok) ? "success" : "warning"}>
-                {readinessChecks.every((check) => check.ok) ? "Ready for live" : "Needs attention"}
-              </Badge>
             </CardHeader>
-            <div className="grid gap-3">
-              {readinessChecks.map((check) => (
-                <div key={check.label} className="grid items-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer p-4 [grid-template-columns:auto_minmax(0,1fr)]">
-                  <span className={severityIconClass(check.ok ? "ok" : "warning")}>
-                    {severityIcon(check.ok ? "ok" : "warning")}
-                  </span>
-                  <div>
-                    <strong>{check.label}</strong>
-                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{check.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <OverlayPreviewWithZoom liveUrl={liveUrl} />
           </Card>
 
-          <Card>
+          <Card className={riskCardClassName(goLiveIssues.length > 0)}>
             <CardHeader>
               <div>
-                <p className="eyebrow">Warnings</p>
-                <CardTitle className="text-xl">Operator alerts</CardTitle>
+                <p className="eyebrow">Go-live status</p>
+                <CardTitle className="text-xl">Operator status</CardTitle>
+                <CardDescription>Only items needing attention are shown.</CardDescription>
               </div>
-              <Badge variant={warnings.length ? "warning" : "success"}>
-                {warnings.length ? `${warnings.length} active` : "All clear"}
+              <Badge variant={goLiveStatus.variant}>
+                {goLiveStatus.label}
               </Badge>
             </CardHeader>
-            {warnings.length ? (
+            {goLiveIssues.length ? (
               <div className="grid gap-3">
-                {warnings.map((warning) => (
-                  <div key={`${warning.severity}-${warning.title}`} className={warningCardClass(warning.severity)}>
+                {goLiveIssues.map((issue) => (
+                  <div key={`${issue.severity}-${issue.title}`} className={warningCardClass(issue.severity)}>
                     <div className="flex items-start gap-3">
-                      <span className={severityIconClass(warning.severity)}>{severityIcon(warning.severity)}</span>
-                      <strong>{warning.title}</strong>
+                      <span className={severityIconClass(issue.severity)}>{severityIcon(issue.severity)}</span>
+                      <strong>{issue.title}</strong>
                     </div>
-                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{warning.detail}</p>
+                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{issue.detail}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <FieldHint>No active operator warnings. The live setup looks healthy.</FieldHint>
+              <FieldHint>All checks are healthy. Safe to proceed on air.</FieldHint>
             )}
           </Card>
 
@@ -1013,29 +1238,29 @@ export function OperationsPage() {
               </summary>
               <div className="grid gap-4 px-4 pb-4">
                 <div className="grid gap-3">
-                  <div>
-                    <strong>Published theme</strong>
-                    <span>{publishedTheme?.name ?? "None selected"}</span>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Published theme</strong>
+                    <span className={dataTileValueClassName()}>{publishedTheme?.name ?? "None selected"}</span>
                   </div>
-                  <div>
-                    <strong>Left logo source</strong>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Left logo source</strong>
                     <Badge variant={logoTone(leftLogo)}>{leftLogo.label}</Badge>
                   </div>
-                  <div>
-                    <strong>Right logo source</strong>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Right logo source</strong>
                     <Badge variant={logoTone(rightLogo)}>{rightLogo.label}</Badge>
                   </div>
-                  <div>
-                    <strong>Lower line mode</strong>
-                    <span>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Lower line mode</strong>
+                    <span className={dataTileValueClassName()}>
                       {live.data?.period === "BREAK"
                         ? publishedTheme?.centerSecondary.breakMode ?? "—"
                         : publishedTheme?.centerSecondary.gameMode ?? "—"}
                     </span>
                   </div>
-                  <div>
-                    <strong>Active overlay state</strong>
-                    <span>
+                  <div className={dataTileClassName()}>
+                    <strong className={dataTileLabelClassName()}>Active overlay state</strong>
+                    <span className={dataTileValueClassName()}>
                       {live.data?.teamEvent === "none"
                         ? "Normal"
                         : live.data?.teamEvent.startsWith("towel")
