@@ -1,6 +1,6 @@
 # PBResults Scoreboard
 
-Browser-based scoreboard control, team resolution, and overlay tooling for PBResults live feeds.
+Browser-based scoreboard control, team resolution, and overlay tooling for [PBResults](https://www.paintballresults.com/) live feeds.
 
 This project is built for paintball broadcast workflows where PBResults provides the upstream `/live` data and the overlay is consumed as a browser source in tools like vMix.
 
