@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, Palette, Radio } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type {
   AppSettings,
@@ -78,7 +79,7 @@ function OverlayPreviewWithZoom({ liveUrl }: { liveUrl: string }) {
       <iframe
         title="Live scoreboard overlay"
         src={liveUrl}
-        className="h-[220px] w-full origin-center border-0 pointer-events-none transition-transform duration-200"
+        className="h-[184px] w-full origin-center border-0 pointer-events-none transition-transform duration-200"
         style={{ transform: `scale(${zoom})` }}
         loading="lazy"
       />
@@ -221,12 +222,12 @@ function resolutionNoteClass(tone: "ok" | "warning" | "critical" | "info") {
 
 function warningCardClass(severity: WarningItem["severity"]) {
   if (severity === "critical") {
-    return "grid gap-2 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] p-4";
+    return "grid gap-3 rounded-md3m border border-[#e4b9b4] border-l-4 border-l-[#c54535] bg-[#fff7f6] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.06)]";
   }
   if (severity === "warning") {
-    return "grid gap-2 rounded-md3m border border-[#b8800038] bg-[#fff9e8] p-4";
+    return "grid gap-3 rounded-md3m border border-[#e5cf8f] border-l-4 border-l-[#a97400] bg-[#fffdf4] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.05)]";
   }
-  return "grid gap-2 rounded-md3m border border-[#005fa32e] bg-[#eef7ff] p-4";
+  return "grid gap-3 rounded-md3m border border-[#b6d2ec] border-l-4 border-l-[#1f73b8] bg-[#f5faff] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.05)]";
 }
 
 function severityIconClass(severity: WarningItem["severity"] | "ok") {
@@ -254,10 +255,7 @@ function dataTileValueClassName() {
   return "text-sm leading-snug text-md3-onBackground";
 }
 
-function riskCardClassName(hasRisk: boolean) {
-  if (hasRisk) {
-    return "border-[#c93a2c38] bg-[#fff7f5]";
-  }
+function riskCardClassName() {
   return "border-md3-outlineVariant bg-md3-surface";
 }
 
@@ -265,7 +263,137 @@ type GoLiveIssue = {
   severity: "critical" | "warning" | "info";
   title: string;
   detail: string;
+  cause: string;
+  fix: string;
 };
+
+const ISSUE_SEVERITY_RANK: Record<GoLiveIssue["severity"], number> = {
+  critical: 3,
+  warning: 2,
+  info: 1
+};
+
+function issueBadgeVariant(severity: GoLiveIssue["severity"]) {
+  if (severity === "critical") {
+    return "critical" as const;
+  }
+  if (severity === "warning") {
+    return "warning" as const;
+  }
+  return "info" as const;
+}
+
+function normalizeReadinessIssue(check: ReadinessCheck): Pick<GoLiveIssue, "severity" | "title" | "detail"> {
+  switch (check.label) {
+    case "Upstream reachable":
+      return {
+        severity: "warning",
+        title: "Upstream feed error",
+        detail: check.detail
+      };
+    case "Polling enabled":
+      return {
+        severity: "warning",
+        title: "Polling is paused",
+        detail: check.detail
+      };
+    case "Live data fresh":
+      return {
+        severity: "warning",
+        title: check.detail === "No successful fetch yet." ? "No successful live fetch yet" : "Live data is stale",
+        detail: check.detail
+      };
+    case "Published theme ready":
+      return {
+        severity: "critical",
+        title: "No published theme",
+        detail: check.detail
+      };
+    case "Left team resolved":
+      return {
+        severity: "warning",
+        title: "Left team needs confirmation",
+        detail: check.detail
+      };
+    case "Right team resolved":
+      return {
+        severity: "warning",
+        title: "Right team needs confirmation",
+        detail: check.detail
+      };
+    case "Logo coverage":
+      return {
+        severity: "warning",
+        title: "Logo coverage",
+        detail: check.detail
+      };
+    default:
+      return {
+        severity: "warning",
+        title: check.label,
+        detail: check.detail
+      };
+  }
+}
+
+function issueGuidance(title: string, detail: string) {
+  switch (title) {
+    case "Upstream feed error":
+      return {
+        cause: "The PBResults `/live` source is unreachable or returning an error.",
+        fix: "Check upstream PBResults server/network, verify URL in Settings, then press Refresh now."
+      };
+    case "Live data is stale":
+    case "Live data fresh":
+      return {
+        cause: "Recent live updates are delayed beyond expected polling freshness.",
+        fix: "Keep polling enabled, verify upstream connectivity, and wait for a new successful fetch."
+      };
+    case "Polling is paused":
+    case "Polling enabled":
+      return {
+        cause: "Automatic polling is currently disabled.",
+        fix: "Click Start polling and confirm status changes to Active."
+      };
+    case "No successful live fetch yet":
+    case "Waiting for live state":
+      return {
+        cause: "No successful `/live` response has been received in this session yet.",
+        fix: "Confirm upstream URL and connectivity, keep polling active, and refresh once source is healthy."
+      };
+    case "Left team needs confirmation":
+    case "Right team needs confirmation":
+    case "Left team resolved":
+    case "Right team resolved":
+      return {
+        cause: detail,
+        fix: "Use Team resolution (Step 1 quick suggestions first, then Step 2 manual selection if needed)."
+      };
+    case "Left logo unresolved":
+    case "Right logo unresolved":
+    case "Logo coverage":
+      return {
+        cause: detail,
+        fix: "Add team logo in Teams registry or configure fallback/logo assets in Theme Editor."
+      };
+    case "No published theme":
+    case "Published theme ready":
+      return {
+        cause: detail,
+        fix: "Publish/select a valid theme in Themes before continuing on-air."
+      };
+    case "Upstream reachable":
+      return {
+        cause: detail,
+        fix: "Confirm upstream server health and network route to the configured source URL."
+      };
+    default:
+      return {
+        cause: detail,
+        fix: "Open the related section on this page and resolve the highlighted issue before go-live."
+      };
+  }
+}
 
 function resolveLogoSource(
   side: "left" | "right",
@@ -338,7 +466,7 @@ function teamOptionLabel(team: TeamRecord) {
 function describeResolutionState(match: TeamMatchResult, rememberedLiveName: boolean) {
   if (match.resolutionSource === "manual") {
     return {
-      tone: "info" as const,
+      tone: "ok" as const,
       title: "Temporary match active",
       detail: "This side is currently using an operator override for the current live name."
     };
@@ -516,7 +644,7 @@ function ResolutionCard({
       : match.status === "uncertain"
         ? "Needs review"
         : "Unmatched";
-  const statusVariant = manualOverrideActive ? "info" : matchTone(match);
+  const statusVariant = manualOverrideActive ? "success" : matchTone(match);
   const verdict = manualOverrideActive
     ? "Temporary decision is active. Confirm this is still correct for on-air output."
     : match.status === "matched"
@@ -529,17 +657,37 @@ function ResolutionCard({
     ["Matched alias", match.matchedAlias ?? (manualOverrideActive ? "Manual override" : "—")],
     ["Confidence", `${Math.round(match.confidence * 100)}%`]
   ];
-  const [manualSelectionOpen, setManualSelectionOpen] = useState(() => !manualOverrideActive && needsResolution);
+  const manualSelectionDefaultOpen = !manualOverrideActive && needsResolution && !showSuggestedTeams;
+  const resolutionViewKey = `${match.inputName}|${match.status}|${manualOverrideActive ? "manual" : "auto"}|${match.candidates
+    .map((candidate) => candidate.teamId)
+    .join(",")}`;
+  const previousResolutionViewKeyRef = useRef(resolutionViewKey);
+  const closeManualSelectionAfterQuickActionRef = useRef(false);
+  const [manualSelectionOpen, setManualSelectionOpen] = useState(() => manualSelectionDefaultOpen);
 
   useEffect(() => {
-    if (!needsResolution) {
-      setManualSelectionOpen(false);
-      return;
+    if (previousResolutionViewKeyRef.current !== resolutionViewKey) {
+      previousResolutionViewKeyRef.current = resolutionViewKey;
+      if (closeManualSelectionAfterQuickActionRef.current) {
+        closeManualSelectionAfterQuickActionRef.current = false;
+        setManualSelectionOpen(false);
+        return;
+      }
+      setManualSelectionOpen(manualSelectionDefaultOpen);
     }
-    if (!manualOverrideActive) {
-      setManualSelectionOpen(true);
-    }
-  }, [manualOverrideActive, needsResolution]);
+  }, [manualSelectionDefaultOpen, resolutionViewKey]);
+
+  function handleQuickSuggestionApply(teamId: string) {
+    closeManualSelectionAfterQuickActionRef.current = true;
+    setManualSelectionOpen(false);
+    onApply(teamId);
+  }
+
+  function handleQuickSuggestionApplyAndRemember(teamId: string) {
+    closeManualSelectionAfterQuickActionRef.current = true;
+    setManualSelectionOpen(false);
+    onApplyAndRemember(teamId);
+  }
 
   return (
     <Card className="grid min-h-full content-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
@@ -601,7 +749,12 @@ function ResolutionCard({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="secondary" type="button" onClick={() => onApply(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => handleQuickSuggestionApply(candidate.teamId)}
+                    disabled={resolving || !match.inputName.trim()}
+                  >
                     Match now
                   </Button>
                   {manualOverrideActive ? (
@@ -612,7 +765,12 @@ function ResolutionCard({
                   <details className="row-action-menu">
                     <summary className={buttonVariants({ variant: "secondary" })}>More</summary>
                     <div className="row-action-menu-list">
-                      <Button variant="secondary" type="button" onClick={() => onApplyAndRemember(candidate.teamId)} disabled={resolving || !match.inputName.trim()}>
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        onClick={() => handleQuickSuggestionApplyAndRemember(candidate.teamId)}
+                        disabled={resolving || !match.inputName.trim()}
+                      >
                         Match and remember
                       </Button>
                       <Link className={buttonVariants({ variant: "secondary" })} to={`/admin/teams/${candidate.teamId}`}>
@@ -631,7 +789,7 @@ function ResolutionCard({
               {manualOverrideActive
                 ? "Override is active. Use Change assignment only if this needs correction."
                 : needsResolution
-                  ? "Use manual selection if suggestions are not correct."
+                  ? "No quick suggestion is ready. Use manual selection."
                   : "This side is stable for current live input."}
             </p>
           </div>
@@ -790,9 +948,9 @@ export function OperationsPage() {
 
     if (warnings.length) {
       return {
-        tone: "warning",
-        title: "Non-blocking operator warnings",
-        detail: "Review the Warnings panel for potential quality issues before broadcast."
+        tone: "critical",
+        title: "Operator attention required before go-live",
+        detail: "Check Operator status on the right. Each item includes cause and fix steps."
       };
     }
 
@@ -859,19 +1017,36 @@ export function OperationsPage() {
   }, [leftLogo, live.data, publishedTheme, rightLogo, settings.data]);
 
   const goLiveIssues = useMemo<GoLiveIssue[]>(() => {
-    const issuesFromWarnings = warnings.map((warning) => ({
+    const issuesFromWarnings: GoLiveIssue[] = warnings.map((warning) => ({
       severity: warning.severity,
       title: warning.title,
-      detail: warning.detail
+      detail: warning.detail,
+      ...issueGuidance(warning.title, warning.detail)
     }));
-    const issuesFromReadiness = readinessChecks
+
+    const issuesFromReadiness: GoLiveIssue[] = readinessChecks
       .filter((check) => !check.ok)
-      .map((check) => ({
-        severity: "warning" as const,
-        title: check.label,
-        detail: check.detail
-      }));
-    return [...issuesFromWarnings, ...issuesFromReadiness];
+      .map((check) => {
+        const normalized = normalizeReadinessIssue(check);
+        return {
+          ...normalized,
+          ...issueGuidance(normalized.title, normalized.detail)
+        };
+      });
+
+    const deduped = new Map<string, GoLiveIssue>();
+    [...issuesFromWarnings, ...issuesFromReadiness].forEach((issue) => {
+      const current = deduped.get(issue.title);
+      if (!current) {
+        deduped.set(issue.title, issue);
+        return;
+      }
+      if (ISSUE_SEVERITY_RANK[issue.severity] > ISSUE_SEVERITY_RANK[current.severity]) {
+        deduped.set(issue.title, issue);
+      }
+    });
+
+    return Array.from(deduped.values());
   }, [readinessChecks, warnings]);
 
   const goLiveStatus = useMemo(() => {
@@ -883,6 +1058,26 @@ export function OperationsPage() {
     }
     return { label: "Ready", variant: "success" as const };
   }, [goLiveIssues]);
+
+  const lastUpdateTone = useMemo<"success" | "warning" | "critical">(() => {
+    const fetchedAt = live.data?.fetchedAt;
+    if (!fetchedAt) {
+      return "critical";
+    }
+
+    const ageMs = Date.now() - Date.parse(fetchedAt);
+    const pollIntervalMs = settings.data?.pollIntervalMs ?? 1000;
+    const staleThresholdMs = Math.max(pollIntervalMs * 4, 5000);
+    if (Number.isNaN(ageMs) || ageMs < 0) {
+      return "warning";
+    }
+
+    if (ageMs <= staleThresholdMs) {
+      return "success";
+    }
+
+    return live.data?.sourceStatus === "error" ? "critical" : "warning";
+  }, [live.data?.fetchedAt, live.data?.sourceStatus, settings.data?.pollIntervalMs]);
 
   useEffect(() => {
     const leftRaw = live.data?.displayLeftTeamMatch.inputName ?? "";
@@ -1018,7 +1213,7 @@ export function OperationsPage() {
   }
 
   return (
-    <AdminPageFrame className="panel-stack gap-4">
+    <AdminPageFrame className="panel-stack gap-4 w-[90%] !max-w-none">
       <AdminPageHeader
         eyebrow="Operations"
         title="Live operator overview"
@@ -1029,7 +1224,7 @@ export function OperationsPage() {
               {refreshing ? "Refreshing..." : "Refresh now"}
             </Button>
             <Button
-              variant="secondary"
+              variant={settings.data.pollEnabled ? "danger" : "default"}
               type="button"
               onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
               disabled={togglingPoll}
@@ -1042,6 +1237,15 @@ export function OperationsPage() {
 
       <StatusPanel
         tone={operatorPriority.tone === "critical" ? "critical" : operatorPriority.tone === "warning" ? "warning" : "success"}
+        icon={
+          operatorPriority.tone === "critical" ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : operatorPriority.tone === "warning" ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" />
+          )
+        }
         title={operatorPriority.title}
         description={operatorPriority.detail}
       />
@@ -1049,24 +1253,28 @@ export function OperationsPage() {
       <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
         <AdminStatTile
           tone={sourceStatusTone(live.data?.sourceStatus)}
+          icon={<Activity className="h-3.5 w-3.5" />}
           label="Live feed"
           value={<Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>}
           detail={live.data?.errorMessage ?? "Live feed available"}
         />
         <AdminStatTile
           tone={settings.data.pollEnabled ? "success" : "warning"}
+          icon={<Radio className="h-3.5 w-3.5" />}
           label="Polling"
           value={<Badge variant={settings.data.pollEnabled ? "success" : "warning"}>{settings.data.pollEnabled ? "Active" : "Paused"}</Badge>}
           detail={`${settings.data.pollIntervalMs} ms interval`}
         />
         <AdminStatTile
-          tone="info"
+          tone={lastUpdateTone}
+          icon={<Clock3 className="h-3.5 w-3.5" />}
           label="Last update"
           value={formatAge(live.data?.fetchedAt ?? null)}
           detail={formatTimestamp(live.data?.fetchedAt ?? null)}
         />
         <AdminStatTile
           tone={publishedTheme ? "success" : "warning"}
+          icon={<Palette className="h-3.5 w-3.5" />}
           label="Published theme"
           value={publishedTheme?.name ?? "None selected"}
           detail={publishedTheme ? "Ready for overlay" : "Choose one in Themes"}
@@ -1195,12 +1403,12 @@ export function OperationsPage() {
             <OverlayPreviewWithZoom liveUrl={liveUrl} />
           </Card>
 
-          <Card className={riskCardClassName(goLiveIssues.length > 0)}>
+          <Card className={riskCardClassName()}>
             <CardHeader>
               <div>
                 <p className="eyebrow">Go-live status</p>
                 <CardTitle className="text-xl">Operator status</CardTitle>
-                <CardDescription>Only items needing attention are shown.</CardDescription>
+                <CardDescription>Only items needing attention are shown with cause and fix actions.</CardDescription>
               </div>
               <Badge variant={goLiveStatus.variant}>
                 {goLiveStatus.label}
@@ -1210,11 +1418,32 @@ export function OperationsPage() {
               <div className="grid gap-3">
                 {goLiveIssues.map((issue) => (
                   <div key={`${issue.severity}-${issue.title}`} className={warningCardClass(issue.severity)}>
-                    <div className="flex items-start gap-3">
-                      <span className={severityIconClass(issue.severity)}>{severityIcon(issue.severity)}</span>
-                      <strong>{issue.title}</strong>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className={severityIconClass(issue.severity)}>{severityIcon(issue.severity)}</span>
+                        <div className="grid gap-1">
+                          <strong className="text-base leading-tight">{issue.title}</strong>
+                          <p className="m-0 text-sm leading-snug text-md3-onSurfaceVariant">{issue.detail}</p>
+                        </div>
+                      </div>
+                      <Badge variant={issueBadgeVariant(issue.severity)} className="normal-case tracking-[0.02em]">
+                        {issue.severity === "critical" ? "Immediate" : issue.severity === "warning" ? "Needs action" : "Heads up"}
+                      </Badge>
                     </div>
-                    <p className="m-0 text-sm text-md3-onSurfaceVariant">{issue.detail}</p>
+                    <div className="grid gap-1.5 border-t border-md3-outlineVariant/70 pt-2">
+                      <p className="m-0 flex items-start gap-2 text-sm leading-snug text-md3-onBackground">
+                        <span className="mt-0.5 inline-flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-md3-surfaceContainerHigh text-[0.66rem] font-extrabold text-md3-onSurfaceVariant">
+                          ?
+                        </span>
+                        <span><strong>Cause</strong>: {issue.cause}</span>
+                      </p>
+                      <p className="m-0 flex items-start gap-2 text-sm leading-snug text-md3-onBackground">
+                        <span className="mt-0.5 inline-flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-md3-surfaceContainerHigh text-[0.66rem] font-extrabold text-md3-onSurfaceVariant">
+                          →
+                        </span>
+                        <span><strong>Fix</strong>: {issue.fix}</span>
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1230,7 +1459,6 @@ export function OperationsPage() {
                   <p className="eyebrow">Overlay details</p>
                   <h3>On-air details</h3>
                 </div>
-                <Badge variant="info">Optional</Badge>
               </summary>
               <div className="grid gap-4 px-4 pb-4">
                 <div className="grid gap-3">
@@ -1276,7 +1504,6 @@ export function OperationsPage() {
                   <p className="eyebrow">Quick links</p>
                   <h3>Shortcuts</h3>
                 </div>
-                <Badge variant="info">Optional</Badge>
               </summary>
               <div className="grid gap-4 px-4 pb-4">
                 <div className="action-row compact">

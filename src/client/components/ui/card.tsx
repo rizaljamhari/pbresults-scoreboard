@@ -19,13 +19,13 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
-  <h3 ref={ref} className={cn("m-0 text-[1.1rem] font-semibold tracking-[0.01em] text-md3-onBackground", className)} {...props} />
+  <h3 ref={ref} className={cn("m-0 text-[1.2rem] font-semibold tracking-[0.005em] text-md3-onBackground", className)} {...props} />
 ));
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn("m-0 text-sm text-md3-onSurfaceVariant", className)} {...props} />
+    <p ref={ref} className={cn("m-0 text-[0.92rem] leading-snug text-md3-onSurfaceVariant", className)} {...props} />
   )
 );
 CardDescription.displayName = "CardDescription";

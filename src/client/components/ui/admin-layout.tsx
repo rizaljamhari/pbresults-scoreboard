@@ -52,19 +52,25 @@ const statusPanelVariants = cva("grid gap-3 rounded-md3m border p-4", {
 });
 
 interface StatusPanelProps extends React.ComponentProps<"section">, VariantProps<typeof statusPanelVariants> {
+  icon?: React.ReactNode;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
 }
 
-function StatusPanel({ className, tone, density, title, description, action, children, ...props }: StatusPanelProps) {
+function StatusPanel({ className, tone, density, icon, title, description, action, children, ...props }: StatusPanelProps) {
   return (
     <section className={cn(statusPanelVariants({ tone, density }), className)} {...props}>
       {title || description || action ? (
         <div className="flex items-start justify-between gap-3">
-          <div className="grid gap-1">
-            {title ? <h3 className="m-0 text-base font-semibold text-md3-onBackground">{title}</h3> : null}
-            {description ? <p className="m-0 text-sm text-md3-onSurfaceVariant">{description}</p> : null}
+          <div className="flex items-start gap-2.5">
+            {icon ? (
+              <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center text-md3-onSurfaceVariant">{icon}</span>
+            ) : null}
+            <div className="grid gap-1">
+              {title ? <h3 className="m-0 text-base font-semibold text-md3-onBackground">{title}</h3> : null}
+              {description ? <p className="m-0 text-sm text-md3-onSurfaceVariant">{description}</p> : null}
+            </div>
           </div>
           {action ? <div className="flex items-center gap-2">{action}</div> : null}
         </div>
@@ -90,15 +96,19 @@ const adminStatTileVariants = cva("grid gap-1.5 rounded-md3m border px-4 py-3", 
 });
 
 interface AdminStatTileProps extends React.ComponentProps<"div">, VariantProps<typeof adminStatTileVariants> {
+  icon?: React.ReactNode;
   label: React.ReactNode;
   value: React.ReactNode;
   detail?: React.ReactNode;
 }
 
-function AdminStatTile({ className, tone, label, value, detail, ...props }: AdminStatTileProps) {
+function AdminStatTile({ className, tone, icon, label, value, detail, ...props }: AdminStatTileProps) {
   return (
     <div className={cn(adminStatTileVariants({ tone }), className)} {...props}>
-      <span className="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-md3-onSurfaceVariant">{label}</span>
+      <span className="flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.08em] text-md3-onSurfaceVariant">
+        {icon ? <span className="inline-flex h-3.5 w-3.5 items-center justify-center">{icon}</span> : null}
+        {label}
+      </span>
       <strong className="text-base leading-tight text-md3-onBackground">{value}</strong>
       {detail ? <span className="text-sm text-md3-onSurfaceVariant">{detail}</span> : null}
     </div>
