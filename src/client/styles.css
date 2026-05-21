@@ -965,6 +965,46 @@ details[open]:not(.editor-section-card) > summary::after {
   overflow: visible;
 }
 
+.editor-subsection-stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.editor-subsection-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border-radius: var(--md-radius-s);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-divider);
+}
+
+.editor-subsection-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.editor-subsection-header h4 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.editor-subsection-header p {
+  margin: 0;
+  color: var(--md-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.editor-subsection-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.editor-subsection-toggle {
+  align-self: end;
+  min-height: 42px;
+}
+
 .block-editor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1260,6 +1300,12 @@ details[open]:not(.editor-section-card) > summary::after {
   justify-content: center;
 }
 
+.center-secondary-timeout-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
 .safe-area {
   position: absolute;
   inset: 54px 96px;
@@ -1478,6 +1524,25 @@ details[open]:not(.editor-section-card) > summary::after {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes center-secondary-timeout-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  74% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
   }
 }
 

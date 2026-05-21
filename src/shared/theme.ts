@@ -269,6 +269,20 @@ export const centerSecondarySchema = z.object({
       animation: z.enum(centerSecondaryTransitionValues).default("fade"),
       durationMs: z.number().positive().default(250)
     })
+    .default({}),
+  timeout: z
+    .object({
+      enabled: z.boolean().default(true),
+      text: z.string().default("TIMEOUT"),
+      durationMs: z.number().positive().default(1200),
+      minIncreaseSeconds: z.number().min(1).default(45),
+      backgroundColor: z.string().default("#b3261ecc"),
+      color: z.string().default("#ffffff"),
+      fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+      fontSize: z.number().positive().default(28),
+      fontWeight: z.number().min(100).max(900).default(700),
+      letterSpacing: z.number().default(1)
+    })
     .default({})
 });
 

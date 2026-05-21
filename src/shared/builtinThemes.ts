@@ -443,6 +443,18 @@ export const builtinThemes: ThemeDefinition[] = [
       "transition": {
         "animation": "fade",
         "durationMs": 250
+      },
+      "timeout": {
+        "enabled": true,
+        "text": "TIMEOUT",
+        "durationMs": 1200,
+        "minIncreaseSeconds": 45,
+        "backgroundColor": "#b3261ecc",
+        "color": "#ffffff",
+        "fontFamily": "Barlow Condensed",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "letterSpacing": 1
       }
     }
   },
@@ -753,6 +765,18 @@ export const builtinThemes: ThemeDefinition[] = [
       "transition": {
         "animation": "fade",
         "durationMs": 220
+      },
+      "timeout": {
+        "enabled": true,
+        "text": "TIMEOUT",
+        "durationMs": 1200,
+        "minIncreaseSeconds": 45,
+        "backgroundColor": "#b3261ecc",
+        "color": "#ffffff",
+        "fontFamily": "Barlow Condensed",
+        "fontSize": 24,
+        "fontWeight": 700,
+        "letterSpacing": 1
       }
     }
   }

@@ -26,6 +26,7 @@ type OverlaySnapshot = {
 
 const TEAM_SWITCH_ANIMATION_MS = 600;
 const TEAM_SWITCH_COOLDOWN_MS = 2200;
+const BREAK_TIMEOUT_DEFAULT_THRESHOLD_SECONDS = 45;
 
 function resolveBackgroundPosition(position: ThemeDefinition["components"]["homeName"]["backgroundImagePosition"]) {
   switch (position) {
@@ -360,6 +361,7 @@ export function OverlayRenderer({
     from: NormalizedLiveState;
     to: NormalizedLiveState;
   } | null>(null);
+  const [breakTimeoutToken, setBreakTimeoutToken] = useState<number | null>(null);
   const [centerSecondaryAnimationTick, setCenterSecondaryAnimationTick] = useState(0);
   const previousTeamEventRef = useRef<NormalizedLiveState["teamEvent"]>("none");
   const previousCenterSecondaryVariantRef = useRef<"timer" | "staticText" | "hidden" | null>(null);
@@ -367,6 +369,8 @@ export function OverlayRenderer({
   const previousSwitchLiveRef = useRef<NormalizedLiveState | null>(null);
   const lastTeamSwitchAtRef = useRef(0);
   const teamSwitchClearTimeoutRef = useRef<number | null>(null);
+  const previousBreakLiveRef = useRef<NormalizedLiveState | null>(null);
+  const breakTimeoutClearTimeoutRef = useRef<number | null>(null);
   // Towel animation repeat state
   const [towelAnimationTick, setTowelAnimationTick] = useState(0);
   const towelIntervalRef = useRef<number | null>(null);
@@ -400,9 +404,62 @@ export function OverlayRenderer({
       if (teamSwitchClearTimeoutRef.current !== null) {
         clearTimeout(teamSwitchClearTimeoutRef.current);
       }
+      if (breakTimeoutClearTimeoutRef.current !== null) {
+        clearTimeout(breakTimeoutClearTimeoutRef.current);
+      }
     },
     []
   );
+
+  useEffect(() => {
+    if (!theme.centerSecondary.timeout.enabled) {
+      previousBreakLiveRef.current = live;
+      if (breakTimeoutClearTimeoutRef.current !== null) {
+        clearTimeout(breakTimeoutClearTimeoutRef.current);
+        breakTimeoutClearTimeoutRef.current = null;
+      }
+      setBreakTimeoutToken(null);
+      return;
+    }
+
+    if (!live || live.sourceStatus !== "ok") {
+      previousBreakLiveRef.current = live;
+      return;
+    }
+
+    const previous = previousBreakLiveRef.current;
+    previousBreakLiveRef.current = live;
+
+    if (!previous || majorAnimationActive || !theme.centerSecondary.timeout.enabled) {
+      return;
+    }
+
+    const inBreakNow = live.period === "BREAK" && live.state !== "END";
+    const wasInBreak = previous.period === "BREAK" && previous.state !== "END";
+    if (!inBreakNow || !wasInBreak) {
+      return;
+    }
+
+    if (previous.breakTimer.value <= 10) {
+      return;
+    }
+
+    const increase = live.breakTimer.value - previous.breakTimer.value;
+    const threshold = theme.centerSecondary.timeout.minIncreaseSeconds || BREAK_TIMEOUT_DEFAULT_THRESHOLD_SECONDS;
+    if (increase < threshold || live.breakTimer.value < threshold) {
+      return;
+    }
+
+    const token = Date.now();
+    setBreakTimeoutToken(token);
+    if (breakTimeoutClearTimeoutRef.current !== null) {
+      clearTimeout(breakTimeoutClearTimeoutRef.current);
+    }
+    breakTimeoutClearTimeoutRef.current = window.setTimeout(() => {
+      setBreakTimeoutToken((current) => (current === token ? null : current));
+      breakTimeoutClearTimeoutRef.current = null;
+    }, theme.centerSecondary.timeout.durationMs);
+  }, [live, majorAnimationActive, theme.centerSecondary.timeout]);
 
   useEffect(() => {
     if (!overlayGeneral.teamSwitchEnabled) {
@@ -733,6 +790,12 @@ export function OverlayRenderer({
         const isGameFinishSecondaryOverlay = componentId === "breakTime" && Boolean(gameFinishToken);
         const content = isGameFinishSecondaryOverlay ? "GAME FINISHED" : baseContent;
         const visible = component.visible && content !== null && content !== "";
+        const showBreakTimeoutOverlay =
+          componentId === "breakTime" &&
+          Boolean(breakTimeoutToken) &&
+          theme.centerSecondary.timeout.enabled &&
+          live?.period === "BREAK" &&
+          !isGameFinishSecondaryOverlay;
         const previousSwitchContent =
           teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.from) : null;
         const nextSwitchContent =
@@ -848,6 +911,28 @@ export function OverlayRenderer({
                   {content}
                 </span>
               )}
+              {showBreakTimeoutOverlay ? (
+                <span
+                  key={`break-timeout:${breakTimeoutToken}`}
+                  className="component-content text-content center-secondary-timeout-overlay"
+                  style={{
+                    justifyContent:
+                      component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+                    padding: component.padding,
+                    background: theme.centerSecondary.timeout.backgroundColor,
+                    color: theme.centerSecondary.timeout.color,
+                    fontFamily: `"${theme.centerSecondary.timeout.fontFamily}", sans-serif`,
+                    fontSize: theme.centerSecondary.timeout.fontSize,
+                    fontWeight: theme.centerSecondary.timeout.fontWeight,
+                    letterSpacing: theme.centerSecondary.timeout.letterSpacing,
+                    lineHeight: component.lineHeight,
+                    animation: `center-secondary-timeout-flash ${theme.centerSecondary.timeout.durationMs}ms ease-out both`,
+                    zIndex: 5
+                  }}
+                >
+                  {theme.centerSecondary.timeout.text}
+                </span>
+              ) : null}
             </span>
           </button>
         );

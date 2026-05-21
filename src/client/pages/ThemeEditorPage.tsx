@@ -1937,150 +1937,301 @@ export function ThemeEditorPage() {
 
                 {selectedSlot === "center" ? (
                   <SectionCard title="Center Behavior" description="Choose what the lower center line shows during game time and during breaks." defaultOpen={false}>
-                    <div className="form-grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                      <label>
-                        Game mode
-                        <select
-                          value={theme.centerSecondary.gameMode}
-                          onChange={(event) =>
-                            patchTheme((draft) => {
-                              draft.centerSecondary.gameMode = event.target.value as "timer" | "staticText" | "hidden";
-                            })
-                          }
-                        >
-                          <option value="staticText">Static text</option>
-                          <option value="timer">Break timer</option>
-                          <option value="hidden">Hidden</option>
-                        </select>
-                      </label>
-                      <label>
-                        Break mode
-                        <select
-                          value={theme.centerSecondary.breakMode}
-                          onChange={(event) =>
-                            patchTheme((draft) => {
-                              draft.centerSecondary.breakMode = event.target.value as "timer" | "staticText" | "hidden";
-                            })
-                          }
-                        >
-                          <option value="timer">Break timer</option>
-                          <option value="staticText">Static text</option>
-                          <option value="hidden">Hidden</option>
-                        </select>
-                      </label>
-                      {theme.centerSecondary.gameMode === "staticText" ? (
-                        <TextField
-                          label="Game text"
-                          value={theme.centerSecondary.gameText}
-                          onChange={(value) => patchTheme((draft) => (draft.centerSecondary.gameText = value))}
-                        />
-                      ) : null}
-                      {theme.centerSecondary.breakMode === "staticText" ? (
-                        <TextField
-                          label="Break text"
-                          value={theme.centerSecondary.breakText}
-                          onChange={(value) => patchTheme((draft) => (draft.centerSecondary.breakText = value))}
-                        />
-                      ) : null}
-                      <label>
-                        Transition animation
-                        <select
-                          value={theme.centerSecondary.transition.animation}
-                          onChange={(event) =>
-                            patchTheme((draft) => {
-                              draft.centerSecondary.transition.animation = event.target.value as "none" | "fade" | "slide-up";
-                            })
-                          }
-                        >
-                          <option value="none">none</option>
-                          <option value="fade">fade</option>
-                          <option value="slide-up">slide-up</option>
-                        </select>
-                      </label>
-                      <NumberField
-                        label="Transition duration"
-                        unit="ms"
-                        value={theme.centerSecondary.transition.durationMs}
-                        onChange={(value) =>
-                          patchTheme((draft) => {
-                            draft.centerSecondary.transition.durationMs = value;
-                          })
-                        }
-                      />
-                      <label>
-                        Timer font
-                        <select
-                          value={theme.centerSecondary.timerStyle.fontFamily}
-                          onChange={(event) =>
-                            patchTheme((draft) => {
-                              draft.centerSecondary.timerStyle.fontFamily =
-                                event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
-                            })
-                          }
-                        >
-                          <option>Bebas Neue</option>
-                          <option>Oswald</option>
-                          <option>Barlow Condensed</option>
-                          <option>Arial Narrow</option>
-                          <option>Helvetica Neue</option>
-                        </select>
-                      </label>
-                      <NumberField
-                        label="Timer size"
-                        unit="px"
-                        value={theme.centerSecondary.timerStyle.fontSize}
-                        onChange={(value) =>
-                          patchTheme((draft) => {
-                            draft.centerSecondary.timerStyle.fontSize = value;
-                          })
-                        }
-                      />
-                      <ColorField
-                        label="Timer color"
-                        value={theme.centerSecondary.timerStyle.color}
-                        onChange={(value) =>
-                          patchTheme((draft) => {
-                            draft.centerSecondary.timerStyle.color = value;
-                          })
-                        }
-                      />
-                      <label>
-                        Static text font
-                        <select
-                          value={theme.centerSecondary.staticStyle.fontFamily}
-                          onChange={(event) =>
-                            patchTheme((draft) => {
-                              draft.centerSecondary.staticStyle.fontFamily =
-                                event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
-                            })
-                          }
-                        >
-                          <option>Bebas Neue</option>
-                          <option>Oswald</option>
-                          <option>Barlow Condensed</option>
-                          <option>Arial Narrow</option>
-                          <option>Helvetica Neue</option>
-                        </select>
-                      </label>
-                      <NumberField
-                        label="Static text size"
-                        unit="px"
-                        value={theme.centerSecondary.staticStyle.fontSize}
-                        onChange={(value) =>
-                          patchTheme((draft) => {
-                            draft.centerSecondary.staticStyle.fontSize = value;
-                          })
-                        }
-                      />
-                      <ColorField
-                        label="Static text color"
-                        value={theme.centerSecondary.staticStyle.color}
-                        onChange={(value) =>
-                          patchTheme((draft) => {
-                            draft.centerSecondary.staticStyle.color = value;
-                          })
-                        }
-                      />
+                    <div className="editor-subsection-stack">
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
+                          <h4>Display Modes</h4>
+                          <p>Decide what the secondary center line shows during live play and during breaks.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label>
+                            Game mode
+                            <select
+                              value={theme.centerSecondary.gameMode}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.gameMode = event.target.value as "timer" | "staticText" | "hidden";
+                                })
+                              }
+                            >
+                              <option value="staticText">Static text</option>
+                              <option value="timer">Break timer</option>
+                              <option value="hidden">Hidden</option>
+                            </select>
+                          </label>
+                          <label>
+                            Break mode
+                            <select
+                              value={theme.centerSecondary.breakMode}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.breakMode = event.target.value as "timer" | "staticText" | "hidden";
+                                })
+                              }
+                            >
+                              <option value="timer">Break timer</option>
+                              <option value="staticText">Static text</option>
+                              <option value="hidden">Hidden</option>
+                            </select>
+                          </label>
+                          {theme.centerSecondary.gameMode === "staticText" ? (
+                            <TextField
+                              label="Game text"
+                              value={theme.centerSecondary.gameText}
+                              onChange={(value) => patchTheme((draft) => (draft.centerSecondary.gameText = value))}
+                            />
+                          ) : null}
+                          {theme.centerSecondary.breakMode === "staticText" ? (
+                            <TextField
+                              label="Break text"
+                              value={theme.centerSecondary.breakText}
+                              onChange={(value) => patchTheme((draft) => (draft.centerSecondary.breakText = value))}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
+                          <h4>Mode Transition</h4>
+                          <p>Control the motion when the center secondary changes between timer and static text.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label>
+                            Transition animation
+                            <select
+                              value={theme.centerSecondary.transition.animation}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.transition.animation = event.target.value as "none" | "fade" | "slide-up";
+                                })
+                              }
+                            >
+                              <option value="none">none</option>
+                              <option value="fade">fade</option>
+                              <option value="slide-up">slide-up</option>
+                            </select>
+                          </label>
+                          <NumberField
+                            label="Transition duration"
+                            unit="ms"
+                            value={theme.centerSecondary.transition.durationMs}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.transition.durationMs = value;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
+                          <h4>Timer Style</h4>
+                          <p>Used when the secondary line is showing a live break timer.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label>
+                            Timer font
+                            <select
+                              value={theme.centerSecondary.timerStyle.fontFamily}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.timerStyle.fontFamily =
+                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
+                                })
+                              }
+                            >
+                              {fontFamilies.map((font) => (
+                                <option key={font} value={font}>
+                                  {font}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <NumberField
+                            label="Timer size"
+                            unit="px"
+                            value={theme.centerSecondary.timerStyle.fontSize}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timerStyle.fontSize = value;
+                              })
+                            }
+                          />
+                          <ColorField
+                            label="Timer color"
+                            value={theme.centerSecondary.timerStyle.color}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timerStyle.color = value;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
+                          <h4>Static Text Style</h4>
+                          <p>Used when the secondary line is showing a label instead of a timer.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label>
+                            Static text font
+                            <select
+                              value={theme.centerSecondary.staticStyle.fontFamily}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.staticStyle.fontFamily =
+                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
+                                })
+                              }
+                            >
+                              {fontFamilies.map((font) => (
+                                <option key={font} value={font}>
+                                  {font}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <NumberField
+                            label="Static text size"
+                            unit="px"
+                            value={theme.centerSecondary.staticStyle.fontSize}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.staticStyle.fontSize = value;
+                              })
+                            }
+                          />
+                          <ColorField
+                            label="Static text color"
+                            value={theme.centerSecondary.staticStyle.color}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.staticStyle.color = value;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
+                          <h4>Timeout Overlay</h4>
+                          <p>Flash a one-shot `TIMEOUT` treatment on top of the break timer when break time suddenly jumps upward.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label className="checkbox editor-subsection-toggle">
+                            <input
+                              type="checkbox"
+                              checked={theme.centerSecondary.timeout.enabled}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.timeout.enabled = event.target.checked;
+                                })
+                              }
+                            />
+                            Timeout overlay enabled
+                          </label>
+                          <TextField
+                            label="Timeout text"
+                            value={theme.centerSecondary.timeout.text}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.text = value;
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Timeout duration"
+                            unit="ms"
+                            value={theme.centerSecondary.timeout.durationMs}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.durationMs = value;
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Trigger increase"
+                            unit="s"
+                            value={theme.centerSecondary.timeout.minIncreaseSeconds}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.minIncreaseSeconds = value;
+                              })
+                            }
+                          />
+                          <label>
+                            Timeout font
+                            <select
+                              value={theme.centerSecondary.timeout.fontFamily}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.timeout.fontFamily =
+                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
+                                })
+                              }
+                            >
+                              {fontFamilies.map((font) => (
+                                <option key={font} value={font}>
+                                  {font}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <NumberField
+                            label="Timeout size"
+                            unit="px"
+                            value={theme.centerSecondary.timeout.fontSize}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.fontSize = value;
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Timeout weight"
+                            value={theme.centerSecondary.timeout.fontWeight}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.fontWeight = value;
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Timeout spacing"
+                            unit="px"
+                            step={0.1}
+                            value={theme.centerSecondary.timeout.letterSpacing}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.letterSpacing = value;
+                              })
+                            }
+                          />
+                          <ColorField
+                            label="Timeout text color"
+                            value={theme.centerSecondary.timeout.color}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.color = value;
+                              })
+                            }
+                          />
+                          <ColorField
+                            label="Timeout background"
+                            value={theme.centerSecondary.timeout.backgroundColor}
+                            onChange={(value) =>
+                              patchTheme((draft) => {
+                                draft.centerSecondary.timeout.backgroundColor = value;
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
                     </div>
                   </SectionCard>
                 ) : null}
