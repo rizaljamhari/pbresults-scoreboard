@@ -1,3 +1,32 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { formatClock } from "../../shared/normalize";
+import type {
+  AppSettings,
+  NormalizedLiveState,
+  TeamMatchResult,
+  TeamRecord,
+  ThemeDefinition
+} from "../../shared/theme";
+import { ApiError, api } from "../api";
+import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams, useThemes } from "../hooks";
+import { showToast } from "../toast";
+import {
+  AdminPageFrame,
+  AdminPageHeader,
+  AdminStatTile,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  FieldHint,
+  Select,
+  StatusPanel,
+  buttonVariants
+} from "../components/ui";
 
 // Overlay preview with zoom controls (persisted in localStorage)
 function OverlayPreviewWithZoom({ liveUrl }: { liveUrl: string }) {
@@ -49,27 +78,13 @@ function OverlayPreviewWithZoom({ liveUrl }: { liveUrl: string }) {
       <iframe
         title="Live scoreboard overlay"
         src={liveUrl}
-        className={`h-[220px] w-full origin-center border-0 pointer-events-none transition-transform duration-200`}
+        className="h-[220px] w-full origin-center border-0 pointer-events-none transition-transform duration-200"
         style={{ transform: `scale(${zoom})` }}
         loading="lazy"
       />
     </div>
   );
 }
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { formatClock } from "../../shared/normalize";
-import type {
-  AppSettings,
-  NormalizedLiveState,
-  TeamMatchResult,
-  TeamRecord,
-  ThemeDefinition
-} from "../../shared/theme";
-import { ApiError, api } from "../api";
-import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams, useThemes } from "../hooks";
-import { showToast } from "../toast";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FieldHint, Select, buttonVariants } from "../components/ui";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -237,16 +252,6 @@ function dataTileLabelClassName() {
 
 function dataTileValueClassName() {
   return "text-sm leading-snug text-md3-onBackground";
-}
-
-function priorityBannerClassName(tone: OperatorPriority["tone"]) {
-  if (tone === "success") {
-    return "grid gap-2 rounded-md3m border border-[#245b3224] bg-[var(--md3-success-container)] px-4 py-4";
-  }
-  if (tone === "critical") {
-    return "grid gap-2 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] px-4 py-4";
-  }
-  return "grid gap-2 rounded-md3m border border-[#b8800038] bg-[#fff9e8] px-4 py-4";
 }
 
 function riskCardClassName(hasRisk: boolean) {
@@ -1013,68 +1018,59 @@ export function OperationsPage() {
   }
 
   return (
-    <section className="admin-page panel-stack !w-[90%] !max-w-none mx-auto gap-4">
-      <header className="flex items-end justify-between gap-5 py-1 max-[1200px]:flex-col max-[1200px]:items-start">
-        <div>
-          <p className="eyebrow">Operations</p>
-          <h2>Live operator overview</h2>
-          <FieldHint>Prioritize Go-live status first, then Team resolution. Everything else is secondary.</FieldHint>
-        </div>
-        <div className="action-row compact items-center max-[1200px]:w-full max-[1200px]:justify-start">
-          <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh now"}
-          </Button>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
-            disabled={togglingPoll}
-          >
-            {togglingPoll ? "Updating..." : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
-          </Button>
-        </div>
-      </header>
+    <AdminPageFrame className="panel-stack gap-4">
+      <AdminPageHeader
+        eyebrow="Operations"
+        title="Live operator overview"
+        description="Prioritize Go-live status first, then Team resolution. Everything else is secondary."
+        actions={(
+          <div className="action-row compact items-center max-[1200px]:w-full max-[1200px]:justify-start">
+            <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
+              {refreshing ? "Refreshing..." : "Refresh now"}
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
+              disabled={togglingPoll}
+            >
+              {togglingPoll ? "Updating..." : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
+            </Button>
+          </div>
+        )}
+      />
 
-      <Card>
-        <CardContent className="grid gap-3">
-          <div className={priorityBannerClassName(operatorPriority.tone)}>
-            <strong>{operatorPriority.title}</strong>
-            <p className="m-0 text-sm text-md3-onSurfaceVariant">{operatorPriority.detail}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <StatusPanel
+        tone={operatorPriority.tone === "critical" ? "critical" : operatorPriority.tone === "warning" ? "warning" : "success"}
+        title={operatorPriority.title}
+        description={operatorPriority.detail}
+      />
 
-      <div className="grid grid-cols-4 gap-4 max-[1200px]:grid-cols-1">
-        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong className={dataTileLabelClassName()}>Live feed</strong>
-          <div className="grid gap-1">
-            <Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>
-            <span className="text-sm text-md3-onSurfaceVariant">{live.data?.errorMessage ?? "Live feed available"}</span>
-          </div>
-        </div>
-        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong className={dataTileLabelClassName()}>Polling</strong>
-          <div className="grid gap-1">
-            <Badge variant={settings.data.pollEnabled ? "success" : "warning"}>
-              {settings.data.pollEnabled ? "Active" : "Paused"}
-            </Badge>
-            <span className="text-sm text-md3-onSurfaceVariant">{settings.data.pollIntervalMs} ms interval</span>
-          </div>
-        </div>
-        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong className={dataTileLabelClassName()}>Last update</strong>
-          <div className="grid gap-1">
-            <span>{formatAge(live.data?.fetchedAt ?? null)}</span>
-            <span className="text-sm text-md3-onSurfaceVariant">{formatTimestamp(live.data?.fetchedAt ?? null)}</span>
-          </div>
-        </div>
-        <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4 shadow-md31">
-          <strong className={dataTileLabelClassName()}>Published theme</strong>
-          <div className="grid gap-1">
-            <span>{publishedTheme?.name ?? "None selected"}</span>
-            <span className="text-sm text-md3-onSurfaceVariant">{publishedTheme ? "Ready for overlay" : "Choose one in Themes"}</span>
-          </div>
-        </div>
+      <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
+        <AdminStatTile
+          tone={sourceStatusTone(live.data?.sourceStatus)}
+          label="Live feed"
+          value={<Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>}
+          detail={live.data?.errorMessage ?? "Live feed available"}
+        />
+        <AdminStatTile
+          tone={settings.data.pollEnabled ? "success" : "warning"}
+          label="Polling"
+          value={<Badge variant={settings.data.pollEnabled ? "success" : "warning"}>{settings.data.pollEnabled ? "Active" : "Paused"}</Badge>}
+          detail={`${settings.data.pollIntervalMs} ms interval`}
+        />
+        <AdminStatTile
+          tone="info"
+          label="Last update"
+          value={formatAge(live.data?.fetchedAt ?? null)}
+          detail={formatTimestamp(live.data?.fetchedAt ?? null)}
+        />
+        <AdminStatTile
+          tone={publishedTheme ? "success" : "warning"}
+          label="Published theme"
+          value={publishedTheme?.name ?? "None selected"}
+          detail={publishedTheme ? "Ready for overlay" : "Choose one in Themes"}
+        />
       </div>
 
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)] items-start gap-4 max-[1200px]:grid-cols-1">
@@ -1315,6 +1311,6 @@ export function OperationsPage() {
           </Card>
         </div>
       </div>
-    </section>
+    </AdminPageFrame>
   );
 }

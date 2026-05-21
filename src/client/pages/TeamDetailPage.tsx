@@ -6,7 +6,7 @@ import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { hasTeamUnsavedChanges } from "./teamAdminUtils";
 import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/teamMatching";
-import { Button, FieldHint, Input, Textarea, buttonVariants } from "../components/ui";
+import { AdminPageFrame, AdminPageHeader, Button, Checkbox, FieldHint, Input, Textarea, buttonVariants } from "../components/ui";
 
 function aliasesToText(aliases: string[]) {
   return aliases.join("\n");
@@ -212,57 +212,57 @@ export function TeamDetailPage() {
 
   if (!selectedTeam || !draft) {
     return (
-      <section className="admin-page panel-stack">
-        <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
-          <div>
-            <p className="eyebrow">Team Registry</p>
-            <h2>Team not found</h2>
-            <FieldHint>The selected team no longer exists.</FieldHint>
-          </div>
-          <Link
-            className={buttonVariants({ variant: "secondary" })}
-            to="/admin/teams"
-            onClick={(event) => {
-              if (!canLeaveEditor()) {
-                event.preventDefault();
-              }
-            }}
-          >
-            Back to overview
-          </Link>
-        </header>
-      </section>
+      <AdminPageFrame className="panel-stack">
+        <AdminPageHeader
+          eyebrow="Team Registry"
+          title="Team not found"
+          description="The selected team no longer exists."
+          actions={(
+            <Link
+              className={buttonVariants({ variant: "secondary" })}
+              to="/admin/teams"
+              onClick={(event) => {
+                if (!canLeaveEditor()) {
+                  event.preventDefault();
+                }
+              }}
+            >
+              Back to overview
+            </Link>
+          )}
+        />
+      </AdminPageFrame>
     );
   }
 
   return (
-    <section className="admin-page panel-stack">
-      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
-        <div>
-          <p className="eyebrow">Team Registry</p>
-          <h2>Edit team</h2>
-          <FieldHint>Update team profile, alias matching, and logo assets.</FieldHint>
-        </div>
-        <div className="action-row compact">
-          <Link
-            className={buttonVariants({ variant: "secondary" })}
-            to="/admin/teams"
-            onClick={(event) => {
-              if (!canLeaveEditor()) {
-                event.preventDefault();
-              }
-            }}
-          >
-            Back to overview
-          </Link>
-          <Button variant="secondary" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-          <Button variant="danger" onClick={() => void handleDelete()}>
-            Delete team
-          </Button>
-        </div>
-      </header>
+    <AdminPageFrame className="panel-stack">
+      <AdminPageHeader
+        eyebrow="Team Registry"
+        title="Edit team"
+        description="Update team profile, alias matching, and logo assets."
+        actions={(
+          <div className="action-row compact">
+            <Link
+              className={buttonVariants({ variant: "secondary" })}
+              to="/admin/teams"
+              onClick={(event) => {
+                if (!canLeaveEditor()) {
+                  event.preventDefault();
+                }
+              }}
+            >
+              Back to overview
+            </Link>
+            <Button variant="secondary" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+            <Button variant="danger" onClick={() => void handleDelete()}>
+              Delete team
+            </Button>
+          </div>
+        )}
+      />
 
       <div className="grid grid-cols-2 items-start gap-4 max-[1200px]:grid-cols-1">
         <div className="panel">
@@ -286,11 +286,11 @@ export function TeamDetailPage() {
             </label>
             <label>
               Canonical name
-              <input value={draft.canonicalName} onChange={(event) => setDraft({ ...draft, canonicalName: event.target.value })} />
+              <Input value={draft.canonicalName} onChange={(event) => setDraft({ ...draft, canonicalName: event.target.value })} />
             </label>
             <label>
               Scoreboard display name
-              <input
+              <Input
                 value={draft.scoreboardDisplayName}
                 onChange={(event) => setDraft({ ...draft, scoreboardDisplayName: event.target.value })}
                 placeholder="Optional override used on scoreboard"
@@ -298,7 +298,7 @@ export function TeamDetailPage() {
             </label>
             <label>
               Short name
-              <input value={draft.shortName} onChange={(event) => setDraft({ ...draft, shortName: event.target.value })} />
+              <Input value={draft.shortName} onChange={(event) => setDraft({ ...draft, shortName: event.target.value })} />
             </label>
             <label>
               Aliases (comma or newline separated)
@@ -318,7 +318,7 @@ export function TeamDetailPage() {
               <Textarea rows={5} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
             </label>
             <label className="checkbox">
-              <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
+              <Checkbox checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
               Active in live matching
             </label>
             {hasUnsavedChanges ? <FieldHint>You have unsaved changes.</FieldHint> : null}
@@ -444,6 +444,6 @@ export function TeamDetailPage() {
           </div>
         </div>
       </div>
-    </section>
+    </AdminPageFrame>
   );
 }

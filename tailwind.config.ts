@@ -27,7 +27,9 @@ const config: Config = {
           onSurfaceVariant: "var(--md3-on-surface-variant)",
           danger: "var(--md3-danger)",
           dangerContainer: "var(--md3-danger-container)",
-          successContainer: "var(--md3-success-container)"
+          successContainer: "var(--md3-success-container)",
+          infoContainer: "var(--md3-info-container)",
+          warningContainer: "var(--md3-warning-container)"
         }
       },
       borderRadius: {

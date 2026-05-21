@@ -4,10 +4,10 @@ import { cn } from "../lib/utils";
 
 function navLinkClass(active: boolean) {
   return cn(
-    "relative flex min-h-12 items-center rounded-full px-4 py-3 font-medium transition-all duration-md3 ease-md3",
+    "relative flex min-h-11 items-center rounded-full px-4 py-2.5 text-[0.95rem] font-semibold tracking-[0.01em] transition-all duration-md3 ease-md3",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-md3-primary focus-visible:ring-offset-2",
     active
-      ? "bg-md3-secondaryContainer text-md3-onPrimaryContainer"
+      ? "bg-md3-secondaryContainer text-md3-onPrimaryContainer shadow-md31"
       : "text-md3-onSurfaceVariant hover:bg-md3-primary/10 hover:text-md3-onPrimaryContainer"
   );
 }
@@ -39,11 +39,12 @@ export function AppShell() {
   ];
 
   return (
-    <div className="admin-root app-shell bg-md3-background text-md3-onBackground">
+    <div className="admin-root app-shell text-md3-onBackground">
       <aside className="sidebar border-r border-md3-outlineVariant bg-md3-surface/90 backdrop-blur-xl">
         <div>
-          <p className="eyebrow text-md3-primary">PBResults</p>
+          <p className="eyebrow text-md3-primary">PBResults Control</p>
           <h1 className="m-0 font-medium text-md3-onBackground">PBResults Scoreboard</h1>
+          <p className="m-0 mt-1 text-sm text-md3-onSurfaceVariant">Operator console</p>
         </div>
         <nav className="sidebar-nav grid gap-1">
           {navItems.map((item) => (
@@ -67,7 +68,7 @@ export function AppShell() {
           </a>
         </nav>
       </aside>
-      <main className="content bg-md3-background">
+      <main className="content">
         <Outlet key={location.pathname} />
       </main>
       <ToastViewport />

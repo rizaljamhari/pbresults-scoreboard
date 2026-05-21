@@ -4,11 +4,12 @@ import { api } from "../api";
 import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams } from "../hooks";
 import { showToast } from "../toast";
 import {
+  AdminFilterBar,
+  AdminPageFrame,
+  AdminPageHeader,
   Badge,
   Button,
   Card,
-  CardHeader,
-  CardTitle,
   Checkbox,
   FieldHint,
   Input,
@@ -195,38 +196,38 @@ export function TeamsPage() {
   }
 
   return (
-    <section className="admin-page panel-stack">
-      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
-        <div>
-          <p className="eyebrow">Team Registry</p>
-          <h2>Overview</h2>
-          <FieldHint>Review all teams in one table. Open a team to edit profile, aliases, and logos.</FieldHint>
-        </div>
-        <div className="action-row compact">
-          <Button variant="secondary" onClick={() => void handleExportTeams()}>
-            Export Teams
-          </Button>
-          <label className={buttonVariants({ variant: "secondary" })}>
-            Import Teams
-            <input
-              hidden
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleImportTeams(file);
-                }
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <Button onClick={() => void handleCreate()}>Create Team</Button>
-        </div>
-      </header>
+    <AdminPageFrame className="panel-stack">
+      <AdminPageHeader
+        eyebrow="Team Registry"
+        title="Overview"
+        description="Review all teams in one table. Open a team to edit profile, aliases, and logos."
+        actions={(
+          <div className="action-row compact">
+            <Button variant="secondary" onClick={() => void handleExportTeams()}>
+              Export Teams
+            </Button>
+            <label className={buttonVariants({ variant: "secondary" })}>
+              Import Teams
+              <input
+                hidden
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleImportTeams(file);
+                  }
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <Button onClick={() => void handleCreate()}>Create Team</Button>
+          </div>
+        )}
+      />
 
       <Card>
-        <div className="mb-3.5 grid grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_auto] items-end gap-3.5 max-[1200px]:grid-cols-1 max-[1200px]:items-stretch">
+        <AdminFilterBar className="mb-3.5">
           <label>
             Search teams
             <Input
@@ -256,7 +257,7 @@ export function TeamsPage() {
             <Checkbox checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
             Compact rows
           </label>
-        </div>
+        </AdminFilterBar>
         <div className="mt-4 flex items-center justify-between gap-4 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-3">
           <div className="flex min-w-0 items-baseline gap-2">
             <strong className="text-base text-md3-onBackground">{selectedCount}</strong>
@@ -410,6 +411,6 @@ export function TeamsPage() {
           ) : null}
         </Card>
       </div>
-    </section>
+    </AdminPageFrame>
   );
 }

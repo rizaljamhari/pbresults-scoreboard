@@ -6,7 +6,7 @@ import { builtinThemes } from "../../shared/builtinThemes";
 import { fontFamilies } from "../../shared/theme";
 import type { ComponentId, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
-import { Badge, Button, FieldHint, buttonVariants } from "../components/ui";
+import { AdminPageFrame, AdminPageHeader, AdminStatTile, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
 
 type EditorMode = "basic" | "advanced";
 type InspectorView = "theme" | "component" | "concede";
@@ -1464,15 +1464,14 @@ export function ThemeEditorPage() {
           : "No piece selected";
 
   return (
-    <section className="admin-page panel-stack editor-layout">
+    <AdminPageFrame className="panel-stack editor-layout">
       <div className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Theme Editor</p>
-            <h2>{theme.name}</h2>
-            {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : null}
-          </div>
-          <div className="editor-header-actions">
+        <AdminPageHeader
+          eyebrow="Theme Editor"
+          title={theme.name}
+          description={hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : "No pending changes"}
+          actions={(
+            <div className="editor-header-actions">
             <div className="editor-header-cluster">
               <div className="segmented-control">
                 <button
@@ -1585,17 +1584,28 @@ export function ThemeEditorPage() {
               </details>
             </div>
           </div>
-        </div>
+          )}
+        />
 
-        <div className="editor-summary-grid">
-          <div className={`editor-summary-card ${selectAllMode || selectedIds.length > 0 ? "editor-summary-card--active" : ""}`}>
-            <strong>Selected</strong>
-            <span>{selectedSummaryLabel}</span>
-          </div>
-          <div className={`editor-summary-card ${previewEnabled ? "editor-summary-card--active" : ""}`}>
-            <strong>Preview</strong>
-            <span>{previewEnabled ? `${previewLive.period} · ${previewLive.teamEvent}` : "Live feed"}</span>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <AdminStatTile
+            tone={selectAllMode || selectedIds.length > 0 ? "info" : "neutral"}
+            label="Selection"
+            value={selectedSummaryLabel}
+            detail={selectAllMode ? "Global layout scope" : selectedIds.length > 1 ? "Multi-selection active" : "Single-piece mode"}
+          />
+          <AdminStatTile
+            tone={previewEnabled ? "success" : "neutral"}
+            label="Preview"
+            value={previewEnabled ? `${previewLive.period} · ${previewLive.teamEvent}` : "Live feed"}
+            detail={previewEnabled ? "Simulator state enabled" : "Using live feed state"}
+          />
+          <AdminStatTile
+            tone={editorMode === "advanced" ? "warning" : "neutral"}
+            label="Editing mode"
+            value={editorMode === "advanced" ? "Advanced" : "Basic"}
+            detail={editorMode === "advanced" ? "Power tooling exposed" : "Focused workflow"}
+          />
         </div>
 
         <div className="editor-workspace">
@@ -1766,26 +1776,22 @@ export function ThemeEditorPage() {
             <div className="inspector v2-inspector">
             <div className="inspector-toolbar">
               <div className="segmented-control">
-                <button
-                  className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setInspectorView("theme")}
-                  type="button"
-                >
-                  Theme
+                <button className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"} onClick={() => setInspectorView("theme")} type="button">
+                  Appearance
                 </button>
                 <button
                   className={inspectorView === "component" ? "segmented-button active" : "segmented-button"}
                   onClick={() => setInspectorView("component")}
                   type="button"
                 >
-                  Scoreboard
+                  Selection & layout
                 </button>
                 <button
                   className={inspectorView === "concede" ? "segmented-button active" : "segmented-button"}
                   onClick={() => setInspectorView("concede")}
                   type="button"
                 >
-                  Overlay
+                  Overlay events
                 </button>
               </div>
             </div>
@@ -2672,6 +2678,6 @@ export function ThemeEditorPage() {
           </div>
         </div>
       </div>
-    </section>
+    </AdminPageFrame>
   );
 }

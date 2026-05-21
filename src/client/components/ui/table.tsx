@@ -5,7 +5,7 @@ const TableShell = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   <div
     ref={ref}
     className={cn(
-      "max-h-[60vh] overflow-x-auto overflow-y-auto rounded-md3m border border-md3-outlineVariant bg-md3-surface",
+      "max-h-[62vh] overflow-x-auto overflow-y-auto rounded-md3m border border-md3-outlineVariant bg-md3-surface shadow-md31",
       className
     )}
     {...props}
@@ -24,7 +24,7 @@ const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
 TableHeader.displayName = "TableHeader";
 
 const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className, ...props }, ref) => (
-  <tbody ref={ref} className={cn("[&_tr:hover]:bg-md3-surfaceContainer", className)} {...props} />
+  <tbody ref={ref} className={cn("[&_tr:hover]:bg-md3-surfaceContainerLow", className)} {...props} />
 ));
 TableBody.displayName = "TableBody";
 
@@ -38,6 +38,7 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
     ref={ref}
     className={cn(
       "sticky top-0 z-10 border-b border-md3-outlineVariant px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-md3-onSurfaceVariant",
+      "bg-md3-surface",
       className
     )}
     {...props}
@@ -46,7 +47,7 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
 TableHead.displayName = "TableHead";
 
 const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(({ className, ...props }, ref) => (
-  <td ref={ref} className={cn("border-b border-md3-outlineVariant px-3 py-3 align-middle", className)} {...props} />
+  <td ref={ref} className={cn("border-b border-md3-outlineVariant px-3 py-2.5 align-middle", className)} {...props} />
 ));
 TableCell.displayName = "TableCell";
 

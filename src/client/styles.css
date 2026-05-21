@@ -25,26 +25,27 @@
 }
 
 .admin-root {
-  /* Phase 2: admin-only Material You token foundation (blue). */
-  --md3-background: #f9fbff;
-  --md3-on-background: #0a0d1b;
-  --md3-surface: #fffbfe;
-  --md3-surface-container: #eef2f8;
-  --md3-surface-container-low: #f3f6fb;
+  --md3-background: #f4f7fc;
+  --md3-on-background: #101a2e;
+  --md3-surface: #fcfdff;
+  --md3-surface-container: #ecf1f9;
+  --md3-surface-container-low: #f5f8fc;
   --md3-primary: #005fa3;
   --md3-on-primary: #ffffff;
-  --md3-primary-container: #d3e4ff;
-  --md3-on-primary-container: #0d3b66;
-  --md3-secondary-container: #dce2f9;
-  --md3-on-secondary-container: #1b2059;
+  --md3-primary-container: #d7e8ff;
+  --md3-on-primary-container: #163457;
+  --md3-secondary-container: #dde8f7;
+  --md3-on-secondary-container: #213654;
   --md3-tertiary: #0d47a1;
   --md3-on-tertiary: #ffffff;
-  --md3-outline: #73747e;
-  --md3-outline-variant: #c3c7cf;
-  --md3-on-surface-variant: #47464f;
+  --md3-outline: #71809b;
+  --md3-outline-variant: #c3cfdf;
+  --md3-on-surface-variant: #4d5d77;
   --md3-danger: #b3261e;
   --md3-danger-container: #f9dedc;
   --md3-success-container: #dcefdc;
+  --md3-info-container: #e5f1ff;
+  --md3-warning-container: #fff9e8;
 
   --md3-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --md3-duration-fast: 200ms;
@@ -57,6 +58,20 @@
   --md3-radius-2xl: 32px;
   --md3-shadow-1: 0 1px 2px rgba(28, 27, 31, 0.12), 0 2px 8px rgba(28, 27, 31, 0.08);
   --md3-shadow-2: 0 10px 26px rgba(28, 27, 31, 0.12), 0 2px 10px rgba(28, 27, 31, 0.06);
+  --md3-shadow-3: 0 20px 40px rgba(16, 34, 62, 0.12), 0 4px 14px rgba(16, 34, 62, 0.08);
+
+  --admin-surface-1: var(--md3-surface);
+  --admin-surface-2: #f3f7fd;
+  --admin-surface-3: #e8eef8;
+  --admin-divider: rgba(113, 128, 155, 0.32);
+  --admin-focus-ring: rgba(0, 95, 163, 0.2);
+  --admin-text-title: var(--md3-on-background);
+  --admin-text-body: #283750;
+  --admin-text-meta: var(--md3-on-surface-variant);
+  --admin-title-size: clamp(1.42rem, 2vw, 1.7rem);
+  --admin-section-size: 1.18rem;
+  --admin-body-size: 1rem;
+  --admin-meta-size: 0.9rem;
 
   /* Compatibility aliases for existing admin CSS while migration is in progress. */
   --md-primary: var(--md3-primary);
@@ -93,8 +108,8 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(0, 95, 163, 0.08), transparent 28%),
-    linear-gradient(180deg, #f9fbff 0%, #f3f6fb 100%);
+    radial-gradient(circle at top left, rgba(0, 95, 163, 0.1), transparent 34%),
+    linear-gradient(180deg, #f4f7fc 0%, #edf3fb 100%);
   color: var(--md-text);
 }
 
@@ -211,10 +226,11 @@ input[type="color"] {
 
 label {
   display: grid;
-  gap: 0.15rem;
-  font-size: 0.92rem;
-  font-weight: 500;
-  color: var(--md-text-muted);
+  gap: 0.3rem;
+  font-size: var(--admin-meta-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--admin-text-meta);
 }
 
 .app-shell {
@@ -228,10 +244,10 @@ label {
   z-index: 10;
   display: grid;
   align-content: start;
-  gap: 1.6rem;
-  padding: 1.5rem 1rem 1.5rem 1.2rem;
-  border-right: 1px solid var(--md-outline-soft);
-  background: rgba(255, 255, 255, 0.88);
+  gap: 1.2rem;
+  padding: 1.3rem 0.9rem 1.3rem 1.1rem;
+  border-right: 1px solid var(--admin-divider);
+  background: rgba(252, 253, 255, 0.9);
   backdrop-filter: blur(18px);
 }
 
@@ -240,13 +256,13 @@ label {
 .panel h3 {
   margin: 0;
   font-family: "Roboto", "Segoe UI", sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
-  color: var(--md-text);
+  color: var(--admin-text-title);
 }
 
 .sidebar h1 {
-  font-size: 1.55rem;
+  font-size: 1.45rem;
   line-height: 1.15;
 }
 
@@ -287,26 +303,79 @@ label {
 
 .content {
   min-width: 0;
-  padding: 2rem;
-}
-
-.admin-page {
-  max-width: 1440px;
-  margin: 0 auto;
-  gap: 1.25rem;
+  padding: clamp(1rem, 2.5vw, 2rem);
 }
 
 .panel-stack,
 .editor-layout {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
+}
+
+.admin-page-frame {
+  display: grid;
+  gap: 1rem;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.admin-page-header-shell {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.15rem;
+}
+
+.admin-page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.admin-page-eyebrow {
+  margin: 0;
+  color: var(--md3-primary);
+  font-weight: 700;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.admin-page-title {
+  margin: 0;
+  font-family: "Roboto", "Segoe UI", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: var(--admin-title-size);
+  line-height: 1.1;
+  color: var(--admin-text-title);
+}
+
+.admin-page-description {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--admin-text-meta);
+}
+
+.admin-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(140px, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.9rem;
+  border-radius: var(--md3-radius-m);
+  border: 1px solid var(--admin-divider);
+  background: var(--admin-surface-2);
 }
 
 .panel {
-  padding: 1.5rem;
+  padding: 1.1rem;
   border-radius: var(--md-radius-l);
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(195, 199, 207, 0.6);
+  background: var(--admin-surface-1);
+  border: 1px solid var(--admin-divider);
   box-shadow: var(--md-shadow-1);
 }
 
@@ -319,7 +388,7 @@ label {
 }
 
 .panel-header {
-  margin-bottom: 1rem;
+  margin-bottom: 0.8rem;
 }
 
 .action-row.compact {
@@ -458,9 +527,9 @@ details[open]:not(.editor-section-card) > summary::after {
   min-width: 158px;
   padding: 0.55rem;
   border-radius: var(--md-radius-s);
-  border: 1px solid var(--md-outline-soft);
-  background: var(--md-surface);
-  box-shadow: var(--md-shadow-2);
+  border: 1px solid var(--admin-divider);
+  background: var(--admin-surface-1);
+  box-shadow: var(--md3-shadow-3);
 }
 
 .row-action-menu--up .row-action-menu-list {
@@ -530,7 +599,7 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .form-grid {
   display: grid;
-  gap: 0.95rem;
+  gap: 0.8rem;
 }
 
 .field-with-unit {
@@ -562,8 +631,8 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .editor-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 0.85rem;
   align-items: start;
 }
 
@@ -572,7 +641,7 @@ details[open]:not(.editor-section-card) > summary::after {
   top: 1rem;
   align-self: start;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
   min-width: 0;
   width: 100%;
 }
@@ -604,10 +673,10 @@ details[open]:not(.editor-section-card) > summary::after {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  padding: 0.6rem 0.7rem;
+  padding: 0.55rem 0.65rem;
   border-radius: var(--md-radius-m);
-  background: var(--md-surface-2);
-  border: 1px solid var(--md-outline-soft);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-divider);
   width: 100%;
   max-width: 100%;
   overflow: visible;
@@ -648,10 +717,10 @@ details[open]:not(.editor-section-card) > summary::after {
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: center;
-  padding: 0.8rem 0.9rem;
+  padding: 0.7rem 0.8rem;
   border-radius: var(--md-radius-m);
-  background: var(--md-surface-2);
-  border: 1px solid var(--md-outline-soft);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-divider);
   width: 100%;
   max-width: 100%;
   overflow: visible;
@@ -727,39 +796,6 @@ details[open]:not(.editor-section-card) > summary::after {
   min-width: 0;
 }
 
-.editor-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.8rem;
-  margin-bottom: 1rem;
-}
-
-.editor-summary-card {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.95rem 1rem;
-  border-radius: var(--md-radius-m);
-  background: var(--md-surface-2);
-  border: 1px solid var(--md-outline-soft);
-}
-
-.editor-summary-card--active {
-  background: var(--md-primary-soft);
-  border-color: rgba(0, 95, 163, 0.22);
-}
-
-.editor-summary-card strong {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--md-text-muted);
-}
-
-.editor-summary-card small {
-  color: var(--md-text-muted);
-  font-size: 0.76rem;
-}
-
 .editor-header-actions {
   display: flex;
   flex-wrap: wrap;
@@ -797,10 +833,10 @@ details[open]:not(.editor-section-card) > summary::after {
 }
 
 .inspector {
-  padding: 1.1rem;
+  padding: 0.9rem;
   border-radius: var(--md-radius-m);
-  background: var(--md-surface-2);
-  border: 1px solid var(--md-outline-soft);
+  background: var(--admin-surface-2);
+  border: 1px solid var(--admin-divider);
   overflow: auto;
   max-height: calc(100vh - 8rem);
 }
@@ -847,22 +883,24 @@ details[open]:not(.editor-section-card) > summary::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 0.55rem 0.9rem;
-  border: 1px solid var(--md-outline-soft);
-  background: var(--md-surface);
+  min-height: 36px;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--admin-divider);
+  background: var(--admin-surface-1);
   color: var(--md-primary-text);
   border-radius: 999px;
   box-shadow: none;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .segmented-button:hover {
-  background: var(--md-surface-3);
+  background: var(--admin-surface-3);
   box-shadow: none;
 }
 
 .segmented-button.active {
-  background: var(--md-primary-soft);
+  background: var(--md3-primary-container);
   border-color: rgba(0, 95, 163, 0.18);
   color: var(--md-primary-text);
 }
@@ -876,15 +914,15 @@ details[open]:not(.editor-section-card) > summary::after {
 .editor-section-card {
   overflow: visible;
   border-radius: var(--md-radius-m);
-  background: var(--md-surface);
-  border: 1px solid var(--md-outline-soft);
+  background: var(--admin-surface-1);
+  border: 1px solid var(--admin-divider);
 }
 
 .editor-section-header {
   display: block;
   list-style: none;
   cursor: pointer;
-  padding: 1rem;
+  padding: 0.85rem 0.9rem;
 }
 
 .editor-section-header::-webkit-details-marker {
@@ -920,8 +958,8 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .editor-section-body {
   display: grid;
-  gap: 0.9rem;
-  padding: 0 1rem 1rem;
+  gap: 0.8rem;
+  padding: 0 0.9rem 0.9rem;
   overflow: visible;
 }
 
@@ -1457,6 +1495,20 @@ details[open]:not(.editor-section-card) > summary::after {
 
   .content {
     padding: 1rem;
+  }
+
+  .admin-page-header-shell {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-page-header-actions {
+    justify-content: flex-start;
+  }
+
+  .admin-filter-bar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .editor-header-actions {

@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
-import { Badge, Button, Card, Checkbox, FieldHint, Input, Select, buttonVariants } from "../components/ui";
+import {
+  AdminPageFrame,
+  AdminPageHeader,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  FieldHint,
+  Input,
+  Select,
+  buttonVariants
+} from "../components/ui";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 export function SettingsPage() {
@@ -126,20 +136,27 @@ export function SettingsPage() {
   }
 
   return (
-    <section className="admin-page panel-stack">
-      <Card>
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Runtime</p>
-            <h2>Source and publishing settings</h2>
-          </div>
+    <AdminPageFrame className="panel-stack">
+      <AdminPageHeader
+        eyebrow="Runtime"
+        title="Source and publishing settings"
+        description="Control live polling, publish target theme, and source configuration."
+        actions={(
           <div className="action-row compact">
             {hasUnsavedChanges ? <Badge variant="default">Unsaved changes</Badge> : <Badge variant="success">Saved</Badge>}
-            <Button variant="secondary" type="button" onClick={() => handleDiscardChanges()} disabled={!hasUnsavedChanges || saving}>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => handleDiscardChanges()}
+              disabled={!hasUnsavedChanges || saving}
+            >
               Discard changes
             </Button>
           </div>
-        </div>
+        )}
+      />
+
+      <Card>
         <form
           className="form-grid"
           onSubmit={(event) => {
@@ -254,8 +271,8 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <p className="eyebrow">Portability</p>
-        <h2>Full app backup and restore</h2>
+        <p className="admin-page-eyebrow">Portability</p>
+        <h3 className="m-0 text-[var(--admin-section-size)] font-semibold text-md3-onBackground">Full app backup and restore</h3>
         <FieldHint>Export settings, themes, and uploaded logo assets as one JSON bundle.</FieldHint>
         <div className="action-row compact">
           <Button variant="secondary" type="button" onClick={() => void handleExportApp()}>
@@ -278,6 +295,6 @@ export function SettingsPage() {
           </label>
         </div>
       </Card>
-    </section>
+    </AdminPageFrame>
   );
 }

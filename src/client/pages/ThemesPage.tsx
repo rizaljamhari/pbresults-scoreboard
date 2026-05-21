@@ -4,14 +4,13 @@ import { api } from "../api";
 import { useAutoCloseRowActionMenus, useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import {
+  AdminFilterBar,
+  AdminPageFrame,
+  AdminPageHeader,
   Badge,
   Button,
   Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Checkbox,
-  FieldHint,
   Input,
   Select,
   Table,
@@ -120,35 +119,35 @@ export function ThemesPage() {
   }
 
   return (
-    <section className="admin-page panel-stack">
-      <header className="flex items-start justify-between gap-4 py-1 max-[1200px]:flex-col">
-        <div>
-          <p className="eyebrow">Theme Library</p>
-          <h2>Overview and publishing</h2>
-          <FieldHint>Manage built-in and custom themes with clear publish and lifecycle actions.</FieldHint>
-        </div>
-        <div className="action-row">
-          <label className={buttonVariants({ variant: "secondary" })}>
-            Import theme
-            <input
-              type="file"
-              accept="application/json,.json"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleImport(file);
-                }
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <Button onClick={() => void handleCreate()}>Create Theme</Button>
-        </div>
-      </header>
+    <AdminPageFrame className="panel-stack">
+      <AdminPageHeader
+        eyebrow="Theme Library"
+        title="Overview and publishing"
+        description="Manage built-in and custom themes with clear publish and lifecycle actions."
+        actions={(
+          <div className="action-row">
+            <label className={buttonVariants({ variant: "secondary" })}>
+              Import theme
+              <input
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleImport(file);
+                  }
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <Button onClick={() => void handleCreate()}>Create Theme</Button>
+          </div>
+        )}
+      />
 
       <Card>
-        <div className="mb-3.5 grid grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_auto] items-end gap-3.5 max-[1200px]:grid-cols-1 max-[1200px]:items-stretch">
+        <AdminFilterBar className="mb-3.5">
           <label>
             Search themes
             <Input
@@ -176,7 +175,7 @@ export function ThemesPage() {
             <Checkbox checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
             Compact rows
           </label>
-        </div>
+        </AdminFilterBar>
 
         <TableShell>
           <Table
@@ -252,6 +251,6 @@ export function ThemesPage() {
           </Table>
         </TableShell>
       </Card>
-    </section>
+    </AdminPageFrame>
   );
 }
