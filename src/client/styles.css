@@ -1235,6 +1235,12 @@ details[open]:not(.editor-section-card) > summary::after {
   pointer-events: none;
 }
 
+.component-body {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .component-content {
   position: relative;
   z-index: 1;
@@ -1430,6 +1436,28 @@ details[open]:not(.editor-section-card) > summary::after {
   }
   50% {
     transform: scale(1.03);
+  }
+}
+
+@keyframes overlay-team-switch-out {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes overlay-team-switch-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

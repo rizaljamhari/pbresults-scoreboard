@@ -11,6 +11,22 @@ type OverlayRendererProps = {
   onSelectComponent?: (id: ComponentId) => void;
 };
 
+type OverlaySnapshot = {
+  state: string;
+  period: string;
+  round: number;
+  sourceStatus: NormalizedLiveState["sourceStatus"];
+  leftName: string;
+  rightName: string;
+  secondLeftName: string;
+  secondRightName: string;
+  leftScore: number;
+  rightScore: number;
+};
+
+const TEAM_SWITCH_ANIMATION_MS = 600;
+const TEAM_SWITCH_COOLDOWN_MS = 2200;
+
 function resolveBackgroundPosition(position: ThemeDefinition["components"]["homeName"]["backgroundImagePosition"]) {
   switch (position) {
     case "top":
@@ -104,20 +120,6 @@ function imageStyles(component: ThemeDefinition["components"]["eventLogo"]): CSS
   return {
     ...frameStyles(component),
     display: component.visible ? "block" : "none"
-  };
-}
-
-function mergedBackgroundStyles(base: CSSProperties, assetUrl: string | null, fit: ThemeDefinition["components"]["homeName"]["backgroundImageFit"], position: ThemeDefinition["components"]["homeName"]["backgroundImagePosition"]): CSSProperties {
-  if (!assetUrl) {
-    return base;
-  }
-
-  return {
-    ...base,
-    backgroundImage: `url("${assetUrl}")`,
-    backgroundSize: resolveBackgroundSize(fit),
-    backgroundPosition: resolveBackgroundPosition(position),
-    backgroundRepeat: "no-repeat"
   };
 }
 
@@ -256,6 +258,92 @@ function mergeRects(
   };
 }
 
+function createOverlaySnapshot(live: NormalizedLiveState): OverlaySnapshot {
+  const secondLeftName = Array.isArray(live.secondGame) ? live.secondGame[0]?.name ?? "" : "";
+  const secondRightName = Array.isArray(live.secondGame) ? live.secondGame[1]?.name ?? "" : "";
+  return {
+    state: live.state,
+    period: live.period,
+    round: live.round,
+    sourceStatus: live.sourceStatus,
+    leftName: live.displayLeftTeam.name,
+    rightName: live.displayRightTeam.name,
+    secondLeftName,
+    secondRightName,
+    leftScore: Number(live.displayLeftTeam.score ?? 0),
+    rightScore: Number(live.displayRightTeam.score ?? 0)
+  };
+}
+
+function normalizedName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function samePairUnordered(leftA: string, rightA: string, leftB: string, rightB: string) {
+  return (leftA === leftB && rightA === rightB) || (leftA === rightB && rightA === leftB);
+}
+
+function winnerSideFromSnapshot(snapshot: OverlaySnapshot): "left" | "right" | null {
+  if (snapshot.leftScore === snapshot.rightScore) {
+    return null;
+  }
+  return snapshot.leftScore > snapshot.rightScore ? "left" : "right";
+}
+
+function resolveEventLabelRect(
+  side: "left" | "right",
+  theme: ThemeDefinition,
+  overlayGeneral: ThemeDefinition["teamEventOverlay"]["general"]
+) {
+  const logoComponent = side === "left" ? theme.components.homeTeamLogo : theme.components.awayTeamLogo;
+  if (overlayGeneral.followLogoSize && logoComponent.visible) {
+    const inset = Math.max(0, logoComponent.padding);
+    const width = Math.max(1, logoComponent.width - inset * 2);
+    const height = Math.max(1, logoComponent.height - inset * 2);
+    return {
+      x: logoComponent.x + inset,
+      y: logoComponent.y + inset,
+      width,
+      height
+    };
+  }
+
+  const nameComponent = side === "left" ? theme.components.homeName : theme.components.awayName;
+  const group = mergeRects(nameComponent, logoComponent.visible ? logoComponent : null);
+  const anchoredY =
+    overlayGeneral.position === "above"
+      ? group.y - overlayGeneral.height + overlayGeneral.offsetY
+      : group.y + overlayGeneral.offsetY;
+
+  if (overlayGeneral.placementMode === "full-panel") {
+    return {
+      x: group.x + overlayGeneral.offsetX,
+      y: group.y + overlayGeneral.offsetY,
+      width: group.width,
+      height: group.height
+    };
+  }
+
+  if (overlayGeneral.placementMode === "top-ribbon") {
+    return {
+      x: group.x + overlayGeneral.offsetX,
+      y: anchoredY,
+      width: group.width,
+      height: overlayGeneral.height
+    };
+  }
+
+  const width = Math.max(160, Math.min(group.width, Math.round(group.width * 0.76)));
+  const x = group.x + Math.round((group.width - width) / 2) + overlayGeneral.offsetX;
+  const y = anchoredY;
+  return {
+    x,
+    y,
+    width,
+    height: overlayGeneral.height
+  };
+}
+
 export function OverlayRenderer({
   theme,
   live,
@@ -266,16 +354,120 @@ export function OverlayRenderer({
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; eventType: "towel" | "base"; until: number; token: string } | null>(null);
+  const [teamSwitchToken, setTeamSwitchToken] = useState<number | null>(null);
+  const [teamSwitchPayload, setTeamSwitchPayload] = useState<{
+    token: number;
+    from: NormalizedLiveState;
+    to: NormalizedLiveState;
+  } | null>(null);
   const [centerSecondaryAnimationTick, setCenterSecondaryAnimationTick] = useState(0);
   const previousTeamEventRef = useRef<NormalizedLiveState["teamEvent"]>("none");
   const previousCenterSecondaryVariantRef = useRef<"timer" | "staticText" | "hidden" | null>(null);
+  const previousSwitchSnapshotRef = useRef<OverlaySnapshot | null>(null);
+  const previousSwitchLiveRef = useRef<NormalizedLiveState | null>(null);
+  const lastTeamSwitchAtRef = useRef(0);
+  const teamSwitchClearTimeoutRef = useRef<number | null>(null);
   // Towel animation repeat state
   const [towelAnimationTick, setTowelAnimationTick] = useState(0);
   const towelIntervalRef = useRef<number | null>(null);
   const currentTeamEvent = live?.teamEvent ?? "none";
+  const finishState = useMemo(() => {
+    if (!live || live.sourceStatus !== "ok" || live.state !== "END" || live.period !== "BREAK") {
+      return null;
+    }
+    const snapshot = createOverlaySnapshot(live);
+    const token = `${snapshot.round}|${snapshot.leftName}|${snapshot.rightName}|${snapshot.leftScore}|${snapshot.rightScore}`;
+    return { token, snapshot };
+  }, [live]);
+  const gameFinishToken = finishState?.token ?? null;
+  const winnerReveal = useMemo(() => {
+    if (!finishState) {
+      return null;
+    }
+    const winnerSide = winnerSideFromSnapshot(finishState.snapshot);
+    if (!winnerSide) {
+      return null;
+    }
+    return {
+      side: winnerSide,
+      token: `${finishState.token}|${winnerSide}`
+    };
+  }, [finishState]);
+  const majorAnimationActive = Boolean(gameFinishToken || winnerReveal);
+
+  useEffect(
+    () => () => {
+      if (teamSwitchClearTimeoutRef.current !== null) {
+        clearTimeout(teamSwitchClearTimeoutRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!overlayGeneral.teamSwitchEnabled) {
+      if (teamSwitchClearTimeoutRef.current !== null) {
+        clearTimeout(teamSwitchClearTimeoutRef.current);
+        teamSwitchClearTimeoutRef.current = null;
+      }
+      setTeamSwitchToken(null);
+      setTeamSwitchPayload(null);
+      return;
+    }
+
+    if (!live || live.sourceStatus !== "ok") {
+      previousSwitchSnapshotRef.current = null;
+      previousSwitchLiveRef.current = null;
+      setTeamSwitchPayload(null);
+      return;
+    }
+
+    const snapshot = createOverlaySnapshot(live);
+    const previous = previousSwitchSnapshotRef.current;
+    const previousLive = previousSwitchLiveRef.current;
+    previousSwitchSnapshotRef.current = snapshot;
+    previousSwitchLiveRef.current = live;
+    if (!previous || !previousLive || majorAnimationActive) {
+      return;
+    }
+
+    if (snapshot.state === "END") {
+      return;
+    }
+
+    const leftNow = normalizedName(snapshot.leftName);
+    const rightNow = normalizedName(snapshot.rightName);
+    const leftPrev = normalizedName(previous.leftName);
+    const rightPrev = normalizedName(previous.rightName);
+    if (!leftNow || !rightNow || !leftPrev || !rightPrev) {
+      return;
+    }
+    const mainPairUnchanged = samePairUnordered(leftNow, rightNow, leftPrev, rightPrev);
+    if (mainPairUnchanged) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastTeamSwitchAtRef.current < TEAM_SWITCH_COOLDOWN_MS) {
+      return;
+    }
+    lastTeamSwitchAtRef.current = now;
+
+    setTeamSwitchToken(now);
+    setTeamSwitchPayload({ token: now, from: previousLive, to: live });
+    if (teamSwitchClearTimeoutRef.current !== null) {
+      clearTimeout(teamSwitchClearTimeoutRef.current);
+    }
+    teamSwitchClearTimeoutRef.current = window.setTimeout(() => {
+      setTeamSwitchToken((current) => (current === now ? null : current));
+      setTeamSwitchPayload((current) => (current?.token === now ? null : current));
+      teamSwitchClearTimeoutRef.current = null;
+    }, TEAM_SWITCH_ANIMATION_MS);
+  }, [live, majorAnimationActive, overlayGeneral.teamSwitchEnabled]);
+
   // Repeating towel animation logic
   useEffect(() => {
-    if (!live || currentTeamEvent === "none") {
+    if (!live || currentTeamEvent === "none" || majorAnimationActive) {
       if (towelIntervalRef.current !== null) {
         clearInterval(towelIntervalRef.current);
         towelIntervalRef.current = null;
@@ -298,10 +490,10 @@ export function OverlayRenderer({
         towelIntervalRef.current = null;
       }
     };
-  }, [currentTeamEvent, live, overlayGeneral.durationMs]);
+  }, [currentTeamEvent, live, majorAnimationActive, overlayGeneral.durationMs]);
 
   useEffect(() => {
-    if (!live || !overlayGeneral.enabled) {
+    if (!live || !overlayGeneral.enabled || majorAnimationActive) {
       previousTeamEventRef.current = "none";
       setActiveConcede(null);
       return;
@@ -334,7 +526,7 @@ export function OverlayRenderer({
       until: 0, // not used anymore
       token
     });
-  }, [currentTeamEvent, live?.round, live?.sidesSwitched, overlayGeneral.enabled, live]);
+  }, [currentTeamEvent, live?.round, live?.sidesSwitched, majorAnimationActive, overlayGeneral.enabled, live]);
 
   // Remove timeout logic: activeConcede is now persistent while teamEvent is active
 
@@ -358,60 +550,23 @@ export function OverlayRenderer({
     if (!overlayGeneral.enabled || !activeConcede) {
       return null;
     }
-
-    const logoComponent = activeConcede.side === "left" ? theme.components.homeTeamLogo : theme.components.awayTeamLogo;
-    if (overlayGeneral.followLogoSize && logoComponent.visible) {
-      const inset = Math.max(0, logoComponent.padding);
-      const width = Math.max(1, logoComponent.width - inset * 2);
-      const height = Math.max(1, logoComponent.height - inset * 2);
-      return {
-        x: logoComponent.x + inset,
-        y: logoComponent.y + inset,
-        width,
-        height,
-        token: activeConcede.token
-      };
-    }
-
-    const nameComponent = activeConcede.side === "left" ? theme.components.homeName : theme.components.awayName;
-    const group = mergeRects(nameComponent, logoComponent.visible ? logoComponent : null);
-    const anchoredY =
-      overlayGeneral.position === "above"
-        ? group.y - overlayGeneral.height + overlayGeneral.offsetY
-        : group.y + overlayGeneral.offsetY;
-
-    if (overlayGeneral.placementMode === "full-panel") {
-      return {
-        x: group.x + overlayGeneral.offsetX,
-        y: group.y + overlayGeneral.offsetY,
-        width: group.width,
-        height: group.height,
-        token: activeConcede.token
-      };
-    }
-
-    if (overlayGeneral.placementMode === "top-ribbon") {
-      return {
-        x: group.x + overlayGeneral.offsetX,
-        y: anchoredY,
-        width: group.width,
-        height: overlayGeneral.height,
-        token: activeConcede.token
-      };
-    }
-
-    const width = Math.max(160, Math.min(group.width, Math.round(group.width * 0.76)));
-    const x = group.x + Math.round((group.width - width) / 2) + overlayGeneral.offsetX;
-    const y = anchoredY;
-
+    const rect = resolveEventLabelRect(activeConcede.side, theme, overlayGeneral);
     return {
-      x,
-      y,
-      width,
-      height: overlayGeneral.height,
+      ...rect,
       token: activeConcede.token
     };
   }, [activeConcede, overlayGeneral, theme]);
+
+  const winnerLabel = useMemo(() => {
+    if (!overlayGeneral.enabled || !winnerReveal) {
+      return null;
+    }
+    const rect = resolveEventLabelRect(winnerReveal.side, theme, overlayGeneral);
+    return {
+      ...rect,
+      token: winnerReveal.token
+    };
+  }, [overlayGeneral, theme, winnerReveal]);
 
   const activeConcedeTheme = activeConcede?.eventType === "base" ? theme.teamEventOverlay.base : theme.teamEventOverlay.concede;
   const activeConcedeSurface = activeConcedeTheme
@@ -429,6 +584,21 @@ export function OverlayRenderer({
     : null;
   const concedeText = activeConcedeTheme?.text ?? "";
   const concedeTextColor = activeConcedeTheme?.color ?? "#ffffff";
+  const winnerTheme = theme.teamEventOverlay.winner;
+  const winnerSurface = surfaceStyles(
+    {
+      backgroundColor: winnerTheme.backgroundColor,
+      backgroundImageAssetId: winnerTheme.backgroundImageAssetId,
+      backgroundImageFit: overlayGeneral.backgroundImageFit,
+      backgroundImagePosition: overlayGeneral.backgroundImagePosition,
+      backgroundOverlayColor: winnerTheme.backgroundOverlayColor,
+      backgroundOverlayOpacity: winnerTheme.backgroundOverlayOpacity
+    },
+    assets
+  );
+  const winnerText = winnerTheme.text?.trim() || "WINNER";
+  const defaultEventLabel = concedeLabel && live && currentTeamEvent !== "none" ? concedeLabel : null;
+  const activeOverlayLabel = winnerLabel ?? defaultEventLabel;
 
   return (
     <div
@@ -444,19 +614,34 @@ export function OverlayRenderer({
       {(
         Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>
       ).map(([componentId, component]) => {
+        const switchTarget =
+          componentId === "homeName" ||
+          componentId === "homeTeamLogo" ||
+          componentId === "homeScore" ||
+          componentId === "awayName" ||
+          componentId === "awayTeamLogo" ||
+          componentId === "awayScore";
+        const teamSwitchActive = Boolean(
+          overlayGeneral.teamSwitchEnabled &&
+            teamSwitchPayload &&
+            teamSwitchToken !== null &&
+            teamSwitchPayload.token === teamSwitchToken &&
+            switchTarget
+        );
         const commonClass = editable && selectedComponentId === componentId ? "component-slot selected" : "component-slot";
         if (component.kind === "image") {
           const imageAsset = resolveImageAsset(componentId, component, theme, live, assets);
           const surface = surfaceStyles(component, assets);
           const isTeamLogo = componentId === "homeTeamLogo" || componentId === "awayTeamLogo";
-          const backgroundSurface = isTeamLogo
-            ? mergedBackgroundStyles(
-                surface.background,
-                imageAsset?.url ?? null,
-                component.backgroundImageFit,
-                component.backgroundImagePosition
-              )
-            : surface.background;
+          const backgroundSurface = surface.background;
+          const previousImageAsset =
+            teamSwitchActive && teamSwitchPayload
+              ? resolveImageAsset(componentId, component, theme, teamSwitchPayload.from, assets)
+              : null;
+          const nextImageAsset =
+            teamSwitchActive && teamSwitchPayload
+              ? resolveImageAsset(componentId, component, theme, teamSwitchPayload.to, assets)
+              : null;
           return (
             <button
               key={componentId}
@@ -465,32 +650,93 @@ export function OverlayRenderer({
               style={imageStyles(component)}
               onClick={() => onSelectComponent?.(componentId)}
             >
-              <span className="component-surface" style={backgroundSurface} />
-              {surface.overlay ? (
-                <span className="component-surface-overlay" style={surface.overlay ?? undefined} />
-              ) : null}
-              <span className="component-content image-content" style={{ padding: component.padding }}>
-                {!isTeamLogo && imageAsset ? (
-                  <img
-                    alt={imageAsset.originalName}
-                    src={imageAsset.url}
-                    className="event-logo-image"
-                    style={{
-                      objectFit: resolveObjectFit(component.backgroundImageFit),
-                      objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
-                    }}
-                  />
-                ) : editable && !imageAsset ? (
-                  <span>Logo</span>
-                ) : null}
+              <span className="component-body">
+                <span className="component-surface" style={backgroundSurface} />
+                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay ?? undefined} /> : null}
+                {teamSwitchActive && isTeamLogo && teamSwitchPayload ? (
+                  <>
+                    <span
+                      className="component-content image-content"
+                      style={{
+                        padding: component.padding,
+                        animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 2,
+                        transformOrigin: "center center",
+                        willChange: "transform, opacity",
+                        backfaceVisibility: "hidden"
+                      }}
+                    >
+                      {previousImageAsset ? (
+                        <img
+                          alt={previousImageAsset.originalName}
+                          src={previousImageAsset.url}
+                          className="event-logo-image"
+                          style={{
+                            objectFit: resolveObjectFit(component.backgroundImageFit),
+                            objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
+                          }}
+                        />
+                      ) : null}
+                    </span>
+                    <span
+                      className="component-content image-content"
+                      style={{
+                        padding: component.padding,
+                        animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 3,
+                        transformOrigin: "center center",
+                        willChange: "transform, opacity",
+                        backfaceVisibility: "hidden"
+                      }}
+                    >
+                      {nextImageAsset ? (
+                        <img
+                          alt={nextImageAsset.originalName}
+                          src={nextImageAsset.url}
+                          className="event-logo-image"
+                          style={{
+                            objectFit: resolveObjectFit(component.backgroundImageFit),
+                            objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
+                          }}
+                        />
+                      ) : null}
+                    </span>
+                  </>
+                ) : (
+                  <span className="component-content image-content" style={{ padding: component.padding }}>
+                    {imageAsset ? (
+                      <img
+                        alt={imageAsset.originalName}
+                        src={imageAsset.url}
+                        className="event-logo-image"
+                        style={{
+                          objectFit: resolveObjectFit(component.backgroundImageFit),
+                          objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
+                        }}
+                      />
+                    ) : editable ? (
+                      <span>Logo</span>
+                    ) : null}
+                  </span>
+                )}
               </span>
             </button>
           );
         }
 
         const surface = surfaceStyles(component, assets);
-        const content = componentId === "breakTime" ? centerSecondaryPresentation.content : resolveTextContent(theme, componentId, live);
+        const baseContent = componentId === "breakTime" ? centerSecondaryPresentation.content : resolveTextContent(theme, componentId, live);
+        const isGameFinishSecondaryOverlay = componentId === "breakTime" && Boolean(gameFinishToken);
+        const content = isGameFinishSecondaryOverlay ? "GAME FINISHED" : baseContent;
         const visible = component.visible && content !== null && content !== "";
+        const previousSwitchContent =
+          teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.from) : null;
+        const nextSwitchContent =
+          teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.to) : null;
         const centerSecondaryStyle =
           componentId === "breakTime"
             ? centerSecondaryPresentation.variant === "timer"
@@ -507,6 +753,20 @@ export function OverlayRenderer({
                 ? "center-secondary-slide-up"
                 : "none"
             : "none";
+        const contentKey =
+          componentId === "breakTime"
+            ? isGameFinishSecondaryOverlay
+              ? `game-finish:${gameFinishToken}`
+              : `${centerSecondaryPresentation.variant}:${centerSecondaryAnimationTick}`
+            : undefined;
+        const contentAnimation =
+          isGameFinishSecondaryOverlay
+            ? "center-secondary-slide-up 220ms ease"
+            : componentId === "breakTime" &&
+                centerSecondaryAnimationTick > 0 &&
+                centerSecondaryAnimationName !== "none"
+              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
+              : undefined;
 
         return (
           <button
@@ -516,44 +776,92 @@ export function OverlayRenderer({
             style={{ ...frameStyles(component), display: visible ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(componentId)}
           >
-            <span className="component-surface" style={surface.background} />
-            {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
-            <span
-              key={componentId === "breakTime" ? `${centerSecondaryPresentation.variant}:${centerSecondaryAnimationTick}` : undefined}
-              className="component-content text-content"
-              style={{
-                justifyContent:
-                  component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                padding: component.padding,
-                color: centerSecondaryStyle?.color ?? component.color,
-                fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
-                fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
-                fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
-                letterSpacing: component.letterSpacing,
-                lineHeight: component.lineHeight,
-                animation:
-                  componentId === "breakTime" &&
-                  centerSecondaryAnimationTick > 0 &&
-                  centerSecondaryAnimationName !== "none"
-                    ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
-                    : undefined
-              }}
-            >
-              {content}
+            <span className="component-body">
+              <span className="component-surface" style={surface.background} />
+              {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+              {teamSwitchActive && teamSwitchPayload ? (
+                <>
+                  <span
+                    className="component-content text-content"
+                    style={{
+                      justifyContent:
+                        component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+                      padding: component.padding,
+                      color: centerSecondaryStyle?.color ?? component.color,
+                      fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
+                      fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
+                      fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
+                      letterSpacing: component.letterSpacing,
+                      lineHeight: component.lineHeight,
+                      animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
+                      position: "absolute",
+                      inset: 0,
+                      zIndex: 2,
+                      transformOrigin: "center center",
+                      willChange: "transform, opacity",
+                      backfaceVisibility: "hidden"
+                    }}
+                  >
+                    {previousSwitchContent}
+                  </span>
+                  <span
+                    className="component-content text-content"
+                    style={{
+                      justifyContent:
+                        component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+                      padding: component.padding,
+                      color: centerSecondaryStyle?.color ?? component.color,
+                      fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
+                      fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
+                      fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
+                      letterSpacing: component.letterSpacing,
+                      lineHeight: component.lineHeight,
+                      animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
+                      position: "absolute",
+                      inset: 0,
+                      zIndex: 3,
+                      transformOrigin: "center center",
+                      willChange: "transform, opacity",
+                      backfaceVisibility: "hidden"
+                    }}
+                  >
+                    {nextSwitchContent}
+                  </span>
+                </>
+              ) : (
+                <span
+                  key={contentKey}
+                  className="component-content text-content"
+                  style={{
+                    justifyContent:
+                      component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+                    padding: component.padding,
+                    color: centerSecondaryStyle?.color ?? component.color,
+                    fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
+                    fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
+                    fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
+                    letterSpacing: component.letterSpacing,
+                    lineHeight: component.lineHeight,
+                    animation: contentAnimation
+                  }}
+                >
+                  {content}
+                </span>
+              )}
             </span>
           </button>
         );
       })}
 
-      {concedeLabel && live && currentTeamEvent !== "none" ? (
+      {activeOverlayLabel ? (
         <div
-          key={concedeLabel.token}
+          key={activeOverlayLabel.token}
           className="concede-label"
           style={{
-            left: concedeLabel.x,
-            top: concedeLabel.y,
-            width: concedeLabel.width,
-            height: concedeLabel.height,
+            left: activeOverlayLabel.x,
+            top: activeOverlayLabel.y,
+            width: activeOverlayLabel.width,
+            height: activeOverlayLabel.height,
             border: `${overlayGeneral.borderWidth}px solid ${overlayGeneral.borderColor}`,
             borderRadius: overlayGeneral.borderRadius,
             boxShadow: overlayGeneral.shadow
@@ -572,8 +880,12 @@ export function OverlayRenderer({
                     } ${overlayGeneral.durationMs}ms ease-in-out infinite alternate`
             }}
           >
-            <span className="component-surface" style={activeConcedeSurface?.background} />
-            {activeConcedeSurface?.overlay ? <span className="component-surface-overlay" style={activeConcedeSurface.overlay} /> : null}
+            <span className="component-surface" style={winnerLabel ? winnerSurface.background : activeConcedeSurface?.background} />
+            {winnerLabel ? (
+              winnerSurface.overlay ? <span className="component-surface-overlay" style={winnerSurface.overlay} /> : null
+            ) : activeConcedeSurface?.overlay ? (
+              <span className="component-surface-overlay" style={activeConcedeSurface.overlay} />
+            ) : null}
             <span
               className="component-content text-content"
               style={{
@@ -584,7 +896,7 @@ export function OverlayRenderer({
                       ? "flex-end"
                       : "center",
                 padding: overlayGeneral.padding,
-                color: concedeTextColor,
+                color: winnerLabel ? winnerTheme.color : concedeTextColor,
                 fontFamily: `"${overlayGeneral.fontFamily}", sans-serif`,
                 fontSize: overlayGeneral.fontSize,
                 fontWeight: overlayGeneral.fontWeight,
@@ -592,7 +904,7 @@ export function OverlayRenderer({
                 lineHeight: 1
               }}
             >
-              {concedeText}
+              {winnerLabel ? winnerText : concedeText}
             </span>
           </div>
         </div>

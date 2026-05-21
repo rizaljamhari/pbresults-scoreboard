@@ -95,6 +95,7 @@ const defaultImageComponentValue = {
 
 const teamEventOverlayGeneralSchema = z.object({
   enabled: z.boolean().default(true),
+  teamSwitchEnabled: z.boolean().default(true),
   placementMode: z.enum(teamOverlayPlacementValues).default("center-stamp"),
   position: z.enum(concedePositionValues).default("above"),
   offsetX: z.number().default(0),
@@ -139,6 +140,12 @@ const nestedTeamEventOverlaySchema = z.object({
       text: "Base",
       color: "#ffd54f",
       backgroundColor: "#1b3b6fff"
+    }),
+  winner: teamEventOverlayEventSchema
+    .default({
+      text: "WINNER",
+      color: "#ffffff",
+      backgroundColor: "#205838ee"
     })
 });
 
@@ -148,7 +155,7 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
   }
 
   const candidate = input as Record<string, unknown>;
-  if ("general" in candidate || "concede" in candidate || "base" in candidate) {
+  if ("general" in candidate || "concede" in candidate || "base" in candidate || "winner" in candidate) {
     return candidate;
   }
 

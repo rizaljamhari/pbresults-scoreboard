@@ -749,6 +749,12 @@ export function ThemeEditorPage() {
     });
   }
 
+  function patchWinnerOverlay(mutator: (winner: ThemeDefinition["teamEventOverlay"]["winner"]) => void) {
+    patchTeamEventOverlay((overlay) => {
+      mutator(overlay.winner);
+    });
+  }
+
   function selectComponent(id: ComponentId, options?: { additive?: boolean }) {
     setActiveMenu(null);
     setSelectAllMode(false);
@@ -1289,7 +1295,7 @@ export function ThemeEditorPage() {
     await api.publishTheme(themeResource.data.id);
   }
 
-  async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base") {
+  async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base" | "winner") {
     const result = await api.uploadAsset(file);
     const asset = result.asset;
     assets.setData([asset, ...(assets.data ?? [])]);
@@ -1323,8 +1329,15 @@ export function ThemeEditorPage() {
       return;
     }
 
-    patchBaseOverlay((base) => {
-      base.backgroundImageAssetId = asset.id;
+    if (target === "base") {
+      patchBaseOverlay((base) => {
+        base.backgroundImageAssetId = asset.id;
+      });
+      return;
+    }
+
+    patchWinnerOverlay((winner) => {
+      winner.backgroundImageAssetId = asset.id;
     });
   }
 
@@ -2525,6 +2538,14 @@ export function ThemeEditorPage() {
                       Enabled
                     </label>
                     <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={theme.teamEventOverlay.general.teamSwitchEnabled}
+                        onChange={(event) => patchOverlayGeneral((general) => (general.teamSwitchEnabled = event.target.checked))}
+                      />
+                      Team switch transition
+                    </label>
+                    <label className="checkbox">
                       <input type="checkbox" checked={!!theme.teamEventOverlay.general.followLogoSize} onChange={(event) => patchOverlayGeneral((general) => (general.followLogoSize = event.target.checked))} />
                       Match logo size/position
                     </label>
@@ -2664,6 +2685,41 @@ export function ThemeEditorPage() {
                           const file = event.target.files?.[0];
                           if (file) {
                             void uploadAssetIntoTarget(file, "base");
+                          }
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                </SectionCard>
+                <SectionCard title="Winner Overlay" description="Text and surface styling specific to winner reveal." defaultOpen={false}>
+                  <div className="form-grid">
+                    <TextField label="Text" value={theme.teamEventOverlay.winner.text} onChange={(value) => patchWinnerOverlay((winner) => (winner.text = value))} />
+                    <ColorField label="Text color" value={theme.teamEventOverlay.winner.color} onChange={(value) => patchWinnerOverlay((winner) => (winner.color = value))} />
+                    <ColorField label="Background" value={theme.teamEventOverlay.winner.backgroundColor} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundColor = value))} />
+                    <ColorField label="Overlay color" value={theme.teamEventOverlay.winner.backgroundOverlayColor} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundOverlayColor = value))} />
+                    <PercentField label="Overlay opacity" value={theme.teamEventOverlay.winner.backgroundOverlayOpacity} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundOverlayOpacity = value))} />
+                    <label>
+                      Background asset
+                      <select value={theme.teamEventOverlay.winner.backgroundImageAssetId ?? ""} onChange={(event) => patchWinnerOverlay((winner) => (winner.backgroundImageAssetId = event.target.value || null))}>
+                        <option value="">None</option>
+                        {assets.data?.map((asset) => (
+                          <option key={asset.id} value={asset.id}>
+                            {asset.originalName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="secondary-button">
+                      Upload winner background
+                      <input
+                        hidden
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            void uploadAssetIntoTarget(file, "winner");
                           }
                           event.currentTarget.value = "";
                         }}

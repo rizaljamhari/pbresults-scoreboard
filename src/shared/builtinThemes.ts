@@ -76,11 +76,13 @@ function teamEventOverlay(
     general?: Partial<ThemeDefinition["teamEventOverlay"]["general"]>;
     concede?: Partial<ThemeDefinition["teamEventOverlay"]["concede"]>;
     base?: Partial<ThemeDefinition["teamEventOverlay"]["base"]>;
+    winner?: Partial<ThemeDefinition["teamEventOverlay"]["winner"]>;
   } = {}
 ): ThemeDefinition["teamEventOverlay"] {
   return {
     general: {
       enabled: true,
+      teamSwitchEnabled: true,
       position: "above",
       placementMode: "center-stamp",
       offsetX: 0,
@@ -120,6 +122,15 @@ function teamEventOverlay(
       backgroundOverlayColor: "#000000",
       backgroundOverlayOpacity: 0,
       ...(overrides.base ?? {})
+    },
+    winner: {
+      text: "WINNER",
+      color: "#ffffff",
+      backgroundColor: "#205838ee",
+      backgroundImageAssetId: null,
+      backgroundOverlayColor: "#000000",
+      backgroundOverlayOpacity: 0,
+      ...(overrides.winner ?? {})
     }
   };
 }
