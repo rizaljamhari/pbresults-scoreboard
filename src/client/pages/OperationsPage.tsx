@@ -10,7 +10,7 @@ import type {
   ThemeDefinition
 } from "../../shared/theme";
 import { ApiError, api } from "../api";
-import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams, useThemes } from "../hooks";
+import { useAutoCloseRowActionMenus, useLiveState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import {
   AdminPageFrame,
@@ -147,6 +147,10 @@ function formatAge(value: string | null) {
   }
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+function isLocalBrowserHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function eventLabel(event: NormalizedLiveState["teamEvent"]) {
@@ -880,6 +884,7 @@ export function OperationsPage() {
   const settings = useSettings();
   const themes = useThemes();
   const teams = useTeams();
+  const runtimeInfo = useRuntimeInfo();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const [togglingPoll, setTogglingPoll] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -893,15 +898,16 @@ export function OperationsPage() {
     [settings.data?.publishedThemeId, themes.data]
   );
 
-  const liveUrl = typeof window === "undefined" ? "/overlay/live" : `${window.location.origin}/overlay/live`;
-  const previewUrl =
-    typeof window === "undefined"
-      ? publishedTheme
-        ? `/overlay/preview/${publishedTheme.id}`
-        : null
-      : publishedTheme
-        ? `${window.location.origin}/overlay/preview/${publishedTheme.id}`
-        : null;
+  const browserOrigin = typeof window === "undefined" ? null : window.location.origin;
+  const currentHostname = typeof window === "undefined" ? null : window.location.hostname;
+  const vmixOrigin =
+    browserOrigin && currentHostname && isLocalBrowserHost(currentHostname) && runtimeInfo.data?.preferredOrigin
+      ? runtimeInfo.data.preferredOrigin
+      : browserOrigin;
+  const liveUrl = browserOrigin ? `${browserOrigin}/overlay/live` : "/overlay/live";
+  const previewUrl = publishedTheme && browserOrigin ? `${browserOrigin}/overlay/preview/${publishedTheme.id}` : publishedTheme ? `/overlay/preview/${publishedTheme.id}` : null;
+  const vmixLiveUrl = vmixOrigin ? `${vmixOrigin}/overlay/live` : liveUrl;
+  const vmixPreviewUrl = publishedTheme && vmixOrigin ? `${vmixOrigin}/overlay/preview/${publishedTheme.id}` : previewUrl;
 
   const leftLogo = useMemo(() => resolveLogoSource("left", publishedTheme, live.data), [publishedTheme, live.data]);
   const rightLogo = useMemo(() => resolveLogoSource("right", publishedTheme, live.data), [publishedTheme, live.data]);
@@ -1235,6 +1241,17 @@ export function OperationsPage() {
         )}
       />
 
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className={dataTileClassName()}>
+          <strong className={dataTileLabelClassName()}>vMix live URL</strong>
+          <span className={dataTileValueClassName()}>{vmixLiveUrl}</span>
+        </div>
+        <div className={dataTileClassName()}>
+          <strong className={dataTileLabelClassName()}>Host IP for vMix</strong>
+          <span className={dataTileValueClassName()}>{runtimeInfo.data?.preferredHost ?? "Current origin in use"}</span>
+        </div>
+      </div>
+
       <StatusPanel
         tone={operatorPriority.tone === "critical" ? "critical" : operatorPriority.tone === "warning" ? "warning" : "success"}
         icon={
@@ -1507,14 +1524,14 @@ export function OperationsPage() {
               </summary>
               <div className="grid gap-4 px-4 pb-4">
                 <div className="action-row compact">
-                  <a className={buttonVariants({ variant: "secondary" })} href={liveUrl} target="_blank" rel="noreferrer">
+                  <a className={buttonVariants({ variant: "secondary" })} href={vmixLiveUrl} target="_blank" rel="noreferrer">
                     Open live overlay
                   </a>
-                  <Button variant="secondary" type="button" onClick={() => void handleCopyOverlayUrl(liveUrl)}>
+                  <Button variant="secondary" type="button" onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
                     Copy live URL
                   </Button>
-                  {previewUrl ? (
-                    <a className={buttonVariants({ variant: "secondary" })} href={previewUrl} target="_blank" rel="noreferrer">
+                  {vmixPreviewUrl ? (
+                    <a className={buttonVariants({ variant: "secondary" })} href={vmixPreviewUrl} target="_blank" rel="noreferrer">
                       Open preview
                     </a>
                   ) : null}

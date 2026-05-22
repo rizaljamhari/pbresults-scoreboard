@@ -28,6 +28,11 @@ export type UploadTeamLogoResponse = {
   processing: UploadProcessingInfo;
 };
 
+export type RuntimeInfo = {
+  preferredHost: string | null;
+  preferredOrigin: string | null;
+};
+
 export type ApiErrorPayload = {
   message?: string;
   code?: string;
@@ -165,6 +170,7 @@ export const api = {
     }).then(handle<ThemeDefinition>),
   getLive: () => fetch("/api/live").then(handle<NormalizedLiveState>),
   getRawLive: () => fetch("/api/live/raw").then(handle<unknown>),
+  getRuntimeInfo: () => fetch("/api/runtime-info").then(handle<RuntimeInfo>),
   getAssets: () => fetch("/api/assets").then(handle<StoredAsset[]>),
   uploadAsset: (file: File) => {
     const form = new FormData();

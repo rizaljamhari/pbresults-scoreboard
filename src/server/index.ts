@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
@@ -42,6 +43,39 @@ const app = Fastify({
   bodyLimit: 200 * 1024 * 1024
 });
 
+const port = Number(process.env.PORT ?? 3000);
+
+function findPreferredLanAddress() {
+  const interfaces = os.networkInterfaces();
+  const ipv4Candidates: string[] = [];
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (!entry || entry.family !== "IPv4" || entry.internal) {
+        continue;
+      }
+      if (entry.address.startsWith("169.254.")) {
+        continue;
+      }
+      ipv4Candidates.push(entry.address);
+    }
+  }
+
+  const privateCandidate =
+    ipv4Candidates.find((address) => address.startsWith("192.168.")) ??
+    ipv4Candidates.find((address) => address.startsWith("10.")) ??
+    ipv4Candidates.find((address) => {
+      const match = /^172\.(\d+)\./.exec(address);
+      if (!match) {
+        return false;
+      }
+      const secondOctet = Number(match[1]);
+      return secondOctet >= 16 && secondOctet <= 31;
+    });
+
+  return privateCandidate ?? ipv4Candidates[0] ?? null;
+}
+
 await app.register(cors, { origin: true });
 await app.register(multipart);
 await app.register(fastifyStatic, {
@@ -50,6 +84,14 @@ await app.register(fastifyStatic, {
 });
 
 livePoller.start();
+
+app.get("/api/runtime-info", async () => {
+  const preferredHost = findPreferredLanAddress();
+  return {
+    preferredHost,
+    preferredOrigin: preferredHost ? `http://${preferredHost}:${port}` : null
+  };
+});
 
 app.get("/api/live", async () => livePoller.getState().normalized);
 app.get("/api/live/raw", async () => livePoller.getState().raw);
@@ -308,5 +350,4 @@ if (fs.existsSync(clientRoot)) {
   }));
 }
 
-const port = Number(process.env.PORT ?? 3000);
 await app.listen({ port, host: "0.0.0.0" });

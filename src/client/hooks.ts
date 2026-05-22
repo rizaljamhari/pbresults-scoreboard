@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { defaultSettings } from "../shared/theme";
 import type { AppSettings, NormalizedLiveState, StoredAsset, TeamRecord, ThemeDefinition } from "../shared/theme";
+import type { RuntimeInfo } from "./api";
 
 export function useSettings() {
   return useResource(api.getSettings, []);
@@ -17,6 +18,10 @@ export function useTheme(id: string | undefined) {
 
 export function useAssets() {
   return useResource(api.getAssets, []);
+}
+
+export function useRuntimeInfo() {
+  return useResource<RuntimeInfo>(api.getRuntimeInfo, []);
 }
 
 export function useTeams() {
