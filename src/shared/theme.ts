@@ -323,16 +323,6 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
         backgroundOverlayColor: winnerCandidate.backgroundOverlayColor,
         backgroundOverlayOpacity: winnerCandidate.backgroundOverlayOpacity
       };
-    } else {
-      result.winner = {
-        enabled: true,
-        text: undefined,
-        color: undefined,
-        backgroundColor: undefined,
-        backgroundImageAssetId: undefined,
-        backgroundOverlayColor: undefined,
-        backgroundOverlayOpacity: undefined
-      };
     }
 
     return result;
