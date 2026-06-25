@@ -76,7 +76,7 @@ function frameStyles(component: ThemeDefinition["components"][ComponentId]): CSS
     display: component.visible ? "flex" : "none",
     position: "absolute",
     border: `${component.borderWidth}px solid ${component.borderColor}`,
-    borderRadius: component.borderRadius,
+    borderRadius: `${component.borderRadius.map((v) => `${v}px`).join(" ")}`,
     boxShadow: component.shadow,
     overflow: "hidden",
     padding: 0
@@ -92,12 +92,21 @@ function surfaceStyles(
     | "backgroundImagePosition"
     | "backgroundOverlayColor"
     | "backgroundOverlayOpacity"
-  >,
-  assets: StoredAsset[]
+  > & { backgroundImageMode?: "asset" | "homeTeamLogo" | "awayTeamLogo" },
+  assets: StoredAsset[],
+  theme: ThemeDefinition,
+  live: NormalizedLiveState | null
 ): { background: CSSProperties; overlay: CSSProperties | null } {
-  const backgroundAsset = component.backgroundImageAssetId
-    ? assets.find((asset) => asset.id === component.backgroundImageAssetId)
-    : null;
+  let backgroundAsset = null;
+  if (component.backgroundImageMode === "homeTeamLogo") {
+    backgroundAsset = resolveImageAsset("homeTeamLogo", theme.components.homeTeamLogo, theme, live, assets);
+  } else if (component.backgroundImageMode === "awayTeamLogo") {
+    backgroundAsset = resolveImageAsset("awayTeamLogo", theme.components.awayTeamLogo, theme, live, assets);
+  } else {
+    backgroundAsset = component.backgroundImageAssetId
+      ? assets.find((asset) => asset.id === component.backgroundImageAssetId) ?? null
+      : null;
+  }
 
   return {
     background: {
@@ -319,7 +328,8 @@ function resolveEventLabelRect(
       x: logoComponent.x + insetX + logoComponent.offsetX,
       y: logoComponent.y + insetY + logoComponent.offsetY,
       width,
-      height
+      height,
+      borderRadius: logoComponent.borderRadius
     };
   }
 
@@ -328,7 +338,8 @@ function resolveEventLabelRect(
       x: nameComponent.x + nameComponent.paddingX + nameComponent.offsetX,
       y: nameComponent.y + nameComponent.paddingY + nameComponent.offsetY,
       width: Math.max(1, nameComponent.width - nameComponent.paddingX * 2),
-      height: Math.max(1, nameComponent.height - nameComponent.paddingY * 2)
+      height: Math.max(1, nameComponent.height - nameComponent.paddingY * 2),
+      borderRadius: nameComponent.borderRadius
     };
   }
 
@@ -343,7 +354,8 @@ function resolveEventLabelRect(
       x: group.x + overlayGeneral.offsetX,
       y: group.y + overlayGeneral.offsetY,
       width: group.width,
-      height: group.height
+      height: group.height,
+      borderRadius: overlayGeneral.borderRadius
     };
   }
 
@@ -352,7 +364,8 @@ function resolveEventLabelRect(
       x: group.x + overlayGeneral.offsetX,
       y: anchoredY,
       width: group.width,
-      height: overlayGeneral.height
+      height: overlayGeneral.height,
+      borderRadius: overlayGeneral.borderRadius
     };
   }
 
@@ -363,7 +376,8 @@ function resolveEventLabelRect(
     x,
     y,
     width,
-    height: overlayGeneral.height
+    height: overlayGeneral.height,
+    borderRadius: overlayGeneral.borderRadius
   };
 }
 
@@ -385,8 +399,10 @@ export function OverlayRenderer({
   } | null>(null);
   const [breakTimeoutToken, setBreakTimeoutToken] = useState<number | null>(null);
   const [centerSecondaryAnimationTick, setCenterSecondaryAnimationTick] = useState(0);
+  const [centerSecondaryExitActive, setCenterSecondaryExitActive] = useState(false);
   const previousTeamEventRef = useRef<NormalizedLiveState["teamEvent"]>("none");
   const previousCenterSecondaryVariantRef = useRef<"timer" | "staticText" | "hidden" | null>(null);
+  const previousCenterSecondaryPresentationRef = useRef<{ variant: "timer" | "staticText" | "hidden"; content: string } | null>(null);
   const previousSwitchSnapshotRef = useRef<OverlaySnapshot | null>(null);
   const previousSwitchLiveRef = useRef<NormalizedLiveState | null>(null);
   const lastTeamSwitchAtRef = useRef(0);
@@ -617,16 +633,28 @@ export function OverlayRenderer({
     previousCenterSecondaryVariantRef.current = nextVariant;
 
     if (!previousVariant || previousVariant === nextVariant) {
+      if (nextVariant !== "hidden") {
+        previousCenterSecondaryPresentationRef.current = centerSecondaryPresentation;
+      }
       return;
     }
 
-    if ((previousVariant === "timer" && nextVariant === "staticText") || (previousVariant === "staticText" && nextVariant === "timer")) {
+    if (nextVariant === "hidden") {
+      setCenterSecondaryExitActive(true);
+      const timerId = setTimeout(() => {
+        setCenterSecondaryExitActive(false);
+      }, theme.centerSecondary.transition.durationMs);
+      return () => clearTimeout(timerId);
+    } else {
       setCenterSecondaryAnimationTick((current) => current + 1);
+      setCenterSecondaryExitActive(false);
+      previousCenterSecondaryPresentationRef.current = centerSecondaryPresentation;
     }
-  }, [centerSecondaryPresentation.variant]);
+  }, [centerSecondaryPresentation, theme.centerSecondary.transition.durationMs]);
 
   const concedeLabel = useMemo(() => {
-    if (!overlayGeneral.enabled || !activeConcede) {
+    const activeConcedeTheme = activeConcede?.eventType === "base" ? theme.teamEventOverlay.base : theme.teamEventOverlay.concede;
+    if (!overlayGeneral.enabled || !activeConcede || !activeConcedeTheme?.enabled) {
       return null;
     }
     const rect = resolveEventLabelRect(activeConcede.side, theme, overlayGeneral);
@@ -637,7 +665,7 @@ export function OverlayRenderer({
   }, [activeConcede, overlayGeneral, theme]);
 
   const winnerLabel = useMemo(() => {
-    if (!overlayGeneral.enabled || !winnerReveal) {
+    if (!overlayGeneral.enabled || !winnerReveal || !theme.teamEventOverlay.winner.enabled) {
       return null;
     }
     const rect = resolveEventLabelRect(winnerReveal.side, theme, overlayGeneral);
@@ -658,7 +686,9 @@ export function OverlayRenderer({
           backgroundOverlayColor: activeConcedeTheme.backgroundOverlayColor,
           backgroundOverlayOpacity: activeConcedeTheme.backgroundOverlayOpacity
         },
-        assets
+        assets,
+        theme,
+        live
       )
     : null;
   const concedeText = activeConcedeTheme?.text ?? "";
@@ -673,7 +703,9 @@ export function OverlayRenderer({
       backgroundOverlayColor: winnerTheme.backgroundOverlayColor,
       backgroundOverlayOpacity: winnerTheme.backgroundOverlayOpacity
     },
-    assets
+    assets,
+    theme,
+    live
   );
   const winnerText = winnerTheme.text?.trim() || "WINNER";
   const defaultEventLabel = concedeLabel && live && currentTeamEvent !== "none" ? concedeLabel : null;
@@ -710,7 +742,7 @@ export function OverlayRenderer({
         const commonClass = editable && selectedComponentId === componentId ? "component-slot selected" : "component-slot";
         if (component.kind === "image") {
           const imageAsset = resolveImageAsset(componentId, component, theme, live, assets);
-          const surface = surfaceStyles(component, assets);
+          const surface = surfaceStyles(component, assets, theme, live);
           const isTeamLogo = componentId === "homeTeamLogo" || componentId === "awayTeamLogo";
           const backgroundSurface = surface.background;
           const previousImageAsset =
@@ -809,11 +841,18 @@ export function OverlayRenderer({
           );
         }
 
-        const surface = surfaceStyles(component, assets);
+        const surface = surfaceStyles(component, assets, theme, live);
         const baseContent = componentId === "breakTime" ? centerSecondaryPresentation.content : resolveTextContent(theme, componentId, live);
         const isGameFinishSecondaryOverlay = componentId === "breakTime" && Boolean(gameFinishToken);
-        const content = isGameFinishSecondaryOverlay ? "GAME FINISHED" : baseContent;
-        const visible = component.visible && content !== null && content !== "";
+        
+        let content = isGameFinishSecondaryOverlay ? "GAME FINISHED" : baseContent;
+        let visible = component.visible && content !== null && content !== "";
+
+        if (componentId === "breakTime" && centerSecondaryExitActive && previousCenterSecondaryPresentationRef.current) {
+          content = previousCenterSecondaryPresentationRef.current.content;
+          visible = component.visible && content !== null && content !== "";
+        }
+
         const showBreakTimeoutOverlay =
           componentId === "breakTime" &&
           Boolean(breakTimeoutToken) &&
@@ -824,11 +863,16 @@ export function OverlayRenderer({
           teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.from) : null;
         const nextSwitchContent =
           teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.to) : null;
+          
+        const activeVariant = componentId === "breakTime" && centerSecondaryExitActive && previousCenterSecondaryPresentationRef.current 
+          ? previousCenterSecondaryPresentationRef.current.variant 
+          : centerSecondaryPresentation.variant;
+
         const centerSecondaryStyle =
           componentId === "breakTime"
-            ? centerSecondaryPresentation.variant === "timer"
+            ? activeVariant === "timer"
               ? theme.centerSecondary.timerStyle
-              : centerSecondaryPresentation.variant === "staticText"
+              : activeVariant === "staticText"
                 ? theme.centerSecondary.staticStyle
                 : null
             : null;
@@ -838,22 +882,30 @@ export function OverlayRenderer({
               ? "center-secondary-fade"
               : theme.centerSecondary.transition.animation === "slide-up"
                 ? "center-secondary-slide-up"
-                : "none"
+                : theme.centerSecondary.transition.animation === "slide-left"
+                  ? "center-secondary-slide-left"
+                  : theme.centerSecondary.transition.animation === "slide-right"
+                    ? "center-secondary-slide-right"
+                    : "none"
             : "none";
         const contentKey =
           componentId === "breakTime"
             ? isGameFinishSecondaryOverlay
               ? `game-finish:${gameFinishToken}`
-              : `${centerSecondaryPresentation.variant}:${centerSecondaryAnimationTick}`
+              : centerSecondaryExitActive
+                ? `exit:${centerSecondaryAnimationTick}`
+                : `${activeVariant}:${centerSecondaryAnimationTick}`
             : undefined;
         const contentAnimation =
           isGameFinishSecondaryOverlay
             ? "center-secondary-slide-up 220ms ease"
-            : componentId === "breakTime" &&
-                centerSecondaryAnimationTick > 0 &&
-                centerSecondaryAnimationName !== "none"
-              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
-              : undefined;
+            : componentId === "breakTime" && centerSecondaryExitActive && centerSecondaryAnimationName !== "none"
+              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease reverse`
+              : componentId === "breakTime" &&
+                  centerSecondaryAnimationTick > 0 &&
+                  centerSecondaryAnimationName !== "none"
+                ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
+                : undefined;
 
         return (
           <button
@@ -975,9 +1027,11 @@ export function OverlayRenderer({
             top: activeOverlayLabel.y,
             width: activeOverlayLabel.width,
             height: activeOverlayLabel.height,
+            pointerEvents: "none",
             border: `${overlayGeneral.borderWidth}px solid ${overlayGeneral.borderColor}`,
-            borderRadius: overlayGeneral.borderRadius,
-            boxShadow: overlayGeneral.shadow
+            borderRadius: `${activeOverlayLabel.borderRadius.map((v) => `${v}px`).join(" ")}`,
+            boxShadow: overlayGeneral.shadow,
+            overflow: "hidden"
           }}
         >
           <div

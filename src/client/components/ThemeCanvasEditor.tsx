@@ -817,9 +817,9 @@ export function ThemeCanvasEditor({
             >
               {snapSummary}
             </button>
-            <details className="canvas-snap-controls">
-              <summary className="secondary-button">Snap options</summary>
-              <div className="canvas-snap-controls-panel">
+            <div style={{ "--anchor-snap": "anchor-snap", anchorName: "--anchor-snap" } as any}>
+              <button popovertarget="canvas-snap-popover" className="secondary-button">Snap options</button>
+              <div id="canvas-snap-popover" popover="auto" className="canvas-snap-controls-panel" style={{ positionAnchor: "--anchor-snap", positionArea: "bottom span-left", margin: 0 } as any}>
                 <label className="checkbox">
                   <input
                     type="checkbox"
@@ -920,7 +920,7 @@ export function ThemeCanvasEditor({
                 </label>
                 <p className="hint">Hold Shift while resizing to keep aspect ratio.</p>
               </div>
-            </details>
+            </div>
         </div>
       </div>
       <div
@@ -1230,7 +1230,6 @@ export function ThemeCanvasEditor({
                   setInteraction(null);
                   onUpdate(next);
                 }}
-                lockAspectRatio={shiftPressed}
                 scale={stageScale}
                 className={!selectAll && selectedIdSet.has(id) ? "editor-outline selected" : "editor-outline"}
               >

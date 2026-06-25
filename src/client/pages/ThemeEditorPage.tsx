@@ -7,9 +7,11 @@ import { componentIds, fontFamilies } from "../../shared/theme";
 import type { ComponentId, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
 import { AdminPageFrame, AdminPageHeader, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
+import { ThemeComponentInspector } from "../components/ThemeComponentInspector";
+
 
 type EditorMode = "basic" | "advanced";
-type InspectorView = "theme" | "component" | "concede";
+type InspectorView = "theme" | "component" | "concede" | "preview";
 type SlotId = "left" | "center" | "right";
 type PreviewNameMode = "live" | "short" | "long";
 type PreviewLogoMode = "live" | "matched" | "missing" | "unmatched";
@@ -173,7 +175,7 @@ const concedePresets = {
   }
 } as const;
 
-function NumberField(props: {
+export function NumberField(props: {
   label: string;
   value: number;
   onChange: (value: number) => void;
@@ -204,7 +206,7 @@ function NumberField(props: {
   );
 }
 
-function normalizePickerColor(value: string) {
+export function normalizePickerColor(value: string) {
   const normalized = value.trim();
   if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4})$/.test(normalized)) {
     const chars = normalized.slice(1).split("");
@@ -216,7 +218,7 @@ function normalizePickerColor(value: string) {
   return "#000000";
 }
 
-function mergePickerColor(current: string, next: string) {
+export function mergePickerColor(current: string, next: string) {
   const normalized = current.trim();
   if (/^#[0-9a-fA-F]{8}$/.test(normalized)) {
     return `${next}${normalized.slice(7)}`;
@@ -227,7 +229,7 @@ function mergePickerColor(current: string, next: string) {
   return next;
 }
 
-function ColorField(props: { label: string; value: string; onChange: (value: string) => void }) {
+export function ColorField(props: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label>
       {props.label}
@@ -257,7 +259,7 @@ function PercentField(props: { label: string; value: number; onChange: (value: n
   );
 }
 
-function TextField(props: { label: string; value: string; onChange: (value: string) => void }) {
+export function TextField(props: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label>
       {props.label}
@@ -436,6 +438,15 @@ function mirrorComponentLayout(
   targetComponent.paddingY = sourceComponent.paddingY;
   targetComponent.offsetX = -sourceComponent.offsetX;
   targetComponent.offsetY = sourceComponent.offsetY;
+  
+  if (sourceComponent.borderRadius && targetComponent.borderRadius) {
+    targetComponent.borderRadius = [
+      sourceComponent.borderRadius[1],
+      sourceComponent.borderRadius[0],
+      sourceComponent.borderRadius[3],
+      sourceComponent.borderRadius[2]
+    ];
+  }
 
   if (sourceComponent.kind === "text" && targetComponent.kind === "text") {
     targetComponent.textAlign = mirrorTextAlign(sourceComponent.textAlign);
@@ -1609,12 +1620,20 @@ export function ThemeEditorPage() {
               <Button variant="secondary" onClick={() => navigate("/admin/themes")}>
                 Back
               </Button>
-              <Button variant="secondary" onClick={undo} disabled={history.length <= 1}>
-                Undo
+              <Button variant="secondary" onClick={undo} disabled={history.length <= 1} title="Undo">
+                ↶ Undo
               </Button>
-              <Button variant="secondary" onClick={redo} disabled={future.length === 0}>
-                Redo
+              <Button variant="secondary" onClick={redo} disabled={future.length === 0} title="Redo">
+                ↷ Redo
               </Button>
+              <a
+                className={buttonVariants({ variant: "secondary" })}
+                href={`/overlay/preview/${theme.id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open preview
+              </a>
               <Button variant="secondary" onClick={() => void save()}>
                 {saving ? "Saving…" : "Save"}
               </Button>
@@ -1717,36 +1736,69 @@ export function ThemeEditorPage() {
                   onUpdate={updateTheme}
                 />
               </div>
-              <div className="canvas-below-drawers">
-                <details className="canvas-arrange-disclosure">
-                  <summary className={buttonVariants({ variant: "secondary" })}>Arrange tools</summary>
-                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor arrange tools">
-                    <label className="inline-select">
-                      <span className="hint">Zoom</span>
-                      <select value={String(canvasZoom)} onChange={(event) => setCanvasZoom(Number(event.target.value))}>
-                        {zoomPresets.map((preset) => (
-                          <option key={preset} value={String(preset)}>
-                            {Math.round(preset * 100)}%
-                          </option>
-                        ))}
-                      </select>
+            </div>
+          </div>
+
+          <div className="inspector-column">
+            <div className="inspector v2-inspector">
+            <div className="inspector-toolbar">
+              <div className="segmented-control">
+                <button className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"} onClick={() => setInspectorView("theme")} type="button">
+                  Canvas
+                </button>
+                <button
+                  className={inspectorView === "component" ? "segmented-button active" : "segmented-button"}
+                  onClick={() => setInspectorView("component")}
+                  type="button"
+                >
+                  Component
+                </button>
+                <button
+                  className={inspectorView === "concede" ? "segmented-button active" : "segmented-button"}
+                  onClick={() => setInspectorView("concede")}
+                  type="button"
+                >
+                  Event Overlay
+                </button>
+              </div>
+            </div>
+
+            {inspectorView === "theme" ? (
+              <div className="inspector-stack">
+                <SectionCard title="Canvas Basics" description="Core identity and canvas options." defaultOpen>
+                  <div className="form-grid">
+                    <TextField label="Theme name" value={theme.name} onChange={(value) => patchTheme((draft) => (draft.name = value))} />
+                    <TextField
+                      label="Description"
+                      value={theme.description}
+                      onChange={(value) => patchTheme((draft) => (draft.description = value))}
+                    />
+                    <ColorField
+                      label="Canvas background"
+                      value={theme.canvas.backgroundColor}
+                      onChange={(value) => patchTheme((draft) => (draft.canvas.backgroundColor = value))}
+                    />
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={theme.canvas.safeArea}
+                        onChange={(event) => patchTheme((draft) => (draft.canvas.safeArea = event.target.checked))}
+                      />
+                      Show safe area
                     </label>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setCanvasZoom(1)} disabled={canvasZoom === 1}>
-                      Reset zoom
-                    </button>
-                    <a
-                      className={buttonVariants({ variant: "secondary" })}
-                      href={`/overlay/preview/${theme.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open preview
-                    </a>
-                    {theme.builtin ? (
-                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => void saveAsCopy()}>
-                        {saving ? "Saving…" : "Save as Copy"}
-                      </button>
-                    ) : null}
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={theme.canvas.transparentPreview}
+                        onChange={(event) => patchTheme((draft) => (draft.canvas.transparentPreview = event.target.checked))}
+                      />
+                      Transparent admin preview
+                    </label>
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Arrange & Align" description="Align, distribute, and match sizes for multiple selected items." defaultOpen={true}>
+                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor arrange tools">
                     <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("left")}>
                       Align left
                     </button>
@@ -1780,17 +1832,43 @@ export function ThemeEditorPage() {
                     <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("both")}>
                       Match both
                     </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("leftToRight")}>
-                      Sync left to right
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("rightToLeft")}>
-                      Sync right to left
-                    </button>
                     <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("leftToRight")}>
                       Mirror left layout
                     </button>
                     <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("rightToLeft")}>
                       Mirror right layout
+                    </button>
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Working Model" description="Use the canvas for positioning. Use advanced controls only when you need exact geometry." defaultOpen={false}>
+                  <div className="editor-notes">
+                    <p>`Canvas` covers the page-level frame and preview behavior.</p>
+                    <p>`Component` focuses on the selected piece only.</p>
+                    <p>`Event Overlay` controls concede, base, and winner treatments.</p>
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Theme Actions" description="Global layout sync and template controls." defaultOpen={false}>
+                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Theme action tools">
+                    <a
+                      className={buttonVariants({ variant: "secondary" })}
+                      href={`/overlay/preview/${theme.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open preview
+                    </a>
+                    {theme.builtin ? (
+                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => void saveAsCopy()}>
+                        {saving ? "Saving…" : "Save as Copy"}
+                      </button>
+                    ) : null}
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("leftToRight")}>
+                      Sync left to right
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("rightToLeft")}>
+                      Sync right to left
                     </button>
                     <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={resetSelectedSlotToSaved} disabled={!savedSnapshot}>
                       Reset slot
@@ -1806,46 +1884,61 @@ export function ThemeEditorPage() {
                       <p>Sync copies layout, style, visibility, and assets. Mirror copies frame layout and flips left/right spacing.</p>
                     </div>
                   </div>
-                </details>
-                <details
-                  className="canvas-preview-disclosure"
-                  open={previewDrawerOpen}
-                  onToggle={(event) => {
-                    const isOpen = event.currentTarget.open;
-                    setPreviewDrawerOpen(isOpen);
-                    if (!isOpen) {
-                      setActiveMenu(null);
-                    }
-                  }}
-                >
-                  <summary className={buttonVariants({ variant: "secondary" })}>State preview</summary>
+                </SectionCard>
+
+                <SectionCard title="Canvas Shortcuts" description="Keyboard shortcuts for the editor." defaultOpen={false}>
+                  <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
+                    <span className="canvas-shortcut-pill">Drag blank area to pan</span>
+                    <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
+                    <span className="canvas-shortcut-pill">Middle-drag pan</span>
+                    <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
+                    <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
+                    <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
+                    <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
+                    <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
+                    <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
+                    <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
+                    <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
+                    <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
+                  </div>
+                </SectionCard>
+              </div>
+            ) : null}
+
+            {inspectorView === "preview" ? (
+              <div className="inspector-stack">
+                <SectionCard title="State Preview" description="Simulate game states and scoreboard data." defaultOpen>
                   <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
-                    <details className="row-action-menu row-action-menu--up" open={activeMenu === "preview-preset"}>
-                      <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("preview-preset"); }}>Preview preset</summary>
-                      <div className="row-action-menu-list">
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); closeMenus(); }}>
+                    <div className="row-action-menu row-action-menu--up" style={{ "--preset-anchor": "preset-anchor", anchorName: "--preset-anchor" } as any}>
+                      <button type="button" popovertarget="preview-preset-popover" className={buttonVariants({ variant: "secondary" })}>Preview preset</button>
+                      <div id="preview-preset-popover" popover="auto" className="row-action-menu-list" style={{ positionAnchor: "--preset-anchor", positionArea: "top span-left", margin: 0 } as any}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); }}>
                           Live
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); }}>
                           Game
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); }}>
                           Break
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); }}>
                           Towel Left
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); }}>
                           Towel Right
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); }}>
                           Base Left
                         </button>
-                        <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); closeMenus(); }}>
+                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); }}>
                           Base Right
                         </button>
                       </div>
-                    </details>
+                    </div>
                     <label className="checkbox canvas-preview-toggle">
                       <input type="checkbox" checked={previewEnabled} onChange={(event) => setPreviewEnabled(event.target.checked)} />
                       Preview states
@@ -1926,96 +2019,6 @@ export function ThemeEditorPage() {
                     >
                       Reset preview
                     </button>
-                  </div>
-                </details>
-                <details className="canvas-shortcuts-disclosure">
-                  <summary className={buttonVariants({ variant: "secondary" })}>Canvas shortcuts</summary>
-                  <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
-                    <span className="canvas-shortcut-pill">Drag blank area to pan</span>
-                    <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
-                    <span className="canvas-shortcut-pill">Middle-drag pan</span>
-                    <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
-                    <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
-                    <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
-                    <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
-                    <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
-                    <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
-                    <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </div>
-
-          <div className="inspector-column">
-            <div className="inspector v2-inspector">
-            <div className="inspector-toolbar">
-              <div className="segmented-control">
-                <button className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"} onClick={() => setInspectorView("theme")} type="button">
-                  Canvas
-                </button>
-                <button
-                  className={inspectorView === "component" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setInspectorView("component")}
-                  type="button"
-                >
-                  Component
-                </button>
-                <button
-                  className={inspectorView === "concede" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setInspectorView("concede")}
-                  type="button"
-                >
-                  Event Overlay
-                </button>
-              </div>
-            </div>
-
-            {inspectorView === "theme" ? (
-              <div className="inspector-stack">
-                <SectionCard title="Canvas Basics" description="Core identity and canvas options." defaultOpen>
-                  <div className="form-grid">
-                    <TextField label="Theme name" value={theme.name} onChange={(value) => patchTheme((draft) => (draft.name = value))} />
-                    <TextField
-                      label="Description"
-                      value={theme.description}
-                      onChange={(value) => patchTheme((draft) => (draft.description = value))}
-                    />
-                    <ColorField
-                      label="Canvas background"
-                      value={theme.canvas.backgroundColor}
-                      onChange={(value) => patchTheme((draft) => (draft.canvas.backgroundColor = value))}
-                    />
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.canvas.safeArea}
-                        onChange={(event) => patchTheme((draft) => (draft.canvas.safeArea = event.target.checked))}
-                      />
-                      Show safe area
-                    </label>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.canvas.transparentPreview}
-                        onChange={(event) => patchTheme((draft) => (draft.canvas.transparentPreview = event.target.checked))}
-                      />
-                      Transparent admin preview
-                    </label>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Working Model" description="Use the canvas for positioning. Use advanced controls only when you need exact geometry." defaultOpen={false}>
-                  <div className="editor-notes">
-                    <p>`Canvas` covers the page-level frame and preview behavior.</p>
-                    <p>`Component` focuses on the selected piece only.</p>
-                    <p>`Event Overlay` controls concede, base, and winner treatments.</p>
                   </div>
                 </SectionCard>
               </div>
@@ -2123,13 +2126,15 @@ export function ThemeEditorPage() {
                               value={theme.centerSecondary.transition.animation}
                               onChange={(event) =>
                                 patchTheme((draft) => {
-                                  draft.centerSecondary.transition.animation = event.target.value as "none" | "fade" | "slide-up";
+                                  draft.centerSecondary.transition.animation = event.target.value as "none" | "fade" | "slide-up" | "slide-left" | "slide-right";
                                 })
                               }
                             >
                               <option value="none">none</option>
                               <option value="fade">fade</option>
                               <option value="slide-up">slide-up</option>
+                              <option value="slide-left">slide-left</option>
+                              <option value="slide-right">slide-right</option>
                             </select>
                           </label>
                           <NumberField
@@ -2371,519 +2376,32 @@ export function ThemeEditorPage() {
                 ) : null}
 
                 {!selectAllMode && selectedEditableComponent ? (
-                  <>
-                  <SectionCard
-                    title={`${selectedSlotConfig.title} > ${selectedShortLabel}`}
-                    description="Style the selected live piece. Use drag handles on the canvas for placement."
-                    defaultOpen
-                  >
-                    <div className="inline-action-grid">
-                      <details className="row-action-menu row-action-menu--up" open={activeMenu === "piece-tools"}>
-                        <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("piece-tools"); }}>Piece tools</summary>
-                        <div className="row-action-menu-list">
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => {
-                              reorderSelectedComponent("sendToBack");
-                              closeMenus();
-                            }}
-                            disabled={!canBringBackward}
-                          >
-                            Send to back
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => {
-                              reorderSelectedComponent("bringBackward");
-                              closeMenus();
-                            }}
-                            disabled={!canBringBackward}
-                          >
-                            Bring backward
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => {
-                              reorderSelectedComponent("bringForward");
-                              closeMenus();
-                            }}
-                            disabled={!canBringForward}
-                          >
-                            Bring forward
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => {
-                              reorderSelectedComponent("sendToFront");
-                              closeMenus();
-                            }}
-                            disabled={!canBringForward}
-                          >
-                            Send to front
-                          </button>
-                          <button type="button" className="secondary-button" onClick={() => { bringSelectedIntoView(); closeMenus(); }}>
-                            Bring into view
-                          </button>
-                          {selectedMirroredPair ? (
-                            <button type="button" className="secondary-button" onClick={() => { mirrorSelectedPieceLayout(); closeMenus(); }}>
-                              Mirror piece layout
-                            </button>
-                          ) : null}
-                          <button type="button" className="secondary-button" onClick={resetSelectedPieceToSaved} disabled={!savedSnapshot}>
-                            Reset piece to saved
-                          </button>
-                        </div>
-                      </details>
-                    </div>
-                    {selectedMirroredPair ? (
-                      <p className="hint">
-                        `Mirror piece layout` copies frame geometry plus inner padding and offset to the opposite side. It keeps colors, fonts, and assets unchanged.
-                      </p>
-                    ) : null}
-                    <div className="form-grid">
-                      <label className="checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedEditableComponent.visible}
-                          onChange={(event) => patchSelectedComponent((component) => (component.visible = event.target.checked))}
-                        />
-                        Visible
-                      </label>
-                      <ColorField
-                        label="Background"
-                        value={selectedEditableComponent.backgroundColor}
-                        onChange={(value) => patchSelectedComponent((component) => (component.backgroundColor = value))}
-                      />
-                      <label>
-                        Background asset
-                        <select
-                          value={selectedEditableComponent.backgroundImageAssetId ?? ""}
-                          onChange={(event) =>
-                            patchSelectedComponent((component) => (component.backgroundImageAssetId = event.target.value || null))
-                          }
-                        >
-                          <option value="">None</option>
-                          {assets.data?.map((asset) => (
-                            <option key={asset.id} value={asset.id}>
-                              {asset.originalName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="secondary-button">
-                        Upload surface asset
-                        <input
-                          hidden
-                          type="file"
-                          accept="image/*"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              void uploadAssetIntoTarget(file, "surface");
-                            }
-                            event.currentTarget.value = "";
-                          }}
-                        />
-                      </label>
-                      {selectedTextComponent ? (
-                        <>
-                          <label>
-                            Font
-                            <select
-                              value={selectedTextComponent.fontFamily}
-                              onChange={(event) =>
-                                patchSelectedTextComponent(
-                                  (component) =>
-                                    (component.fontFamily = event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"])
-                                )
-                              }
-                            >
-                              <option>Bebas Neue</option>
-                              <option>Oswald</option>
-                              <option>Barlow Condensed</option>
-                              <option>Arial Narrow</option>
-                              <option>Helvetica Neue</option>
-                            </select>
-                          </label>
-                          <ColorField
-                            label="Text color"
-                            value={selectedTextComponent.color}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.color = value))}
-                          />
-                          <NumberField
-                            label="Font size"
-                            unit="px"
-                            value={selectedTextComponent.fontSize}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.fontSize = value))}
-                          />
-                          <label>
-                            Align
-                            <select
-                              value={selectedTextComponent.textAlign}
-                              onChange={(event) =>
-                                patchSelectedTextComponent(
-                                  (component) => (component.textAlign = event.target.value as "left" | "center" | "right")
-                                )
-                              }
-                            >
-                              <option value="left">left</option>
-                              <option value="center">center</option>
-                              <option value="right">right</option>
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Padding X"
-                            unit="px"
-                            value={selectedTextComponent.paddingX}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.paddingX = value))}
-                          />
-                          <NumberField
-                            label="Padding Y"
-                            unit="px"
-                            value={selectedTextComponent.paddingY}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.paddingY = value))}
-                          />
-                          <NumberField
-                            label="Offset X"
-                            unit="px"
-                            value={selectedTextComponent.offsetX}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.offsetX = value))}
-                          />
-                          <NumberField
-                            label="Offset Y"
-                            unit="px"
-                            value={selectedTextComponent.offsetY}
-                            onChange={(value) => patchSelectedTextComponent((component) => (component.offsetY = value))}
-                          />
-                        </>
-                      ) : null}
-                      {selectedImageComponent ? (
-                        <>
-                          {selectedLogoContext ? (
-                            <div className="block-editor-grid">
-                              <div className="block-editor-card">
-                                <strong>Live resolution</strong>
-                                <span className="hint">
-                                  {selectedLogoContext.match?.team?.canonicalName
-                                    ? `${selectedLogoContext.match.team.canonicalName} · ${selectedLogoContext.match.status}`
-                                    : `No matched team yet · ${selectedLogoContext.match?.status ?? "unmatched"}`}
-                                </span>
-                                <div className="team-logo-preview compact">
-                                  {selectedLogoContext.effectiveAsset ? (
-                                    <img
-                                      src={selectedLogoContext.effectiveAsset.url}
-                                      alt={selectedLogoContext.effectiveAsset.originalName}
-                                      className="team-logo-image"
-                                    />
-                                  ) : (
-                                    <span>No resolved logo</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="block-editor-card">
-                                <strong>Logo source order</strong>
-                                <span className="hint">1. matched team registry logo</span>
-                                <span className="hint">2. {teamLogoFallbackModeLabels[selectedImageComponent.teamLogoFallbackMode]}</span>
-                                <span className="hint">Registry asset: {selectedLogoContext.registryAsset?.originalName ?? "none"}</span>
-                                <span className="hint">Fallback asset: {selectedLogoContext.fallbackAsset?.originalName ?? "none"}</span>
-                                <span className="hint">Event logo asset: {selectedLogoContext.eventAsset?.originalName ?? "none"}</span>
-                              </div>
-                            </div>
-                          ) : null}
-                          <label className="secondary-button">
-                            {selectedIsTeamLogo ? "Upload fallback logo" : "Upload image"}
-                            <input
-                              hidden
-                              type="file"
-                              accept="image/*"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                if (file) {
-                                  void uploadAssetIntoTarget(file, "logo");
-                                }
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
-                          <label>
-                            {selectedIsTeamLogo ? "Fallback asset" : "Image asset"}
-                            <select
-                              value={selectedImageComponent.assetId ?? ""}
-                              onChange={(event) =>
-                                patchSelectedComponent((component) => {
-                                  if (component.kind === "image") {
-                                    component.assetId = event.target.value || null;
-                                  }
-                                })
-                              }
-                            >
-                              <option value="">No logo</option>
-                              {assets.data?.map((asset) => (
-                                <option key={asset.id} value={asset.id}>
-                                  {asset.originalName}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          {selectedIsTeamLogo ? (
-                            <label>
-                              Fallback mode
-                              <select
-                                value={selectedImageComponent.teamLogoFallbackMode}
-                                onChange={(event) =>
-                                  patchSelectedComponent((component) => {
-                                    if (component.kind === "image") {
-                                      component.teamLogoFallbackMode =
-                                        event.target.value as ThemeDefinition["components"]["homeTeamLogo"]["teamLogoFallbackMode"];
-                                    }
-                                  })
-                                }
-                              >
-                                <option value="none">Registry only</option>
-                                <option value="eventLogo">Use event logo</option>
-                                <option value="slotFallback">Use slot fallback asset</option>
-                                <option value="slotFallbackThenEventLogo">Use slot fallback, then event logo</option>
-                              </select>
-                            </label>
-                          ) : null}
-                          <label>
-                            Image fit
-                            <select
-                              value={selectedImageComponent.backgroundImageFit}
-                              onChange={(event) =>
-                                patchSelectedComponent((component) => {
-                                  if (component.kind === "image") {
-                                    component.backgroundImageFit = event.target.value as "cover" | "contain" | "stretch";
-                                  }
-                                })
-                              }
-                            >
-                              <option value="cover">cover</option>
-                              <option value="contain">contain</option>
-                              <option value="stretch">stretch</option>
-                            </select>
-                          </label>
-                          <label>
-                            Image position
-                            <select
-                              value={selectedImageComponent.backgroundImagePosition}
-                              onChange={(event) =>
-                                patchSelectedComponent((component) => {
-                                  if (component.kind === "image") {
-                                    component.backgroundImagePosition = event.target.value as "center" | "top" | "bottom" | "left" | "right";
-                                  }
-                                })
-                              }
-                            >
-                              <option value="center">center</option>
-                              <option value="top">top</option>
-                              <option value="bottom">bottom</option>
-                              <option value="left">left</option>
-                              <option value="right">right</option>
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Padding X"
-                            unit="px"
-                            value={selectedImageComponent.paddingX}
-                            onChange={(value) =>
-                              patchSelectedComponent((component) => {
-                                if (component.kind === "image") {
-                                  component.paddingX = value;
-                                }
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Padding Y"
-                            unit="px"
-                            value={selectedImageComponent.paddingY}
-                            onChange={(value) =>
-                              patchSelectedComponent((component) => {
-                                if (component.kind === "image") {
-                                  component.paddingY = value;
-                                }
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Offset X"
-                            unit="px"
-                            value={selectedImageComponent.offsetX}
-                            onChange={(value) =>
-                              patchSelectedComponent((component) => {
-                                if (component.kind === "image") {
-                                  component.offsetX = value;
-                                }
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Offset Y"
-                            unit="px"
-                            value={selectedImageComponent.offsetY}
-                            onChange={(value) =>
-                              patchSelectedComponent((component) => {
-                                if (component.kind === "image") {
-                                  component.offsetY = value;
-                                }
-                              })
-                            }
-                          />
-                          {selectedIsTeamLogo ? <p className="hint">Team logos pull from `/admin/teams` first. Fallback mode decides what happens when no team logo resolves.</p> : null}
-                        </>
-                      ) : null}
-                    </div>
-                  </SectionCard>
-
-                  {editorMode === "advanced" ? (
-                    <>
-                      <SectionCard title="Layout" description="Precise geometry for the selected component." defaultOpen={false}>
-                        <div className="form-grid">
-                          <NumberField label="X position" unit="px" value={selectedEditableComponent.x} onChange={(value) => patchSelectedComponent((component) => (component.x = value))} />
-                          <NumberField label="Y position" unit="px" value={selectedEditableComponent.y} onChange={(value) => patchSelectedComponent((component) => (component.y = value))} />
-                          <NumberField
-                            label="Width"
-                            unit="px"
-                            value={selectedEditableComponent.width}
-                            onChange={(value) => patchSelectedComponent((component) => (component.width = value))}
-                          />
-                          <NumberField
-                            label="Height"
-                            unit="px"
-                            value={selectedEditableComponent.height}
-                            onChange={(value) => patchSelectedComponent((component) => (component.height = value))}
-                          />
-                          <PercentField label="Opacity" value={selectedEditableComponent.opacity} onChange={(value) => patchSelectedComponent((component) => (component.opacity = value))} />
-                          <NumberField
-                            label="Padding X"
-                            unit="px"
-                            value={selectedEditableComponent.paddingX}
-                            onChange={(value) => patchSelectedComponent((component) => (component.paddingX = value))}
-                          />
-                          <NumberField
-                            label="Padding Y"
-                            unit="px"
-                            value={selectedEditableComponent.paddingY}
-                            onChange={(value) => patchSelectedComponent((component) => (component.paddingY = value))}
-                          />
-                          <NumberField
-                            label="Offset X"
-                            unit="px"
-                            value={selectedEditableComponent.offsetX}
-                            onChange={(value) => patchSelectedComponent((component) => (component.offsetX = value))}
-                          />
-                          <NumberField
-                            label="Offset Y"
-                            unit="px"
-                            value={selectedEditableComponent.offsetY}
-                            onChange={(value) => patchSelectedComponent((component) => (component.offsetY = value))}
-                          />
-                        </div>
-                      </SectionCard>
-
-                      <SectionCard title="Surface" description="Refine borders, overlays, and image fitting." defaultOpen={false}>
-                        <div className="form-grid">
-                          <ColorField
-                            label="Border color"
-                            value={selectedEditableComponent.borderColor}
-                            onChange={(value) => patchSelectedComponent((component) => (component.borderColor = value))}
-                          />
-                          <NumberField
-                            label="Border width"
-                            unit="px"
-                            value={selectedEditableComponent.borderWidth}
-                            onChange={(value) => patchSelectedComponent((component) => (component.borderWidth = value))}
-                          />
-                          <NumberField
-                            label="Border radius"
-                            unit="px"
-                            value={selectedEditableComponent.borderRadius}
-                            onChange={(value) => patchSelectedComponent((component) => (component.borderRadius = value))}
-                          />
-                          <label>
-                            Background fit
-                            <select
-                              value={selectedEditableComponent.backgroundImageFit}
-                              onChange={(event) =>
-                                patchSelectedComponent(
-                                  (component) => (component.backgroundImageFit = event.target.value as "cover" | "contain" | "stretch")
-                                )
-                              }
-                            >
-                              <option value="cover">cover</option>
-                              <option value="contain">contain</option>
-                              <option value="stretch">stretch</option>
-                            </select>
-                          </label>
-                          <label>
-                            Background position
-                            <select
-                              value={selectedEditableComponent.backgroundImagePosition}
-                              onChange={(event) =>
-                                patchSelectedComponent(
-                                  (component) =>
-                                    (component.backgroundImagePosition = event.target.value as
-                                      | "center"
-                                      | "top"
-                                      | "bottom"
-                                      | "left"
-                                      | "right")
-                                )
-                              }
-                            >
-                              <option value="center">center</option>
-                              <option value="top">top</option>
-                              <option value="bottom">bottom</option>
-                              <option value="left">left</option>
-                              <option value="right">right</option>
-                            </select>
-                          </label>
-                          <ColorField
-                            label="Overlay color"
-                            value={selectedEditableComponent.backgroundOverlayColor}
-                            onChange={(value) => patchSelectedComponent((component) => (component.backgroundOverlayColor = value))}
-                          />
-                          <PercentField label="Overlay opacity" value={selectedEditableComponent.backgroundOverlayOpacity} onChange={(value) => patchSelectedComponent((component) => (component.backgroundOverlayOpacity = value))} />
-                          <TextField
-                            label="Shadow"
-                            value={selectedEditableComponent.shadow}
-                            onChange={(value) => patchSelectedComponent((component) => (component.shadow = value))}
-                          />
-                        </div>
-                      </SectionCard>
-
-                      {selectedTextComponent ? (
-                        <SectionCard title="Typography" description="Fine-tune the text treatment." defaultOpen={false}>
-                          <div className="form-grid">
-                            <NumberField
-                              label="Font weight"
-                              value={selectedTextComponent.fontWeight}
-                              onChange={(value) => patchSelectedTextComponent((component) => (component.fontWeight = value))}
-                            />
-                            <NumberField
-                              label="Letter spacing"
-                              unit="px"
-                              value={selectedTextComponent.letterSpacing}
-                              step={0.1}
-                              onChange={(value) => patchSelectedTextComponent((component) => (component.letterSpacing = value))}
-                            />
-                            <NumberField
-                              label="Line height"
-                              value={selectedTextComponent.lineHeight}
-                              step={0.1}
-                              onChange={(value) => patchSelectedTextComponent((component) => (component.lineHeight = value))}
-                            />
-                          </div>
-                        </SectionCard>
-                      ) : null}
-                    </>
-                  ) : null}
-                  </>
+                  <ThemeComponentInspector
+                    theme={theme}
+                    patchTheme={patchTheme}
+                    selectedSlot={selectedSlot}
+                    selectedSummaryLabel={selectedSummaryLabel}
+                    selectionModeDetail={selectionModeDetail}
+                    selectAllMode={selectAllMode}
+                    selectedEditableComponent={selectedEditableComponent}
+                    selectedSlotConfig={selectedSlotConfig}
+                    selectedShortLabel={selectedShortLabel}
+                    patchSelectedComponent={patchSelectedComponent}
+                    canBringBackward={canBringBackward}
+                    canBringForward={canBringForward}
+                    reorderSelectedComponent={reorderSelectedComponent}
+                    selectedMirroredPair={selectedMirroredPair}
+                    mirrorSelectedPieceLayout={mirrorSelectedPieceLayout}
+                    bringSelectedIntoView={bringSelectedIntoView}
+                    resetSelectedPieceToSaved={resetSelectedPieceToSaved}
+                    savedSnapshot={savedSnapshot}
+                    selectedTextComponent={selectedTextComponent}
+                    patchSelectedTextComponent={patchSelectedTextComponent}
+                    selectedImageComponent={selectedImageComponent}
+                    selectedLogoContext={selectedLogoContext}
+                    assets={assets.data ?? []}
+                    onUploadAsset={(file, target) => void uploadAssetIntoTarget(file, target)}
+                  />
                 ) : (
                   <SectionCard title="Component" description="Pick a scoreboard block from the structure cards or directly from the canvas." defaultOpen>
                     <p className="hint">Nothing selected yet.</p>
@@ -2967,7 +2485,13 @@ export function ThemeEditorPage() {
                     <NumberField label="Height" unit="px" value={theme.teamEventOverlay.general.height} onChange={(value) => patchOverlayGeneral((general) => (general.height = value))} />
                     <NumberField label="Padding" unit="px" value={theme.teamEventOverlay.general.padding} onChange={(value) => patchOverlayGeneral((general) => (general.padding = value))} />
                     <NumberField label="Border width" unit="px" value={theme.teamEventOverlay.general.borderWidth} onChange={(value) => patchOverlayGeneral((general) => (general.borderWidth = value))} />
-                    <NumberField label="Border radius" unit="px" value={theme.teamEventOverlay.general.borderRadius} onChange={(value) => patchOverlayGeneral((general) => (general.borderRadius = value))} />
+                    <label style={{ display: "block", marginTop: "0.5rem", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", color: "var(--md-text-secondary)" }}>Corner Radius (px)</label>
+                    <div className="compact-grid" style={{ marginTop: "0.25rem", marginBottom: "0.5rem" }}>
+                      <NumberField label="Top L" value={theme.teamEventOverlay.general.borderRadius[0]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[0] = val))} />
+                      <NumberField label="Top R" value={theme.teamEventOverlay.general.borderRadius[1]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[1] = val))} />
+                      <NumberField label="Btm L" value={theme.teamEventOverlay.general.borderRadius[3]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[3] = val))} />
+                      <NumberField label="Btm R" value={theme.teamEventOverlay.general.borderRadius[2]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[2] = val))} />
+                    </div>
                     <ColorField label="Border color" value={theme.teamEventOverlay.general.borderColor} onChange={(value) => patchOverlayGeneral((general) => (general.borderColor = value))} />
                     <label>
                       Font family
@@ -3010,6 +2534,10 @@ export function ThemeEditorPage() {
                 </SectionCard>
                 <SectionCard title="Concede Overlay" description="Text and surface styling specific to concede events." defaultOpen>
                   <div className="form-grid">
+                    <label className="checkbox">
+                      <input type="checkbox" checked={theme.teamEventOverlay.concede.enabled} onChange={(event) => patchConcede((concede) => (concede.enabled = event.target.checked))} />
+                      Enabled
+                    </label>
                     <TextField label="Text" value={theme.teamEventOverlay.concede.text} onChange={(value) => patchConcede((concede) => (concede.text = value))} />
                     <ColorField label="Text color" value={theme.teamEventOverlay.concede.color} onChange={(value) => patchConcede((concede) => (concede.color = value))} />
                     <ColorField label="Background" value={theme.teamEventOverlay.concede.backgroundColor} onChange={(value) => patchConcede((concede) => (concede.backgroundColor = value))} />
@@ -3045,6 +2573,10 @@ export function ThemeEditorPage() {
                 </SectionCard>
                 <SectionCard title="Base Overlay" description="Text and surface styling specific to base events." defaultOpen={false}>
                   <div className="form-grid">
+                    <label className="checkbox">
+                      <input type="checkbox" checked={theme.teamEventOverlay.base.enabled} onChange={(event) => patchBaseOverlay((base) => (base.enabled = event.target.checked))} />
+                      Enabled
+                    </label>
                     <TextField label="Text" value={theme.teamEventOverlay.base.text} onChange={(value) => patchBaseOverlay((base) => (base.text = value))} />
                     <ColorField label="Text color" value={theme.teamEventOverlay.base.color} onChange={(value) => patchBaseOverlay((base) => (base.color = value))} />
                     <ColorField label="Background" value={theme.teamEventOverlay.base.backgroundColor} onChange={(value) => patchBaseOverlay((base) => (base.backgroundColor = value))} />
@@ -3080,6 +2612,10 @@ export function ThemeEditorPage() {
                 </SectionCard>
                 <SectionCard title="Winner Overlay" description="Text and surface styling specific to winner reveal." defaultOpen={false}>
                   <div className="form-grid">
+                    <label className="checkbox">
+                      <input type="checkbox" checked={theme.teamEventOverlay.winner.enabled} onChange={(event) => patchWinnerOverlay((winner) => (winner.enabled = event.target.checked))} />
+                      Enabled
+                    </label>
                     <TextField label="Text" value={theme.teamEventOverlay.winner.text} onChange={(value) => patchWinnerOverlay((winner) => (winner.text = value))} />
                     <ColorField label="Text color" value={theme.teamEventOverlay.winner.color} onChange={(value) => patchWinnerOverlay((winner) => (winner.color = value))} />
                     <ColorField label="Background" value={theme.teamEventOverlay.winner.backgroundColor} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundColor = value))} />

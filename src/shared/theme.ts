@@ -24,13 +24,14 @@ export const fontFamilies = [
 
 export const backgroundImageFitValues = ["cover", "contain", "stretch"] as const;
 export const backgroundImagePositionValues = ["center", "top", "bottom", "left", "right"] as const;
+export const backgroundImageModeValues = ["asset", "homeTeamLogo", "awayTeamLogo"] as const;
 export const teamLogoFallbackModeValues = ["none", "eventLogo", "slotFallback", "slotFallbackThenEventLogo"] as const;
 export const concedePositionValues = ["above", "overlapping-top"] as const;
 export const concedeAnimationValues = ["slide-horizontal", "slide-vertical", "none"] as const;
 export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ribbon"] as const;
 export const teamOverlayFollowTargetValues = ["none", "logo", "name"] as const;
 export const centerSecondaryModeValues = ["timer", "staticText", "hidden"] as const;
-export const centerSecondaryTransitionValues = ["none", "fade", "slide-up"] as const;
+export const centerSecondaryTransitionValues = ["none", "fade", "slide-up", "slide-left", "slide-right"] as const;
 
 function migrateLegacyFrame(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -44,6 +45,11 @@ function migrateLegacyFrame(input: unknown) {
     ...candidate,
     paddingX: candidate.paddingX ?? legacyPadding,
     paddingY: candidate.paddingY ?? legacyPadding,
+    borderRadius: Array.isArray(candidate.borderRadius)
+      ? candidate.borderRadius
+      : typeof candidate.borderRadius === "number"
+        ? [candidate.borderRadius, candidate.borderRadius, candidate.borderRadius, candidate.borderRadius]
+        : [0, 0, 0, 0],
     offsetX: candidate.offsetX ?? 0,
     offsetY: candidate.offsetY ?? 0
   };
@@ -59,13 +65,14 @@ const commonFrameBaseSchema = z.object({
   opacity: z.number().min(0).max(1),
   backgroundColor: z.string(),
   backgroundImageAssetId: z.string().nullable().default(null),
+  backgroundImageMode: z.enum(backgroundImageModeValues).default("asset"),
   backgroundImageFit: z.enum(backgroundImageFitValues).default("cover"),
   backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
   backgroundOverlayColor: z.string().default("#000000"),
   backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
   borderColor: z.string(),
   borderWidth: z.number().min(0),
-  borderRadius: z.number().min(0),
+  borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]),
   paddingX: z.number().min(0),
   paddingY: z.number().min(0),
   offsetX: z.number(),
@@ -136,7 +143,7 @@ const teamEventOverlayGeneralSchema = z.object({
   backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
   borderColor: z.string().default("#ffffff"),
   borderWidth: z.number().min(0).default(2),
-  borderRadius: z.number().min(0).default(12),
+  borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([12, 12, 12, 12]),
   fontFamily: z.enum(fontFamilies).default("Oswald"),
   fontSize: z.number().positive().default(28),
   fontWeight: z.number().min(100).max(900).default(700),
@@ -149,6 +156,7 @@ const teamEventOverlayGeneralSchema = z.object({
 });
 
 const teamEventOverlayEventSchema = z.object({
+  enabled: z.boolean().default(true),
   text: z.string(),
   color: z.string(),
   backgroundColor: z.string(),
@@ -189,21 +197,27 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
     const nestedCandidate = candidate as {
       general?: Record<string, unknown>;
     };
-    if (
-      nestedCandidate.general &&
-      "followLogoSize" in nestedCandidate.general
-    ) {
-      const currentFollowTarget = nestedCandidate.general.followTarget;
+    if (nestedCandidate.general) {
+      const general = { ...nestedCandidate.general };
+      
+      if ("followLogoSize" in general) {
+        const currentFollowTarget = general.followTarget;
+        general.followTarget =
+          general.followLogoSize === true &&
+          (currentFollowTarget === undefined || currentFollowTarget === "none")
+            ? "logo"
+            : currentFollowTarget ?? "none";
+      }
+
+      if (typeof general.borderRadius === "number") {
+        general.borderRadius = [general.borderRadius, general.borderRadius, general.borderRadius, general.borderRadius];
+      } else if (!Array.isArray(general.borderRadius)) {
+        general.borderRadius = [12, 12, 12, 12];
+      }
+
       return {
         ...candidate,
-        general: {
-          ...nestedCandidate.general,
-          followTarget:
-            nestedCandidate.general.followLogoSize === true &&
-            (currentFollowTarget === undefined || currentFollowTarget === "none")
-              ? "logo"
-              : currentFollowTarget ?? "none"
-        }
+        general
       };
     }
     return candidate;
@@ -249,8 +263,7 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
     return candidate;
   }
 
-  return {
-    general: {
+  const general = {
       enabled: candidate.enabled,
       placementMode: candidate.placementMode,
       position: candidate.position,
@@ -262,7 +275,11 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
       backgroundImagePosition: candidate.backgroundImagePosition,
       borderColor: candidate.borderColor,
       borderWidth: candidate.borderWidth,
-      borderRadius: candidate.borderRadius,
+      borderRadius: Array.isArray(candidate.borderRadius)
+        ? candidate.borderRadius
+        : typeof candidate.borderRadius === "number"
+          ? [candidate.borderRadius, candidate.borderRadius, candidate.borderRadius, candidate.borderRadius]
+          : [12, 12, 12, 12],
       fontFamily: candidate.fontFamily,
       fontSize: candidate.fontSize,
       fontWeight: candidate.fontWeight,
@@ -272,24 +289,53 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
       animationPreset: candidate.animationPreset,
       durationMs: candidate.durationMs,
       followTarget: candidate.followTarget ?? (candidate.followLogoSize === true ? "logo" : "none")
-    },
-    concede: {
-      text: candidate.text,
-      color: candidate.color,
-      backgroundColor: candidate.backgroundColor,
-      backgroundImageAssetId: candidate.backgroundImageAssetId,
-      backgroundOverlayColor: candidate.backgroundOverlayColor,
-      backgroundOverlayOpacity: candidate.backgroundOverlayOpacity
-    },
-    base: {
-      text: candidate.baseText,
-      color: candidate.baseColor,
-      backgroundColor: candidate.baseBackgroundColor,
-      backgroundImageAssetId: candidate.baseBackgroundImageAssetId,
-      backgroundOverlayColor: candidate.baseBackgroundOverlayColor,
-      backgroundOverlayOpacity: candidate.baseBackgroundOverlayOpacity
+    };
+    const result: Record<string, unknown> = {
+      general,
+      concede: {
+        enabled: candidate.enabled ?? true, // Fallback to general enabled
+        text: candidate.text,
+        color: candidate.color,
+        backgroundColor: candidate.backgroundColor,
+        backgroundImageAssetId: candidate.backgroundImageAssetId,
+        backgroundOverlayColor: candidate.backgroundOverlayColor,
+        backgroundOverlayOpacity: candidate.backgroundOverlayOpacity
+      },
+      base: {
+        enabled: candidate.enabled ?? true,
+        text: candidate.baseText,
+        color: candidate.baseColor,
+        backgroundColor: candidate.baseBackgroundColor,
+        backgroundImageAssetId: candidate.baseBackgroundImageAssetId,
+        backgroundOverlayColor: candidate.baseBackgroundOverlayColor,
+        backgroundOverlayOpacity: candidate.baseBackgroundOverlayOpacity
+      }
+    };
+
+    if ("winner" in candidate && candidate.winner && typeof candidate.winner === "object") {
+      const winnerCandidate = candidate.winner as Record<string, unknown>;
+      result.winner = {
+        enabled: winnerCandidate.enabled ?? true,
+        text: winnerCandidate.text,
+        color: winnerCandidate.color,
+        backgroundColor: winnerCandidate.backgroundColor,
+        backgroundImageAssetId: winnerCandidate.backgroundImageAssetId,
+        backgroundOverlayColor: winnerCandidate.backgroundOverlayColor,
+        backgroundOverlayOpacity: winnerCandidate.backgroundOverlayOpacity
+      };
+    } else {
+      result.winner = {
+        enabled: true,
+        text: undefined,
+        color: undefined,
+        backgroundColor: undefined,
+        backgroundImageAssetId: undefined,
+        backgroundOverlayColor: undefined,
+        backgroundOverlayOpacity: undefined
+      };
     }
-  };
+
+    return result;
 }
 
 export const teamEventOverlaySchema = z.preprocess(migrateLegacyTeamEventOverlay, nestedTeamEventOverlaySchema);

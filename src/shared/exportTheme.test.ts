@@ -139,7 +139,7 @@ describe("createThemeExportPackage", () => {
       baseBackgroundOverlayOpacity: 0.25,
       borderColor: "#ffffff",
       borderWidth: 4,
-      borderRadius: 9,
+      borderRadius: [9, 9, 9, 9],
       color: "#ffeeee",
       baseColor: "#ddff00",
       fontFamily: "Oswald",
