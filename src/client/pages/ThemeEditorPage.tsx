@@ -3,10 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
 import { builtinThemes } from "../../shared/builtinThemes";
-import { fontFamilies } from "../../shared/theme";
+import { componentIds, fontFamilies } from "../../shared/theme";
 import type { ComponentId, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
-import { AdminPageFrame, AdminPageHeader, AdminStatTile, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
+import { AdminPageFrame, AdminPageHeader, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
 
 type EditorMode = "basic" | "advanced";
 type InspectorView = "theme" | "component" | "concede";
@@ -18,7 +18,6 @@ type PreviewEventMode = "live" | NormalizedLiveState["teamEvent"];
 type PreviewSwitchMode = "live" | "0" | "1";
 type PreviewPresetId = "live" | "game" | "break" | "towelHome" | "towelAway" | "baseHome" | "baseAway";
 const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-const nudgePresets = [1, 5, 10] as const;
 const safeAreaTopInset = 54;
 const defaultTopInset = 24;
 const previewDrawerStorageKey = "pbresults.themeEditor.previewDrawerOpen";
@@ -89,6 +88,27 @@ const slotConfig: Record<SlotId, { title: string; description: string; ids: Comp
     ids: awayBlockIds
   }
 };
+
+const editorRailGroups: Array<{ id: string; title: string; description: string; ids: ComponentId[] }> = [
+  {
+    id: "left",
+    title: "Left Team",
+    description: "Logo, name, and score on the left side.",
+    ids: homeBlockIds
+  },
+  {
+    id: "center",
+    title: "Center",
+    description: "Primary clock, secondary line, and event logo.",
+    ids: centerBlockIds
+  },
+  {
+    id: "right",
+    title: "Right Team",
+    description: "Score, name, and logo on the right side.",
+    ids: awayBlockIds
+  }
+];
 
 const concedePresets = {
   stampDark: {
@@ -393,6 +413,35 @@ function mirrorX(canvasWidth: number, x: number, width: number) {
   return canvasWidth - x - width;
 }
 
+function mirrorTextAlign(value: "left" | "center" | "right") {
+  if (value === "left") {
+    return "right";
+  }
+  if (value === "right") {
+    return "left";
+  }
+  return "center";
+}
+
+function mirrorComponentLayout(
+  canvasWidth: number,
+  sourceComponent: ThemeDefinition["components"][ComponentId],
+  targetComponent: ThemeDefinition["components"][ComponentId]
+) {
+  targetComponent.x = mirrorX(canvasWidth, sourceComponent.x, sourceComponent.width);
+  targetComponent.y = sourceComponent.y;
+  targetComponent.width = sourceComponent.width;
+  targetComponent.height = sourceComponent.height;
+  targetComponent.paddingX = sourceComponent.paddingX;
+  targetComponent.paddingY = sourceComponent.paddingY;
+  targetComponent.offsetX = -sourceComponent.offsetX;
+  targetComponent.offsetY = sourceComponent.offsetY;
+
+  if (sourceComponent.kind === "text" && targetComponent.kind === "text") {
+    targetComponent.textAlign = mirrorTextAlign(sourceComponent.textAlign);
+  }
+}
+
 function mirroredPairForComponent(id: ComponentId) {
   return mirroredComponentPairs.find(([leftId, rightId]) => leftId === id || rightId === id) ?? null;
 }
@@ -409,6 +458,58 @@ function resolveLayoutScopeEntries(
   const all = ids.map((id) => ({ id, component: draft.components[id] }));
   const visible = all.filter((entry) => entry.component.visible);
   return visible.length > 0 ? visible : all;
+}
+
+const componentOrderIndex: Record<ComponentId, number> = componentIds.reduce(
+  (accumulator, id, index) => {
+    accumulator[id] = index;
+    return accumulator;
+  },
+  {} as Record<ComponentId, number>
+);
+
+function getOrderedComponentIds(theme: ThemeDefinition) {
+  return [...componentIds].sort((left, right) => {
+    const zIndexDifference = theme.components[left].zIndex - theme.components[right].zIndex;
+    if (zIndexDifference !== 0) {
+      return zIndexDifference;
+    }
+    return componentOrderIndex[left] - componentOrderIndex[right];
+  });
+}
+
+function reorderComponentStack(
+  draft: ThemeDefinition,
+  selectedId: ComponentId,
+  action: "bringForward" | "bringBackward" | "sendToFront" | "sendToBack"
+) {
+  const orderedIds = getOrderedComponentIds(draft);
+  const currentIndex = orderedIds.indexOf(selectedId);
+  if (currentIndex === -1) {
+    return false;
+  }
+
+  const targetIndex =
+    action === "bringForward"
+      ? Math.min(orderedIds.length - 1, currentIndex + 1)
+      : action === "bringBackward"
+        ? Math.max(0, currentIndex - 1)
+        : action === "sendToFront"
+          ? orderedIds.length - 1
+          : 0;
+
+  if (targetIndex === currentIndex) {
+    return false;
+  }
+
+  orderedIds.splice(currentIndex, 1);
+  orderedIds.splice(targetIndex, 0, selectedId);
+
+  orderedIds.forEach((id, index) => {
+    draft.components[id].zIndex = index + 1;
+  });
+
+  return true;
 }
 
 export function ThemeEditorPage() {
@@ -431,7 +532,6 @@ export function ThemeEditorPage() {
   const [inspectorView, setInspectorView] = useState<InspectorView>("component");
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [selectAllMode, setSelectAllMode] = useState(false);
-  const [nudgeStep, setNudgeStep] = useState<(typeof nudgePresets)[number]>(1);
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [previewDrawerOpen, setPreviewDrawerOpen] = useState(() => {
     if (typeof window === "undefined") {
@@ -675,6 +775,10 @@ export function ThemeEditorPage() {
       : null;
   const selectedMirroredPair = selected ? mirroredPairForComponent(selected) : null;
   const hasUnsavedChanges = savedSnapshot ? !sameTheme(savedSnapshot, theme) : false;
+  const orderedComponentIds = theme ? getOrderedComponentIds(theme) : [];
+  const selectedStackIndex = selected ? orderedComponentIds.indexOf(selected) : -1;
+  const canBringBackward = selectedStackIndex > 0;
+  const canBringForward = selectedStackIndex >= 0 && selectedStackIndex < orderedComponentIds.length - 1;
 
   function sameTheme(left: ThemeDefinition, right: ThemeDefinition) {
     return JSON.stringify(left) === JSON.stringify(right);
@@ -875,6 +979,16 @@ export function ThemeEditorPage() {
     });
   }
 
+  function reorderSelectedComponent(action: "bringForward" | "bringBackward" | "sendToFront" | "sendToBack") {
+    if (!themeResource.data || !selected) {
+      return;
+    }
+
+    patchTheme((draft) => {
+      reorderComponentStack(draft, selected, action);
+    });
+  }
+
   function centerAllComponents() {
     if (!themeResource.data) {
       return;
@@ -1067,10 +1181,7 @@ export function ThemeEditorPage() {
         const targetId = direction === "leftToRight" ? rightId : leftId;
         const sourceComponent = draft.components[sourceId];
         const targetComponent = draft.components[targetId];
-        targetComponent.x = mirrorX(draft.canvas.width, sourceComponent.x, sourceComponent.width);
-        targetComponent.y = sourceComponent.y;
-        targetComponent.width = sourceComponent.width;
-        targetComponent.height = sourceComponent.height;
+        mirrorComponentLayout(draft.canvas.width, sourceComponent, targetComponent);
       }
     });
 
@@ -1097,10 +1208,7 @@ export function ThemeEditorPage() {
     patchTheme((draft) => {
       const sourceComponent = draft.components[sourceId];
       const targetComponent = draft.components[targetId];
-      targetComponent.x = mirrorX(draft.canvas.width, sourceComponent.x, sourceComponent.width);
-      targetComponent.y = sourceComponent.y;
-      targetComponent.width = sourceComponent.width;
-      targetComponent.height = sourceComponent.height;
+      mirrorComponentLayout(draft.canvas.width, sourceComponent, targetComponent);
     });
   }
 
@@ -1461,7 +1569,7 @@ export function ThemeEditorPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMenu, future, history, nudgeStep, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
+  }, [activeMenu, future, history, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
 
   if (!theme) {
     return <section className="panel"><FieldHint>Loading theme...</FieldHint></section>;
@@ -1475,6 +1583,14 @@ export function ThemeEditorPage() {
         : selected
           ? `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}`
           : "No piece selected";
+  const selectedIdSet = new Set(selectedIds);
+  const selectionModeDetail = selectAllMode
+    ? "Global layout scope"
+    : selectedIds.length > 1
+      ? "Multi-selection active"
+      : selected
+        ? "Single-piece mode"
+        : "Choose a piece from the structure rail or canvas.";
 
   return (
     <AdminPageFrame className="panel-stack editor-layout">
@@ -1482,177 +1598,228 @@ export function ThemeEditorPage() {
         <AdminPageHeader
           eyebrow="Theme Editor"
           title={theme.name}
-          description={hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : "No pending changes"}
+          description={
+            <div className="editor-header-status">
+              {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : <span>Ready to publish</span>}
+              <span>{theme.builtin ? "Built-in theme" : "Custom theme"}</span>
+            </div>
+          }
           actions={(
-            <div className="editor-header-actions">
-            <div className="editor-header-cluster">
-              <div className="segmented-control">
-                <button
-                  className={editorMode === "basic" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setEditorMode("basic")}
-                  type="button"
-                >
-                  Basic
-                </button>
-                <button
-                  className={editorMode === "advanced" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setEditorMode("advanced")}
-                  type="button"
-                >
-                  Advanced
-                </button>
-              </div>
-            </div>
-
-            <div className="editor-header-cluster editor-header-cluster--utility">
-              <details className="row-action-menu row-action-menu--header" open={activeMenu === "header-canvas-tools"}>
-                <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("header-canvas-tools"); }}>Canvas tools</summary>
-                <div className="row-action-menu-list">
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { undo(); closeMenus(); }} disabled={history.length <= 1}>
-                    Undo
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { redo(); closeMenus(); }} disabled={future.length === 0}>
-                    Redo
-                  </button>
-                  <label className="inline-select">
-                    <FieldHint>Zoom</FieldHint>
-                    <select value={String(canvasZoom)} onChange={(event) => setCanvasZoom(Number(event.target.value))}>
-                      {zoomPresets.map((preset) => (
-                        <option key={preset} value={String(preset)}>
-                          {Math.round(preset * 100)}%
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { setCanvasZoom(1); closeMenus(); }} disabled={canvasZoom === 1}>
-                    Reset zoom
-                  </button>
-                  <div className="row-action-menu-note">
-                    <strong>Align</strong>
-                  </div>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("left")}>
-                    Align left
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerX")}>
-                    Align center X
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("right")}>
-                    Align right
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("top")}>
-                    Align top
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerY")}>
-                    Align center Y
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("bottom")}>
-                    Align bottom
-                  </button>
-                  <div className="row-action-menu-note">
-                    <strong>Distribute</strong>
-                  </div>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("horizontal")}>
-                    Distribute horizontal
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("vertical")}>
-                    Distribute vertical
-                  </button>
-                  <div className="row-action-menu-note">
-                    <strong>Match size</strong>
-                    <span>Uses selected piece as reference when available.</span>
-                  </div>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("width")}>
-                    Match width
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("height")}>
-                    Match height
-                  </button>
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("both")}>
-                    Match width + height
-                  </button>
-                </div>
-              </details>
-            </div>
-
-            <div className="editor-header-cluster editor-header-cluster--primary">
+            <div className="editor-header-actions editor-header-actions--compact">
+              <Button variant="secondary" onClick={() => navigate("/admin/themes")}>
+                Back
+              </Button>
+              <Button variant="secondary" onClick={undo} disabled={history.length <= 1}>
+                Undo
+              </Button>
+              <Button variant="secondary" onClick={redo} disabled={future.length === 0}>
+                Redo
+              </Button>
               <Button variant="secondary" onClick={() => void save()}>
                 {saving ? "Saving…" : "Save"}
               </Button>
               <Button onClick={() => void publish()}>Publish</Button>
-              <details className="row-action-menu row-action-menu--header" open={activeMenu === "header-more"}>
-                <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("header-more"); }}>More</summary>
-                <div className="row-action-menu-list">
-                  <button className={buttonVariants({ variant: "secondary" })} onClick={() => { navigate("/admin/themes"); closeMenus(); }}>
-                    Back
-                  </button>
-                  {theme.builtin ? (
-                    <button className={buttonVariants({ variant: "secondary" })} onClick={() => { void saveAsCopy(); closeMenus(); }}>
-                      {saving ? "Saving…" : "Save as Copy"}
-                    </button>
-                  ) : null}
-                  <a className={buttonVariants({ variant: "secondary" })} href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer" onClick={closeMenus}>
-                    Open preview
-                  </a>
-                </div>
-              </details>
             </div>
-          </div>
           )}
         />
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <AdminStatTile
-            tone={selectAllMode || selectedIds.length > 0 ? "info" : "neutral"}
-            label="Selection"
-            value={selectedSummaryLabel}
-            detail={selectAllMode ? "Global layout scope" : selectedIds.length > 1 ? "Multi-selection active" : "Single-piece mode"}
-          />
-          <AdminStatTile
-            tone={previewEnabled ? "success" : "neutral"}
-            label="Preview"
-            value={previewEnabled ? `${previewLive.period} · ${previewLive.teamEvent}` : "Live feed"}
-            detail={previewEnabled ? "Simulator state enabled" : "Using live feed state"}
-          />
-          <AdminStatTile
-            tone={editorMode === "advanced" ? "warning" : "neutral"}
-            label="Editing mode"
-            value={editorMode === "advanced" ? "Advanced" : "Basic"}
-            detail={editorMode === "advanced" ? "Power tooling exposed" : "Focused workflow"}
-          />
-        </div>
-
         <div className="editor-workspace">
-          <div className="canvas-preview-column">
-            <div className="canvas-preview-wrapper">
-            <ThemeCanvasEditor
-              theme={theme}
-              live={previewLive}
-              assets={assets.data ?? []}
-              selectedId={selected}
-              selectedIds={selectedIds}
-              selectAll={selectAllMode}
-              zoom={canvasZoom}
-              onZoomChange={setCanvasZoom}
-              onSelect={selectComponent}
-              onMarqueeSelect={selectComponents}
-              onSelectAll={selectAllComponents}
-              onUpdate={updateTheme}
-            />
-            </div>
-            <div className="canvas-below-drawers">
-              <details
-                className="canvas-preview-disclosure"
-                open={previewDrawerOpen}
-                onToggle={(event) => {
-                  const isOpen = event.currentTarget.open;
-                  setPreviewDrawerOpen(isOpen);
-                  if (!isOpen) {
-                    setActiveMenu(null);
-                  }
-                }}
-              >
-                <summary className={buttonVariants({ variant: "secondary" })}>Preview simulator</summary>
-                <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
+          <aside className="editor-utility-rail">
+            <section className="editor-sidebar-card">
+              <div className="editor-sidebar-card-header">
+                <div>
+                  <p className="editor-sidebar-kicker">Structure</p>
+                  <h3>Components</h3>
+                </div>
+                <Badge variant={hasUnsavedChanges ? "warning" : "default"}>
+                  {hasUnsavedChanges ? "Draft" : "Saved"}
+                </Badge>
+              </div>
+              <div className="editor-sidebar-card-body">
+                <div className="editor-sidebar-actions editor-sidebar-actions--tight">
+                  <button
+                    type="button"
+                    className={selectAllMode ? "secondary-button active-utility" : "secondary-button"}
+                    onClick={selectAllComponents}
+                  >
+                    Select all
+                  </button>
+                  <button type="button" className="secondary-button" onClick={centerAllComponents}>
+                    Center all
+                  </button>
+                </div>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={theme.components.homeTeamLogo.visible}
+                    onChange={(event) =>
+                      patchTheme((draft) => {
+                        draft.components.homeTeamLogo.visible = event.target.checked;
+                        draft.components.awayTeamLogo.visible = event.target.checked;
+                      })
+                    }
+                  />
+                  Show team logos on both sides
+                </label>
+                <div className="component-rail">
+                  {editorRailGroups.map((group) => (
+                    <section key={group.id} className="component-rail-group">
+                      <header className="component-rail-group-header">
+                        <strong>{group.title}</strong>
+                      </header>
+                      <div className="component-rail-list">
+                        {group.ids.map((id) => {
+                          const component = theme.components[id];
+                          const isActive = selectedIdSet.has(id) || (selected === id && selectedIds.length === 0);
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              className={
+                                isActive
+                                  ? "component-rail-item component-rail-item--active"
+                                  : "component-rail-item"
+                              }
+                              onClick={() => selectComponent(id)}
+                            >
+                              <span className="component-rail-item-main">
+                                <strong>{componentLabels[id]}</strong>
+                              </span>
+                              <span className={component.visible ? "component-rail-visibility" : "component-rail-visibility component-rail-visibility--muted"}>
+                                {component.visible ? "Visible" : "Hidden"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </aside>
+
+          <div className="editor-canvas-column">
+            <div className="canvas-preview-column">
+              <div className="canvas-preview-wrapper">
+                <ThemeCanvasEditor
+                  theme={theme}
+                  live={previewLive}
+                  assets={assets.data ?? []}
+                  selectedId={selected}
+                  selectedIds={selectedIds}
+                  selectAll={selectAllMode}
+                  zoom={canvasZoom}
+                  onZoomChange={setCanvasZoom}
+                  onSelect={selectComponent}
+                  onMarqueeSelect={selectComponents}
+                  onSelectAll={selectAllComponents}
+                  onUpdate={updateTheme}
+                />
+              </div>
+              <div className="canvas-below-drawers">
+                <details className="canvas-arrange-disclosure">
+                  <summary className={buttonVariants({ variant: "secondary" })}>Arrange tools</summary>
+                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor arrange tools">
+                    <label className="inline-select">
+                      <span className="hint">Zoom</span>
+                      <select value={String(canvasZoom)} onChange={(event) => setCanvasZoom(Number(event.target.value))}>
+                        {zoomPresets.map((preset) => (
+                          <option key={preset} value={String(preset)}>
+                            {Math.round(preset * 100)}%
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => setCanvasZoom(1)} disabled={canvasZoom === 1}>
+                      Reset zoom
+                    </button>
+                    <a
+                      className={buttonVariants({ variant: "secondary" })}
+                      href={`/overlay/preview/${theme.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open preview
+                    </a>
+                    {theme.builtin ? (
+                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => void saveAsCopy()}>
+                        {saving ? "Saving…" : "Save as Copy"}
+                      </button>
+                    ) : null}
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("left")}>
+                      Align left
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerX")}>
+                      Center X
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("right")}>
+                      Align right
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("top")}>
+                      Align top
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerY")}>
+                      Center Y
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("bottom")}>
+                      Align bottom
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("horizontal")}>
+                      Distribute horizontal
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("vertical")}>
+                      Distribute vertical
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("width")}>
+                      Match width
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("height")}>
+                      Match height
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("both")}>
+                      Match both
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("leftToRight")}>
+                      Sync left to right
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("rightToLeft")}>
+                      Sync right to left
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("leftToRight")}>
+                      Mirror left layout
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("rightToLeft")}>
+                      Mirror right layout
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={resetSelectedSlotToSaved} disabled={!savedSnapshot}>
+                      Reset slot
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => applyLayoutPreset(builtinThemes[0].id)}>
+                      Apply {builtinThemes[0].name}
+                    </button>
+                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => applyLayoutPreset(builtinThemes[1].id)}>
+                      Apply {builtinThemes[1].name}
+                    </button>
+                    <div className="row-action-menu-note">
+                      <strong>Guide</strong>
+                      <p>Sync copies layout, style, visibility, and assets. Mirror copies frame layout and flips left/right spacing.</p>
+                    </div>
+                  </div>
+                </details>
+                <details
+                  className="canvas-preview-disclosure"
+                  open={previewDrawerOpen}
+                  onToggle={(event) => {
+                    const isOpen = event.currentTarget.open;
+                    setPreviewDrawerOpen(isOpen);
+                    if (!isOpen) {
+                      setActiveMenu(null);
+                    }
+                  }}
+                >
+                  <summary className={buttonVariants({ variant: "secondary" })}>State preview</summary>
+                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
                     <details className="row-action-menu row-action-menu--up" open={activeMenu === "preview-preset"}>
                       <summary className={buttonVariants({ variant: "secondary" })} onClick={(event) => { event.preventDefault(); toggleMenu("preview-preset"); }}>Preview preset</summary>
                       <div className="row-action-menu-list">
@@ -1666,16 +1833,16 @@ export function ThemeEditorPage() {
                           Break
                         </button>
                         <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); closeMenus(); }}>
-                          Towel home
+                          Towel Left
                         </button>
                         <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); closeMenus(); }}>
-                          Towel away
+                          Towel Right
                         </button>
                         <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); closeMenus(); }}>
-                          Base home
+                          Base Left
                         </button>
                         <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); closeMenus(); }}>
-                          Base away
+                          Base Right
                         </button>
                       </div>
                     </details>
@@ -1759,29 +1926,30 @@ export function ThemeEditorPage() {
                     >
                       Reset preview
                     </button>
-                </div>
-              </details>
-              <details className="canvas-shortcuts-disclosure">
-                <summary className={buttonVariants({ variant: "secondary" })}>Canvas shortcuts</summary>
-                <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
-                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
-                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
-                  <span className="canvas-shortcut-pill">Drag blank area to pan</span>
-                  <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
-                  <span className="canvas-shortcut-pill">Middle-drag pan</span>
-                  <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
-                  <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
-                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
-                  <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
-                  <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
-                  <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
-                  <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
-                  <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
-                  <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
-                  <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
-                  <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
-                </div>
-              </details>
+                  </div>
+                </details>
+                <details className="canvas-shortcuts-disclosure">
+                  <summary className={buttonVariants({ variant: "secondary" })}>Canvas shortcuts</summary>
+                  <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
+                    <span className="canvas-shortcut-pill">Drag blank area to pan</span>
+                    <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
+                    <span className="canvas-shortcut-pill">Middle-drag pan</span>
+                    <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
+                    <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
+                    <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
+                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
+                    <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
+                    <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
+                    <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
+                    <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
+                    <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
+                    <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
+                  </div>
+                </details>
+              </div>
             </div>
           </div>
 
@@ -1790,28 +1958,28 @@ export function ThemeEditorPage() {
             <div className="inspector-toolbar">
               <div className="segmented-control">
                 <button className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"} onClick={() => setInspectorView("theme")} type="button">
-                  Appearance
+                  Canvas
                 </button>
                 <button
                   className={inspectorView === "component" ? "segmented-button active" : "segmented-button"}
                   onClick={() => setInspectorView("component")}
                   type="button"
                 >
-                  Selection & layout
+                  Component
                 </button>
                 <button
                   className={inspectorView === "concede" ? "segmented-button active" : "segmented-button"}
                   onClick={() => setInspectorView("concede")}
                   type="button"
                 >
-                  Overlay events
+                  Event Overlay
                 </button>
               </div>
             </div>
 
             {inspectorView === "theme" ? (
               <div className="inspector-stack">
-                <SectionCard title="Theme Basics" description="Core identity and canvas options." defaultOpen>
+                <SectionCard title="Canvas Basics" description="Core identity and canvas options." defaultOpen>
                   <div className="form-grid">
                     <TextField label="Theme name" value={theme.name} onChange={(value) => patchTheme((draft) => (draft.name = value))} />
                     <TextField
@@ -1843,11 +2011,11 @@ export function ThemeEditorPage() {
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Working Model" description="Use drag on canvas for placement. Switch to advanced for exact geometry and low-level tuning." defaultOpen={false}>
+                <SectionCard title="Working Model" description="Use the canvas for positioning. Use advanced controls only when you need exact geometry." defaultOpen={false}>
                   <div className="editor-notes">
-                    <p>`Theme` is for page-level settings only.</p>
-                    <p>`Scoreboard` is where you choose and style the visible blocks.</p>
-                    <p>`Overlay` is where you style the concede/team-state treatment.</p>
+                    <p>`Canvas` covers the page-level frame and preview behavior.</p>
+                    <p>`Component` focuses on the selected piece only.</p>
+                    <p>`Event Overlay` controls concede, base, and winner treatments.</p>
                   </div>
                 </SectionCard>
               </div>
@@ -1855,84 +2023,36 @@ export function ThemeEditorPage() {
 
             {inspectorView === "component" ? (
               <div className="inspector-stack inspector-stack--compact">
-                <SectionCard title="Selection" description="Choose a slot, then pick the piece you want to edit." defaultOpen>
-                  <div className="slot-chip-row">
-                    {(Object.entries(slotConfig) as Array<[SlotId, (typeof slotConfig)[SlotId]]>).map(([slot, config]) => (
+                <SectionCard title="Component Overview" description="Selection happens in the structure rail or directly on the canvas." defaultOpen>
+                  <div className="editor-selection-summary">
+                    <div className="editor-selection-copy">
+                      <strong>{selectedSummaryLabel}</strong>
+                      <span className="hint">{selectionModeDetail}</span>
+                    </div>
+                    <div className="segmented-control">
                       <button
-                        key={slot}
+                        className={editorMode === "basic" ? "segmented-button active" : "segmented-button"}
+                        onClick={() => setEditorMode("basic")}
                         type="button"
-                        className={selectedSlot === slot ? "slot-chip slot-chip--active" : "slot-chip"}
-                        onClick={() => selectSlot(slot)}
                       >
-                        {config.title.replace(" Slot", "")}
+                        Basic
                       </button>
-                    ))}
+                      <button
+                        className={editorMode === "advanced" ? "segmented-button active" : "segmented-button"}
+                        onClick={() => setEditorMode("advanced")}
+                        type="button"
+                      >
+                        Advanced
+                      </button>
+                    </div>
                   </div>
-                  <div className="grid gap-2">
-                    <strong>Pieces</strong>
-                    <ComponentPillRow
-                      ids={selectedSlotConfig.ids}
-                      selected={selected}
-                      onSelect={selectComponent}
-                      labels={componentShortLabels}
-                    />
-                  </div>
-                  <div className="inline-action-grid">
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.components.homeTeamLogo.visible}
-                        onChange={(event) =>
-                          patchTheme((draft) => {
-                            draft.components.homeTeamLogo.visible = event.target.checked;
-                            draft.components.awayTeamLogo.visible = event.target.checked;
-                          })
-                        }
-                      />
-                      Show team logos on both sides
-                    </label>
-                    <button type="button" className={selectAllMode ? "secondary-button active-utility" : "secondary-button"} onClick={selectAllComponents}>
-                      Select all
-                    </button>
-                    <button type="button" className="secondary-button" onClick={centerAllComponents}>
-                      Center all on canvas
-                    </button>
-                    <details className="row-action-menu" open={activeMenu === "layout-tools"}>
-                      <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("layout-tools"); }}>Layout tools</summary>
-                      <div className="row-action-menu-list">
-                        <button type="button" className="secondary-button" onClick={() => { syncTeamSlot("leftToRight"); closeMenus(); }}>
-                          Sync left to right
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => { syncTeamSlot("rightToLeft"); closeMenus(); }}>
-                          Sync right to left
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => { mirrorTeamSlotLayout("leftToRight"); closeMenus(); }}>
-                          Mirror left layout
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => { mirrorTeamSlotLayout("rightToLeft"); closeMenus(); }}>
-                          Mirror right layout
-                        </button>
-                        <button type="button" className="secondary-button" onClick={resetSelectedSlotToSaved} disabled={!savedSnapshot}>
-                          Reset slot to saved
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => applyLayoutPreset(builtinThemes[0].id)}>
-                          Apply {builtinThemes[0].name} layout
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => applyLayoutPreset(builtinThemes[1].id)}>
-                          Apply {builtinThemes[1].name} layout
-                        </button>
-                        <div className="row-action-menu-note">
-                          <strong>Guide</strong>
-                          <p>
-                            <strong>Sync:</strong> copy full setup (layout, style, visibility, assets) to opposite side.
-                          </p>
-                          <p>
-                            <strong>Mirror:</strong> copy only geometry (position and size), keep that side styling/assets.
-                          </p>
-                        </div>
-                      </div>
-                    </details>
-                  </div>
+                  {!selectAllMode && selectedEditableComponent ? (
+                    <div className="editor-selection-meta">
+                      <span>{selectedSlotConfig.title}</span>
+                      <span>{selectedEditableComponent.kind === "text" ? "Text component" : "Image component"}</span>
+                      <span>{selectedEditableComponent.visible ? "Visible" : "Hidden"}</span>
+                    </div>
+                  ) : null}
                 </SectionCard>
 
                 {selectedSlot === "center" ? (
@@ -2261,6 +2381,50 @@ export function ThemeEditorPage() {
                       <details className="row-action-menu row-action-menu--up" open={activeMenu === "piece-tools"}>
                         <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("piece-tools"); }}>Piece tools</summary>
                         <div className="row-action-menu-list">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              reorderSelectedComponent("sendToBack");
+                              closeMenus();
+                            }}
+                            disabled={!canBringBackward}
+                          >
+                            Send to back
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              reorderSelectedComponent("bringBackward");
+                              closeMenus();
+                            }}
+                            disabled={!canBringBackward}
+                          >
+                            Bring backward
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              reorderSelectedComponent("bringForward");
+                              closeMenus();
+                            }}
+                            disabled={!canBringForward}
+                          >
+                            Bring forward
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              reorderSelectedComponent("sendToFront");
+                              closeMenus();
+                            }}
+                            disabled={!canBringForward}
+                          >
+                            Send to front
+                          </button>
                           <button type="button" className="secondary-button" onClick={() => { bringSelectedIntoView(); closeMenus(); }}>
                             Bring into view
                           </button>
@@ -2274,41 +2438,10 @@ export function ThemeEditorPage() {
                           </button>
                         </div>
                       </details>
-                      <label className="inline-select">
-                        <span className="hint">Nudge</span>
-                        <select value={String(nudgeStep)} onChange={(event) => setNudgeStep(Number(event.target.value) as (typeof nudgePresets)[number])}>
-                          {nudgePresets.map((preset) => (
-                            <option key={preset} value={String(preset)}>
-                              {preset}px
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <details className="row-action-menu row-action-menu--up" open={activeMenu === "nudge-pad"}>
-                        <summary className="secondary-button" onClick={(event) => { event.preventDefault(); toggleMenu("nudge-pad"); }}>Nudge pad</summary>
-                        <div className="row-action-menu-list">
-                          <div className="nudge-controls nudge-controls--menu">
-                            <button type="button" className="secondary-button nudge-button" onClick={() => nudgeSelected(0, -nudgeStep)}>
-                              ↑
-                            </button>
-                            <div className="nudge-row">
-                              <button type="button" className="secondary-button nudge-button" onClick={() => nudgeSelected(-nudgeStep, 0)}>
-                                ←
-                              </button>
-                              <button type="button" className="secondary-button nudge-button" onClick={() => nudgeSelected(nudgeStep, 0)}>
-                                →
-                              </button>
-                            </div>
-                            <button type="button" className="secondary-button nudge-button" onClick={() => nudgeSelected(0, nudgeStep)}>
-                              ↓
-                            </button>
-                          </div>
-                        </div>
-                      </details>
                     </div>
                     {selectedMirroredPair ? (
                       <p className="hint">
-                        `Mirror piece layout` only copies X, Y, width, and height to the opposite side. It keeps colors, fonts, and assets unchanged.
+                        `Mirror piece layout` copies frame geometry plus inner padding and offset to the opposite side. It keeps colors, fonts, and assets unchanged.
                       </p>
                     ) : null}
                     <div className="form-grid">
@@ -2402,6 +2535,30 @@ export function ThemeEditorPage() {
                               <option value="right">right</option>
                             </select>
                           </label>
+                          <NumberField
+                            label="Padding X"
+                            unit="px"
+                            value={selectedTextComponent.paddingX}
+                            onChange={(value) => patchSelectedTextComponent((component) => (component.paddingX = value))}
+                          />
+                          <NumberField
+                            label="Padding Y"
+                            unit="px"
+                            value={selectedTextComponent.paddingY}
+                            onChange={(value) => patchSelectedTextComponent((component) => (component.paddingY = value))}
+                          />
+                          <NumberField
+                            label="Offset X"
+                            unit="px"
+                            value={selectedTextComponent.offsetX}
+                            onChange={(value) => patchSelectedTextComponent((component) => (component.offsetX = value))}
+                          />
+                          <NumberField
+                            label="Offset Y"
+                            unit="px"
+                            value={selectedTextComponent.offsetY}
+                            onChange={(value) => patchSelectedTextComponent((component) => (component.offsetY = value))}
+                          />
                         </>
                       ) : null}
                       {selectedImageComponent ? (
@@ -2529,6 +2686,54 @@ export function ThemeEditorPage() {
                               <option value="right">right</option>
                             </select>
                           </label>
+                          <NumberField
+                            label="Padding X"
+                            unit="px"
+                            value={selectedImageComponent.paddingX}
+                            onChange={(value) =>
+                              patchSelectedComponent((component) => {
+                                if (component.kind === "image") {
+                                  component.paddingX = value;
+                                }
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Padding Y"
+                            unit="px"
+                            value={selectedImageComponent.paddingY}
+                            onChange={(value) =>
+                              patchSelectedComponent((component) => {
+                                if (component.kind === "image") {
+                                  component.paddingY = value;
+                                }
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Offset X"
+                            unit="px"
+                            value={selectedImageComponent.offsetX}
+                            onChange={(value) =>
+                              patchSelectedComponent((component) => {
+                                if (component.kind === "image") {
+                                  component.offsetX = value;
+                                }
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Offset Y"
+                            unit="px"
+                            value={selectedImageComponent.offsetY}
+                            onChange={(value) =>
+                              patchSelectedComponent((component) => {
+                                if (component.kind === "image") {
+                                  component.offsetY = value;
+                                }
+                              })
+                            }
+                          />
                           {selectedIsTeamLogo ? <p className="hint">Team logos pull from `/admin/teams` first. Fallback mode decides what happens when no team logo resolves.</p> : null}
                         </>
                       ) : null}
@@ -2555,10 +2760,28 @@ export function ThemeEditorPage() {
                           />
                           <PercentField label="Opacity" value={selectedEditableComponent.opacity} onChange={(value) => patchSelectedComponent((component) => (component.opacity = value))} />
                           <NumberField
-                            label="Padding"
+                            label="Padding X"
                             unit="px"
-                            value={selectedEditableComponent.padding}
-                            onChange={(value) => patchSelectedComponent((component) => (component.padding = value))}
+                            value={selectedEditableComponent.paddingX}
+                            onChange={(value) => patchSelectedComponent((component) => (component.paddingX = value))}
+                          />
+                          <NumberField
+                            label="Padding Y"
+                            unit="px"
+                            value={selectedEditableComponent.paddingY}
+                            onChange={(value) => patchSelectedComponent((component) => (component.paddingY = value))}
+                          />
+                          <NumberField
+                            label="Offset X"
+                            unit="px"
+                            value={selectedEditableComponent.offsetX}
+                            onChange={(value) => patchSelectedComponent((component) => (component.offsetX = value))}
+                          />
+                          <NumberField
+                            label="Offset Y"
+                            unit="px"
+                            value={selectedEditableComponent.offsetY}
+                            onChange={(value) => patchSelectedComponent((component) => (component.offsetY = value))}
                           />
                         </div>
                       </SectionCard>
@@ -2696,9 +2919,21 @@ export function ThemeEditorPage() {
                       />
                       Team switch transition
                     </label>
-                    <label className="checkbox">
-                      <input type="checkbox" checked={!!theme.teamEventOverlay.general.followLogoSize} onChange={(event) => patchOverlayGeneral((general) => (general.followLogoSize = event.target.checked))} />
-                      Match logo size/position
+                    <label>
+                      Follow container
+                      <select
+                        value={theme.teamEventOverlay.general.followTarget}
+                        onChange={(event) =>
+                          patchOverlayGeneral(
+                            (general) =>
+                              (general.followTarget = event.target.value as ThemeDefinition["teamEventOverlay"]["general"]["followTarget"])
+                          )
+                        }
+                      >
+                        <option value="none">none</option>
+                        <option value="logo">logo container</option>
+                        <option value="name">name container</option>
+                      </select>
                     </label>
                     <label>
                       Placement

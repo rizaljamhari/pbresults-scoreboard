@@ -124,6 +124,17 @@ function imageStyles(component: ThemeDefinition["components"]["eventLogo"]): CSS
   };
 }
 
+function resolveComponentPadding(component: Pick<ThemeDefinition["components"]["homeName"], "paddingX" | "paddingY">) {
+  return `${component.paddingY}px ${component.paddingX}px`;
+}
+
+function resolveComponentOffset(component: Pick<ThemeDefinition["components"]["homeName"], "offsetX" | "offsetY">) {
+  return {
+    left: component.offsetX,
+    top: component.offsetY
+  } satisfies CSSProperties;
+}
+
 function resolveTextContent(theme: ThemeDefinition, componentId: ComponentId, live: NormalizedLiveState | null): string | null {
   if (!live) {
     return componentId === "breakTime" ? theme.centerSecondary.gameText || "Center Secondary" : componentId;
@@ -297,19 +308,30 @@ function resolveEventLabelRect(
   overlayGeneral: ThemeDefinition["teamEventOverlay"]["general"]
 ) {
   const logoComponent = side === "left" ? theme.components.homeTeamLogo : theme.components.awayTeamLogo;
-  if (overlayGeneral.followLogoSize && logoComponent.visible) {
-    const inset = Math.max(0, logoComponent.padding);
-    const width = Math.max(1, logoComponent.width - inset * 2);
-    const height = Math.max(1, logoComponent.height - inset * 2);
+  const nameComponent = side === "left" ? theme.components.homeName : theme.components.awayName;
+
+  if (overlayGeneral.followTarget === "logo" && logoComponent.visible) {
+    const insetX = Math.max(0, logoComponent.paddingX);
+    const insetY = Math.max(0, logoComponent.paddingY);
+    const width = Math.max(1, logoComponent.width - insetX * 2);
+    const height = Math.max(1, logoComponent.height - insetY * 2);
     return {
-      x: logoComponent.x + inset,
-      y: logoComponent.y + inset,
+      x: logoComponent.x + insetX + logoComponent.offsetX,
+      y: logoComponent.y + insetY + logoComponent.offsetY,
       width,
       height
     };
   }
 
-  const nameComponent = side === "left" ? theme.components.homeName : theme.components.awayName;
+  if (overlayGeneral.followTarget === "name" && nameComponent.visible) {
+    return {
+      x: nameComponent.x + nameComponent.paddingX + nameComponent.offsetX,
+      y: nameComponent.y + nameComponent.paddingY + nameComponent.offsetY,
+      width: Math.max(1, nameComponent.width - nameComponent.paddingX * 2),
+      height: Math.max(1, nameComponent.height - nameComponent.paddingY * 2)
+    };
+  }
+
   const group = mergeRects(nameComponent, logoComponent.visible ? logoComponent : null);
   const anchoredY =
     overlayGeneral.position === "above"
@@ -715,7 +737,8 @@ export function OverlayRenderer({
                     <span
                       className="component-content image-content"
                       style={{
-                        padding: component.padding,
+                        padding: resolveComponentPadding(component),
+                        ...resolveComponentOffset(component),
                         animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
                         position: "absolute",
                         inset: 0,
@@ -740,7 +763,8 @@ export function OverlayRenderer({
                     <span
                       className="component-content image-content"
                       style={{
-                        padding: component.padding,
+                        padding: resolveComponentPadding(component),
+                        ...resolveComponentOffset(component),
                         animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
                         position: "absolute",
                         inset: 0,
@@ -764,7 +788,7 @@ export function OverlayRenderer({
                     </span>
                   </>
                 ) : (
-                  <span className="component-content image-content" style={{ padding: component.padding }}>
+                  <span className="component-content image-content" style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}>
                     {imageAsset ? (
                       <img
                         alt={imageAsset.originalName}
@@ -849,7 +873,8 @@ export function OverlayRenderer({
                     style={{
                       justifyContent:
                         component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                      padding: component.padding,
+                      padding: resolveComponentPadding(component),
+                      ...resolveComponentOffset(component),
                       color: centerSecondaryStyle?.color ?? component.color,
                       fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
                       fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
@@ -872,7 +897,8 @@ export function OverlayRenderer({
                     style={{
                       justifyContent:
                         component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                      padding: component.padding,
+                      padding: resolveComponentPadding(component),
+                      ...resolveComponentOffset(component),
                       color: centerSecondaryStyle?.color ?? component.color,
                       fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
                       fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
@@ -898,7 +924,8 @@ export function OverlayRenderer({
                   style={{
                     justifyContent:
                       component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                    padding: component.padding,
+                    padding: resolveComponentPadding(component),
+                    ...resolveComponentOffset(component),
                     color: centerSecondaryStyle?.color ?? component.color,
                     fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
                     fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
@@ -918,7 +945,8 @@ export function OverlayRenderer({
                   style={{
                     justifyContent:
                       component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                    padding: component.padding,
+                    padding: resolveComponentPadding(component),
+                    ...resolveComponentOffset(component),
                     background: theme.centerSecondary.timeout.backgroundColor,
                     color: theme.centerSecondary.timeout.color,
                     fontFamily: `"${theme.centerSecondary.timeout.fontFamily}", sans-serif`,

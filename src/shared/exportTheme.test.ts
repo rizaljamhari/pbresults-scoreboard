@@ -81,6 +81,11 @@ describe("createThemeExportPackage", () => {
     const legacyTheme = structuredClone(builtinThemes[0]) as typeof builtinThemes[0] & { towelBanner?: Record<string, unknown> };
     delete (legacyTheme.components as Partial<typeof legacyTheme.components>).homeTeamLogo;
     delete (legacyTheme.components as Partial<typeof legacyTheme.components>).awayTeamLogo;
+    delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).paddingX;
+    delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).paddingY;
+    delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).offsetX;
+    delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).offsetY;
+    (legacyTheme.components.homeName as unknown as { padding?: number }).padding = 16;
     delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).backgroundImageAssetId;
     delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).backgroundImageFit;
     delete (legacyTheme.components.homeName as Partial<(typeof legacyTheme.components.homeName)>).backgroundImagePosition;
@@ -101,6 +106,10 @@ describe("createThemeExportPackage", () => {
     expect(parsed.components.homeTeamLogo.teamLogoFallbackMode).toBe("slotFallback");
     expect(parsed.components.homeName.backgroundImageAssetId).toBeNull();
     expect(parsed.components.homeName.backgroundImageFit).toBe("cover");
+    expect(parsed.components.homeName.paddingX).toBe(16);
+    expect(parsed.components.homeName.paddingY).toBe(16);
+    expect(parsed.components.homeName.offsetX).toBe(0);
+    expect(parsed.components.homeName.offsetY).toBe(0);
     expect(parsed.teamEventOverlay.concede.text).toBe("Conceded");
     expect(parsed.teamEventOverlay.general.placementMode).toBe("center-stamp");
     expect(parsed.centerSecondary.breakMode).toBe("timer");
@@ -147,11 +156,25 @@ describe("createThemeExportPackage", () => {
     const parsed = themeSchema.parse(legacyTheme);
     expect(parsed.teamEventOverlay.general.position).toBe("overlapping-top");
     expect(parsed.teamEventOverlay.general.backgroundImageFit).toBe("contain");
-    expect(parsed.teamEventOverlay.general.followLogoSize).toBe(true);
+    expect(parsed.teamEventOverlay.general.followTarget).toBe("logo");
     expect(parsed.teamEventOverlay.concede.text).toBe("TOWEL");
     expect(parsed.teamEventOverlay.concede.backgroundImageAssetId).toBe("asset-a");
     expect(parsed.teamEventOverlay.base.text).toBe("BASE");
     expect(parsed.teamEventOverlay.base.backgroundImageAssetId).toBe("asset-b");
     expect(parsed.teamEventOverlay.base.backgroundOverlayOpacity).toBe(0.25);
+  });
+
+  it("migrates nested team overlay followLogoSize into followTarget", () => {
+    const legacyTheme = structuredClone(builtinThemes[0]);
+    legacyTheme.teamEventOverlay = {
+      ...legacyTheme.teamEventOverlay,
+      general: {
+        ...legacyTheme.teamEventOverlay.general,
+        followLogoSize: true
+      }
+    } as unknown as typeof legacyTheme.teamEventOverlay;
+
+    const parsed = themeSchema.parse(legacyTheme);
+    expect(parsed.teamEventOverlay.general.followTarget).toBe("logo");
   });
 });

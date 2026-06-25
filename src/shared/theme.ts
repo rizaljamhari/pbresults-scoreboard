@@ -28,10 +28,28 @@ export const teamLogoFallbackModeValues = ["none", "eventLogo", "slotFallback", 
 export const concedePositionValues = ["above", "overlapping-top"] as const;
 export const concedeAnimationValues = ["slide-horizontal", "slide-vertical", "none"] as const;
 export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ribbon"] as const;
+export const teamOverlayFollowTargetValues = ["none", "logo", "name"] as const;
 export const centerSecondaryModeValues = ["timer", "staticText", "hidden"] as const;
 export const centerSecondaryTransitionValues = ["none", "fade", "slide-up"] as const;
 
-export const commonFrameSchema = z.object({
+function migrateLegacyFrame(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const candidate = input as Record<string, unknown>;
+  const legacyPadding = typeof candidate.padding === "number" ? candidate.padding : 0;
+
+  return {
+    ...candidate,
+    paddingX: candidate.paddingX ?? legacyPadding,
+    paddingY: candidate.paddingY ?? legacyPadding,
+    offsetX: candidate.offsetX ?? 0,
+    offsetY: candidate.offsetY ?? 0
+  };
+}
+
+const commonFrameBaseSchema = z.object({
   x: z.number(),
   y: z.number(),
   width: z.number().positive(),
@@ -48,11 +66,16 @@ export const commonFrameSchema = z.object({
   borderColor: z.string(),
   borderWidth: z.number().min(0),
   borderRadius: z.number().min(0),
-  padding: z.number().min(0),
+  paddingX: z.number().min(0),
+  paddingY: z.number().min(0),
+  offsetX: z.number(),
+  offsetY: z.number(),
   shadow: z.string()
 });
 
-export const textComponentSchema = commonFrameSchema.extend({
+export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBaseSchema);
+
+const textComponentBaseSchema = commonFrameBaseSchema.extend({
   kind: z.literal("text"),
   fontFamily: z.enum(fontFamilies),
   fontSize: z.number().positive(),
@@ -63,11 +86,15 @@ export const textComponentSchema = commonFrameSchema.extend({
   lineHeight: z.number().positive()
 });
 
-export const imageComponentSchema = commonFrameSchema.extend({
+export const textComponentSchema = z.preprocess(migrateLegacyFrame, textComponentBaseSchema);
+
+const imageComponentBaseSchema = commonFrameBaseSchema.extend({
   kind: z.literal("image"),
   assetId: z.string().nullable(),
   teamLogoFallbackMode: z.enum(teamLogoFallbackModeValues).default("slotFallback")
 });
+
+export const imageComponentSchema = z.preprocess(migrateLegacyFrame, imageComponentBaseSchema);
 
 const defaultImageComponentValue = {
   kind: "image" as const,
@@ -87,7 +114,10 @@ const defaultImageComponentValue = {
   borderColor: "#00000000",
   borderWidth: 0,
   borderRadius: 0,
-  padding: 0,
+  paddingX: 0,
+  paddingY: 0,
+  offsetX: 0,
+  offsetY: 0,
   shadow: "none",
   assetId: null,
   teamLogoFallbackMode: "slotFallback" as const
@@ -115,7 +145,7 @@ const teamEventOverlayGeneralSchema = z.object({
   shadow: z.string().default("none"),
   animationPreset: z.enum(concedeAnimationValues).default("slide-vertical"),
   durationMs: z.number().positive().default(2000),
-  followLogoSize: z.boolean().default(false)
+  followTarget: z.enum(teamOverlayFollowTargetValues).default("none")
 });
 
 const teamEventOverlayEventSchema = z.object({
@@ -156,6 +186,26 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
 
   const candidate = input as Record<string, unknown>;
   if ("general" in candidate || "concede" in candidate || "base" in candidate || "winner" in candidate) {
+    const nestedCandidate = candidate as {
+      general?: Record<string, unknown>;
+    };
+    if (
+      nestedCandidate.general &&
+      "followLogoSize" in nestedCandidate.general
+    ) {
+      const currentFollowTarget = nestedCandidate.general.followTarget;
+      return {
+        ...candidate,
+        general: {
+          ...nestedCandidate.general,
+          followTarget:
+            nestedCandidate.general.followLogoSize === true &&
+            (currentFollowTarget === undefined || currentFollowTarget === "none")
+              ? "logo"
+              : currentFollowTarget ?? "none"
+        }
+      };
+    }
     return candidate;
   }
 
@@ -192,7 +242,8 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
     "shadow",
     "animationPreset",
     "durationMs",
-    "followLogoSize"
+    "followLogoSize",
+    "followTarget"
   ];
   if (!legacyKeys.some((key) => key in candidate)) {
     return candidate;
@@ -220,7 +271,7 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
       shadow: candidate.shadow,
       animationPreset: candidate.animationPreset,
       durationMs: candidate.durationMs,
-      followLogoSize: candidate.followLogoSize
+      followTarget: candidate.followTarget ?? (candidate.followLogoSize === true ? "logo" : "none")
     },
     concede: {
       text: candidate.text,

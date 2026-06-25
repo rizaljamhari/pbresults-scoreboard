@@ -769,6 +769,15 @@ export function ThemeCanvasEditor({
     onZoomChange(Math.round(nextZoom * 1000) / 1000);
   }
 
+  function stepZoom(delta: -0.1 | 0.1) {
+    if (!onZoomChange) {
+      return;
+    }
+
+    const nextZoom = clampZoom(Math.round((zoom + delta) * 1000) / 1000);
+    onZoomChange(nextZoom);
+  }
+
   return (
     <div className="canvas-editor-shell">
       <div className="canvas-editor-toolbar">
@@ -780,6 +789,27 @@ export function ThemeCanvasEditor({
             <button type="button" className="secondary-button" onClick={focusSelectedComponent} disabled={!selectedId}>
               Focus
             </button>
+            <div className="canvas-zoom-controls" aria-label="Canvas zoom controls">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => stepZoom(-0.1)}
+                disabled={zoom <= CAMERA_MIN_ZOOM}
+                aria-label="Zoom out"
+              >
+                -
+              </button>
+              <span className="canvas-zoom-readout">{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => stepZoom(0.1)}
+                disabled={zoom >= CAMERA_MAX_ZOOM}
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+            </div>
             <button
               type="button"
               className={snapSettings.enabled ? "secondary-button active-utility" : "secondary-button"}
