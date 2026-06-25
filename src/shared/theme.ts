@@ -335,6 +335,11 @@ export const centerSecondarySchema = z.object({
   gameText: z.string().default(""),
   breakMode: z.enum(centerSecondaryModeValues).default("timer"),
   breakText: z.string().default(""),
+  gameFinished: z
+    .object({
+      enabled: z.boolean().default(true)
+    })
+    .default({}),
   timerStyle: z
     .object({
       fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),

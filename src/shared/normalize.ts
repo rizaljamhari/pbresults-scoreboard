@@ -23,6 +23,41 @@ type RawLiveState = {
   mainGame?: RawTeam[];
 };
 
+function inferPeriod(
+  raw: RawLiveState | null,
+  state: string,
+  gameTimer: ReturnType<typeof sanitizeTimer>,
+  breakTimer: ReturnType<typeof sanitizeTimer>,
+  previousPeriod?: string | null
+) {
+  const explicitPeriod = typeof raw?.period === "string" ? raw.period.trim() : "";
+  if (explicitPeriod) {
+    return raw?.period ?? explicitPeriod;
+  }
+
+  if (gameTimer.state === 2) {
+    return "GAME";
+  }
+
+  if (breakTimer.state === 2) {
+    return "BREAK";
+  }
+
+  if (state === "END") {
+    return "BREAK";
+  }
+
+  if (state === "RUNNING") {
+    return "GAME";
+  }
+
+  if (previousPeriod?.trim()) {
+    return previousPeriod;
+  }
+
+  return "GAME";
+}
+
 function sanitizeTimer(timer: RawTimer) {
   return {
     value: Math.max(0, Number(timer?.value ?? 0)),
@@ -80,6 +115,7 @@ export function normalizeLiveState(
     sourceStatus?: "idle" | "ok" | "error" | "paused";
     fetchedAt?: string | null;
     errorMessage?: string | null;
+    previousPeriod?: string | null;
     teams?: TeamRecord[];
     teamOverrides?: {
       left?: TeamRecord | null;
@@ -91,6 +127,9 @@ export function normalizeLiveState(
   const awayTeamRaw = sanitizeTeam(raw?.mainGame?.[1]);
   const sidesSwitched = Number(raw?.sidesSwitched ?? 0);
   const state = raw?.state ?? "STOPPED";
+  const breakTimer = sanitizeTimer(raw?.breakTimer);
+  const gameTimer = sanitizeTimer(raw?.gameTimer);
+  const period = inferPeriod(raw, state, gameTimer, breakTimer, options?.previousPeriod);
   const teamEvent =
     state === "TOWEL1"
       ? "towel-home"
@@ -120,7 +159,7 @@ export function normalizeLiveState(
     fetchedAt: options?.fetchedAt ?? null,
     errorMessage: options?.errorMessage ?? null,
     state,
-    period: raw?.period ?? "BREAK",
+    period,
     round: Number(raw?.round ?? 0),
     sidesSwitched,
     secondGame: Array.isArray(raw?.secondGame) ? raw.secondGame.map(sanitizeTeam) : false,
@@ -133,8 +172,8 @@ export function normalizeLiveState(
     displayLeftTeamMatch,
     displayRightTeamMatch,
     unresolvedTeamNames,
-    breakTimer: sanitizeTimer(raw?.breakTimer),
-    gameTimer: sanitizeTimer(raw?.gameTimer),
+    breakTimer,
+    gameTimer,
     teamEvent
   };
 }

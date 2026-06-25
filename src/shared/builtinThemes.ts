@@ -485,6 +485,9 @@ export const builtinThemes: ThemeDefinition[] = [
       "gameText": "SOUTHERNLEGION RACE SERIES",
       "breakMode": "timer",
       "breakText": "",
+      "gameFinished": {
+        "enabled": true
+      },
       "timerStyle": {
         "fontFamily": "Barlow Condensed",
         "fontSize": 28,
@@ -843,6 +846,9 @@ export const builtinThemes: ThemeDefinition[] = [
       "gameText": "MAJOR LEAGUE PAINTBALL",
       "breakMode": "timer",
       "breakText": "",
+      "gameFinished": {
+        "enabled": true
+      },
       "timerStyle": {
         "fontFamily": "Barlow Condensed",
         "fontSize": 24,

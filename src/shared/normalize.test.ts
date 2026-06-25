@@ -124,6 +124,35 @@ describe("normalizeLiveState", () => {
     expect(result.displayLeftTeamMatch.team?.canonicalName).toBe("Override Squad");
     expect(result.displayLeftTeam.name).toBe("OVERRIDE");
   });
+
+  it("infers GAME when period is missing and the game timer is running", () => {
+    const result = normalizeLiveState({
+      mainGame: [{ name: "MPKK", score: 0 }, { name: "MPS", score: 0 }],
+      sidesSwitched: 0,
+      secondGame: false,
+      breakTimer: { value: 0, state: 0 },
+      gameTimer: { value: 146, state: 2 }
+    });
+
+    expect(result.state).toBe("STOPPED");
+    expect(result.period).toBe("GAME");
+  });
+
+  it("reuses the previous period when upstream omits period and both timers are idle", () => {
+    const result = normalizeLiveState(
+      {
+        state: "STOPPED",
+        mainGame: [{ name: "MPKK", score: 0 }, { name: "MPS", score: 0 }],
+        breakTimer: { value: 0, state: 0 },
+        gameTimer: { value: 0, state: 0 }
+      },
+      {
+        previousPeriod: "BREAK"
+      }
+    );
+
+    expect(result.period).toBe("BREAK");
+  });
 });
 
 describe("formatClock", () => {

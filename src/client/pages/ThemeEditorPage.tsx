@@ -2244,6 +2244,27 @@ export function ThemeEditorPage() {
 
                       <div className="editor-subsection-card">
                         <div className="editor-subsection-header">
+                          <h4>Game Finished Overlay</h4>
+                          <p>Show or suppress the automatic `GAME FINISHED` replacement on the lower center line when the match ends.</p>
+                        </div>
+                        <div className="form-grid editor-subsection-grid">
+                          <label className="checkbox editor-subsection-toggle">
+                            <input
+                              type="checkbox"
+                              checked={theme.centerSecondary.gameFinished.enabled}
+                              onChange={(event) =>
+                                patchTheme((draft) => {
+                                  draft.centerSecondary.gameFinished.enabled = event.target.checked;
+                                })
+                              }
+                            />
+                            Game finished overlay enabled
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="editor-subsection-card">
+                        <div className="editor-subsection-header">
                           <h4>Timeout Overlay</h4>
                           <p>Flash a one-shot `TIMEOUT` treatment on top of the break timer when break time suddenly jumps upward.</p>
                         </div>

@@ -182,6 +182,7 @@ class LivePoller {
           sourceStatus: "ok",
           fetchedAt: new Date().toISOString(),
           errorMessage: null,
+          previousPeriod: this.state.normalized.period,
           teams,
           teamOverrides: overrides
         })
@@ -198,6 +199,7 @@ class LivePoller {
           sourceStatus: "error",
           fetchedAt: this.state.normalized.fetchedAt,
           errorMessage: message,
+          previousPeriod: this.state.normalized.period,
           teams,
           teamOverrides: overrides
         })
@@ -223,6 +225,7 @@ class LivePoller {
         sourceStatus: "paused",
         fetchedAt: this.state.normalized.fetchedAt,
         errorMessage: null,
+        previousPeriod: this.state.normalized.period,
         teams,
         teamOverrides: overrides
       })

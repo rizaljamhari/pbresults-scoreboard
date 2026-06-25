@@ -414,13 +414,13 @@ export function OverlayRenderer({
   const towelIntervalRef = useRef<number | null>(null);
   const currentTeamEvent = live?.teamEvent ?? "none";
   const finishState = useMemo(() => {
-    if (!live || live.sourceStatus !== "ok" || live.state !== "END" || live.period !== "BREAK") {
+    if (!theme.centerSecondary.gameFinished.enabled || !live || live.sourceStatus !== "ok" || live.state !== "END" || live.period !== "BREAK") {
       return null;
     }
     const snapshot = createOverlaySnapshot(live);
     const token = `${snapshot.round}|${snapshot.leftName}|${snapshot.rightName}|${snapshot.leftScore}|${snapshot.rightScore}`;
     return { token, snapshot };
-  }, [live]);
+  }, [live, theme.centerSecondary.gameFinished.enabled]);
   const gameFinishToken = finishState?.token ?? null;
   const winnerReveal = useMemo(() => {
     if (!finishState) {

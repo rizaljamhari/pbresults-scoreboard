@@ -113,6 +113,7 @@ describe("createThemeExportPackage", () => {
     expect(parsed.teamEventOverlay.concede.text).toBe("Conceded");
     expect(parsed.teamEventOverlay.general.placementMode).toBe("center-stamp");
     expect(parsed.centerSecondary.breakMode).toBe("timer");
+    expect(parsed.centerSecondary.gameFinished.enabled).toBe(true);
   });
 
   it("migrates a flat legacy team overlay into nested general and event sections", () => {
