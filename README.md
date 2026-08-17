@@ -34,6 +34,8 @@ This project exists to add:
 - normalizes live state for overlays and operator UI
 - provides an operator-first live control page at `/admin/operations`
 - lets you build and publish scoreboard themes
+- supports designer-created free text and image layers
+- exposes operator-controlled text with explicit Take and Reset actions during live production
 - manages team registry, aliases, and learned live match names
 - resolves uncertain or truncated live team names during production
 - exports/imports full app state, teams, and themes

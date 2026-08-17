@@ -12,6 +12,10 @@ describe("createThemeExportPackage", () => {
           originalName: "logo.png",
           mimeType: "image/png",
           url: "/uploads/asset-1.png",
+          role: "original",
+          sourceAssetId: null,
+          hiddenFromPicker: false,
+          contentHash: null,
           createdAt: new Date().toISOString()
         },
         data: "data:image/png;base64,AAAA"

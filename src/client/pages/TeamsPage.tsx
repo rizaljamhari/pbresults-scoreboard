@@ -301,7 +301,6 @@ export function TeamsPage() {
                 <TableHead className="w-14 text-center">
                   <label className="checkbox m-0 inline-flex w-full justify-center">
                     <Checkbox
-                      type="checkbox"
                       checked={allFilteredSelected}
                       ref={(node) => {
                         if (node) {
@@ -328,7 +327,6 @@ export function TeamsPage() {
                     <TableCell className="w-14 text-center">
                       <label className="checkbox m-0 inline-flex w-full justify-center">
                         <Checkbox
-                          type="checkbox"
                           checked={selectedIds.includes(team.id)}
                           onChange={(event) => toggleTeamSelection(team.id, event.target.checked)}
                         />

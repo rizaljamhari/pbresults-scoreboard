@@ -3,11 +3,22 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
 import { builtinThemes } from "../../shared/builtinThemes";
-import { componentIds, fontFamilies } from "../../shared/theme";
-import type { ComponentId, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
+import { fontFamilies } from "../../shared/theme";
+import type { ComponentId, FreeImageComponent, FreeTextComponent, NormalizedLiveState, TeamMatchResult, TeamRecord, TextThemeComponent, ThemeDefinition } from "../../shared/theme";
+import {
+  createFreeComponentId,
+  fixedComponentLabels,
+  getNextComponentZIndex,
+  getThemeComponent,
+  getThemeComponentEntry,
+  isFixedComponentId,
+  listThemeComponentEntries,
+  type ThemeComponent
+} from "../../shared/themeComponents";
 import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
 import { AdminPageFrame, AdminPageHeader, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
 import { ThemeComponentInspector } from "../components/ThemeComponentInspector";
+import { showToast } from "../toast";
 
 
 type EditorMode = "basic" | "advanced";
@@ -24,17 +35,7 @@ const safeAreaTopInset = 54;
 const defaultTopInset = 24;
 const previewDrawerStorageKey = "pbresults.themeEditor.previewDrawerOpen";
 
-const componentLabels: Record<ComponentId, string> = {
-  homeName: "Left Name",
-  homeTeamLogo: "Left Logo",
-  homeScore: "Left Score",
-  awayName: "Right Name",
-  awayTeamLogo: "Right Logo",
-  awayScore: "Right Score",
-  gameTime: "Center Primary",
-  breakTime: "Center Secondary",
-  eventLogo: "Event Logo"
-};
+const componentLabels = fixedComponentLabels;
 
 const componentShortLabels: Record<ComponentId, string> = {
   homeName: "Name",
@@ -326,9 +327,9 @@ function ComponentPillRow(props: {
   );
 }
 
-function slotForComponent(id: ComponentId | null): SlotId {
-  if (!id) {
-    return "left";
+function slotForComponent(id: string | null): SlotId | null {
+  if (!id || !isFixedComponentId(id)) {
+    return null;
   }
   if (homeBlockIds.includes(id)) {
     return "left";
@@ -376,6 +377,7 @@ function buildMatchedPreviewMatch(inputName: string, team: TeamRecord): TeamMatc
     inputName,
     normalizedInput: inputName.trim().toUpperCase(),
     status: "matched",
+    resolutionSource: "automatic",
     confidence: 1,
     matchedAlias: team.aliases[0] ?? team.canonicalName,
     teamId: team.id,
@@ -389,6 +391,7 @@ function buildUnmatchedPreviewMatch(inputName: string): TeamMatchResult {
     inputName,
     normalizedInput: inputName.trim().toUpperCase(),
     status: "unmatched",
+    resolutionSource: "automatic",
     confidence: 0,
     matchedAlias: null,
     teamId: null,
@@ -401,7 +404,7 @@ function clampThemeToCanvas(theme: ThemeDefinition): ThemeDefinition {
   const next = structuredClone(theme);
   const { width: canvasWidth, height: canvasHeight } = next.canvas;
 
-  for (const component of Object.values(next.components)) {
+  for (const { component } of listThemeComponentEntries(next)) {
     component.width = Math.min(component.width, canvasWidth);
     component.height = Math.min(component.height, canvasHeight);
     component.x = clamp(component.x, 0, Math.max(0, canvasWidth - component.width));
@@ -458,40 +461,34 @@ function mirroredPairForComponent(id: ComponentId) {
 }
 
 type LayoutScopeEntry = {
-  id: ComponentId;
-  component: ThemeDefinition["components"][ComponentId];
+  id: string;
+  component: ThemeComponent;
 };
 
 function resolveLayoutScopeEntries(
   draft: ThemeDefinition,
-  ids: ComponentId[]
+  ids: string[]
 ): LayoutScopeEntry[] {
-  const all = ids.map((id) => ({ id, component: draft.components[id] }));
+  const all = ids
+    .map((id) => ({ id, component: getThemeComponent(draft, id) }))
+    .filter((entry): entry is LayoutScopeEntry => Boolean(entry.component));
   const visible = all.filter((entry) => entry.component.visible);
   return visible.length > 0 ? visible : all;
 }
 
-const componentOrderIndex: Record<ComponentId, number> = componentIds.reduce(
-  (accumulator, id, index) => {
-    accumulator[id] = index;
-    return accumulator;
-  },
-  {} as Record<ComponentId, number>
-);
-
 function getOrderedComponentIds(theme: ThemeDefinition) {
-  return [...componentIds].sort((left, right) => {
-    const zIndexDifference = theme.components[left].zIndex - theme.components[right].zIndex;
+  return listThemeComponentEntries(theme).sort((left, right) => {
+    const zIndexDifference = left.component.zIndex - right.component.zIndex;
     if (zIndexDifference !== 0) {
       return zIndexDifference;
     }
-    return componentOrderIndex[left] - componentOrderIndex[right];
-  });
+    return left.id.localeCompare(right.id);
+  }).map((entry) => entry.id);
 }
 
 function reorderComponentStack(
   draft: ThemeDefinition,
-  selectedId: ComponentId,
+  selectedId: string,
   action: "bringForward" | "bringBackward" | "sendToFront" | "sendToBack"
 ) {
   const orderedIds = getOrderedComponentIds(draft);
@@ -517,7 +514,10 @@ function reorderComponentStack(
   orderedIds.splice(targetIndex, 0, selectedId);
 
   orderedIds.forEach((id, index) => {
-    draft.components[id].zIndex = index + 1;
+    const component = getThemeComponent(draft, id);
+    if (component) {
+      component.zIndex = index + 1;
+    }
   });
 
   return true;
@@ -531,8 +531,8 @@ export function ThemeEditorPage() {
   const assets = useAssets();
   const teams = useTeams();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
-  const [selected, setSelected] = useState<ComponentId | null>("homeName");
-  const [selectedIds, setSelectedIds] = useState<ComponentId[]>(["homeName"]);
+  const [selected, setSelected] = useState<string | null>("homeName");
+  const [selectedIds, setSelectedIds] = useState<string[]>(["homeName"]);
   const [selectedSlot, setSelectedSlot] = useState<SlotId>("left");
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<ThemeDefinition[]>([]);
@@ -562,13 +562,18 @@ export function ThemeEditorPage() {
   const [previewBreakTimerValue, setPreviewBreakTimerValue] = useState(3);
   const theme = themeResource.data;
 
-  const selectedEditableComponent = theme && selected ? theme.components[selected] : null;
+  const selectedEntry = theme && selected ? getThemeComponentEntry(theme, selected) : null;
+  const selectedEditableComponent = selectedEntry?.component ?? null;
 
   const selectedTextComponent = selectedEditableComponent?.kind === "text" ? selectedEditableComponent : null;
   const selectedImageComponent = selectedEditableComponent?.kind === "image" ? selectedEditableComponent : null;
   const selectedIsTeamLogo = selected === "homeTeamLogo" || selected === "awayTeamLogo";
   const selectedSlotConfig = slotConfig[selectedSlot];
-  const selectedShortLabel = selected ? componentShortLabels[selected] : "No piece";
+  const selectedShortLabel = selectedEntry
+    ? selectedEntry.source === "free"
+      ? selectedEntry.label
+      : componentShortLabels[selectedEntry.id as ComponentId]
+    : "No piece";
   const sampleTeams = (teams.data ?? []).filter((team) => team.active);
   const defaultLeftPreviewTeam =
     live.data?.displayLeftTeamMatch.team ??
@@ -762,8 +767,9 @@ export function ThemeEditorPage() {
           const fallbackAsset = selectedImageComponent.assetId
             ? assets.data?.find((asset) => asset.id === selectedImageComponent.assetId) ?? null
             : null;
-          const eventAsset = theme.components.eventLogo.assetId
-            ? assets.data?.find((asset) => asset.id === theme.components.eventLogo.assetId) ?? null
+          const eventAssetId = theme?.components.eventLogo.assetId ?? null;
+          const eventAsset = eventAssetId
+            ? assets.data?.find((asset) => asset.id === eventAssetId) ?? null
             : null;
           const effectiveAsset =
             registryAsset ??
@@ -784,8 +790,8 @@ export function ThemeEditorPage() {
           };
         })()
       : null;
-  const selectedMirroredPair = selected ? mirroredPairForComponent(selected) : null;
-  const hasUnsavedChanges = savedSnapshot ? !sameTheme(savedSnapshot, theme) : false;
+  const selectedMirroredPair = selected && isFixedComponentId(selected) ? mirroredPairForComponent(selected) : null;
+  const hasUnsavedChanges = savedSnapshot && theme ? !sameTheme(savedSnapshot, theme) : false;
   const orderedComponentIds = theme ? getOrderedComponentIds(theme) : [];
   const selectedStackIndex = selected ? orderedComponentIds.indexOf(selected) : -1;
   const canBringBackward = selectedStackIndex > 0;
@@ -819,22 +825,25 @@ export function ThemeEditorPage() {
     updateTheme(next);
   }
 
-  function patchSelectedComponent(mutator: (component: ThemeDefinition["components"][ComponentId]) => void) {
+  function patchSelectedComponent(mutator: (component: ThemeComponent) => void) {
     if (!selected) {
       return;
     }
     patchTheme((draft) => {
-      mutator(draft.components[selected]);
+      const component = getThemeComponent(draft, selected);
+      if (component) {
+        mutator(component);
+      }
     });
   }
 
-  function patchSelectedTextComponent(mutator: (component: ThemeDefinition["components"]["homeName"]) => void) {
+  function patchSelectedTextComponent(mutator: (component: TextThemeComponent | FreeTextComponent) => void) {
     if (!selected) {
       return;
     }
     patchTheme((draft) => {
-      const component = draft.components[selected];
-      if (component.kind === "text") {
+      const component = getThemeComponent(draft, selected);
+      if (component?.kind === "text") {
         mutator(component);
       }
     });
@@ -870,7 +879,7 @@ export function ThemeEditorPage() {
     });
   }
 
-  function selectComponent(id: ComponentId, options?: { additive?: boolean }) {
+  function selectComponent(id: string, options?: { additive?: boolean }) {
     setActiveMenu(null);
     setSelectAllMode(false);
     const additive = options?.additive === true;
@@ -882,17 +891,23 @@ export function ThemeEditorPage() {
         setSelected(next.length > 0 ? next[next.length - 1] : null);
         return next;
       });
-      setSelectedSlot(slotForComponent(id));
+      const slot = slotForComponent(id);
+      if (slot) {
+        setSelectedSlot(slot);
+      }
     } else {
       setSelected(id);
       setSelectedIds([id]);
-      setSelectedSlot(slotForComponent(id));
+      const slot = slotForComponent(id);
+      if (slot) {
+        setSelectedSlot(slot);
+      }
     }
 
     setInspectorView("component");
   }
 
-  function selectComponents(ids: ComponentId[], options?: { additive?: boolean }) {
+  function selectComponents(ids: string[], options?: { additive?: boolean }) {
     setActiveMenu(null);
     setSelectAllMode(false);
 
@@ -902,7 +917,10 @@ export function ThemeEditorPage() {
         const next = Array.from(new Set([...current, ...unique]));
         setSelected(next.length > 0 ? next[next.length - 1] : null);
         if (next.length > 0) {
-          setSelectedSlot(slotForComponent(next[next.length - 1]));
+          const slot = slotForComponent(next[next.length - 1]);
+          if (slot) {
+            setSelectedSlot(slot);
+          }
         }
         return next;
       });
@@ -910,7 +928,10 @@ export function ThemeEditorPage() {
       setSelectedIds(unique);
       setSelected(unique.length > 0 ? unique[unique.length - 1] : null);
       if (unique.length > 0) {
-        setSelectedSlot(slotForComponent(unique[unique.length - 1]));
+        const slot = slotForComponent(unique[unique.length - 1]);
+        if (slot) {
+          setSelectedSlot(slot);
+        }
       }
     }
 
@@ -921,7 +942,7 @@ export function ThemeEditorPage() {
     setActiveMenu(null);
     setSelectAllMode(false);
     setSelectedSlot(slot);
-    if (!selected || !slotConfig[slot].ids.includes(selected)) {
+    if (!selected || !isFixedComponentId(selected) || !slotConfig[slot].ids.includes(selected)) {
       const nextId = slotConfig[slot].ids[0];
       setSelected(nextId);
       setSelectedIds(nextId ? [nextId] : []);
@@ -935,7 +956,7 @@ export function ThemeEditorPage() {
     setActiveMenu(null);
     setSelectAllMode(true);
     if (themeResource.data) {
-      const ids = Object.keys(themeResource.data.components) as ComponentId[];
+      const ids = listThemeComponentEntries(themeResource.data).map((entry) => entry.id);
       setSelectedIds(ids);
     }
     setInspectorView("component");
@@ -961,8 +982,9 @@ export function ThemeEditorPage() {
     if (history.length <= 1 || !themeResource.data) {
       return;
     }
+    const currentTheme = themeResource.data;
     const previous = history[history.length - 2];
-    setFuture((current) => [structuredClone(themeResource.data), ...current]);
+    setFuture((current) => [structuredClone(currentTheme), ...current]);
     setHistory((current) => current.slice(0, -1));
     themeResource.setData(structuredClone(previous));
   }
@@ -982,7 +1004,10 @@ export function ThemeEditorPage() {
       return;
     }
     patchTheme((draft) => {
-      const component = draft.components[selected];
+      const component = getThemeComponent(draft, selected);
+      if (!component) {
+        return;
+      }
       component.width = Math.min(component.width, draft.canvas.width);
       component.height = Math.min(component.height, draft.canvas.height);
       component.x = clamp(component.x, 0, Math.max(0, draft.canvas.width - component.width));
@@ -1006,7 +1031,7 @@ export function ThemeEditorPage() {
     }
 
     patchTheme((draft) => {
-      const components = Object.values(draft.components);
+      const components = listThemeComponentEntries(draft).map((entry) => entry.component);
       const visibleComponents = components.filter((component) => component.visible);
       const source = visibleComponents.length > 0 ? visibleComponents : components;
 
@@ -1020,16 +1045,19 @@ export function ThemeEditorPage() {
       const deltaX = targetX - minX;
       const deltaY = targetY - minY;
 
-      for (const component of Object.values(draft.components)) {
+      for (const { component } of listThemeComponentEntries(draft)) {
         component.x += deltaX;
         component.y += deltaY;
       }
     });
   }
 
-  function getLayoutScopeIds(currentTheme: ThemeDefinition): ComponentId[] {
+  function getLayoutScopeIds(currentTheme: ThemeDefinition): string[] {
     if (selectAllMode) {
-      return Object.keys(currentTheme.components) as ComponentId[];
+      return listThemeComponentEntries(currentTheme).map((entry) => entry.id);
+    }
+    if (selected && !isFixedComponentId(selected)) {
+      return selectedIds.length > 0 ? selectedIds : [selected];
     }
     return selectedSlotConfig.ids;
   }
@@ -1135,7 +1163,10 @@ export function ThemeEditorPage() {
       }
 
       const referenceId = selected && ids.includes(selected) ? selected : entries[0].id;
-      const reference = draft.components[referenceId];
+      const reference = getThemeComponent(draft, referenceId);
+      if (!reference) {
+        return;
+      }
 
       for (const entry of entries) {
         if (entry.id === referenceId) {
@@ -1163,10 +1194,7 @@ export function ThemeEditorPage() {
         const targetId = direction === "leftToRight" ? rightId : leftId;
         const sourceComponent = structuredClone(draft.components[sourceId]);
         const mirroredX = mirrorX(draft.canvas.width, sourceComponent.x, sourceComponent.width);
-        draft.components[targetId] = {
-          ...sourceComponent,
-          x: mirroredX
-        } as ThemeDefinition["components"][ComponentId];
+        Object.assign(draft.components[targetId], sourceComponent, { x: mirroredX });
       }
     });
 
@@ -1177,7 +1205,10 @@ export function ThemeEditorPage() {
           : mirroredComponentPairs.find(([, rightId]) => rightId === selected)?.[0] ?? selected;
       setSelected(nextSelected);
       setSelectedIds([nextSelected]);
-      setSelectedSlot(slotForComponent(nextSelected));
+      const slot = slotForComponent(nextSelected);
+      if (slot) {
+        setSelectedSlot(slot);
+      }
     }
   }
 
@@ -1203,7 +1234,10 @@ export function ThemeEditorPage() {
           : mirroredComponentPairs.find(([, rightId]) => rightId === selected)?.[0] ?? selected;
       setSelected(nextSelected);
       setSelectedIds([nextSelected]);
-      setSelectedSlot(slotForComponent(nextSelected));
+      const slot = slotForComponent(nextSelected);
+      if (slot) {
+        setSelectedSlot(slot);
+      }
     }
   }
 
@@ -1229,9 +1263,11 @@ export function ThemeEditorPage() {
     }
 
     patchTheme((draft) => {
-      const component = draft.components[selected];
-      component.x += dx;
-      component.y += dy;
+      const component = getThemeComponent(draft, selected);
+      if (component) {
+        component.x += dx;
+        component.y += dy;
+      }
     });
   }
 
@@ -1242,7 +1278,7 @@ export function ThemeEditorPage() {
 
     if (selectAllMode) {
       patchTheme((draft) => {
-        for (const component of Object.values(draft.components)) {
+        for (const { component } of listThemeComponentEntries(draft)) {
           component.x += dx;
           component.y += dy;
         }
@@ -1253,7 +1289,7 @@ export function ThemeEditorPage() {
     if (selectedIds.length > 1) {
       patchTheme((draft) => {
         for (const id of selectedIds) {
-          const component = draft.components[id];
+          const component = getThemeComponent(draft, id);
           if (!component) {
             continue;
           }
@@ -1281,7 +1317,15 @@ export function ThemeEditorPage() {
     }
 
     patchTheme((draft) => {
-      draft.components[selected] = structuredClone(savedSnapshot.components[selected]) as ThemeDefinition["components"][ComponentId];
+      if (isFixedComponentId(selected)) {
+        Object.assign(draft.components[selected], structuredClone(savedSnapshot.components[selected]));
+        return;
+      }
+      const savedComponent = savedSnapshot.freeComponents.find((component) => component.id === selected);
+      const index = draft.freeComponents.findIndex((component) => component.id === selected);
+      if (savedComponent && index >= 0) {
+        draft.freeComponents[index] = structuredClone(savedComponent);
+      }
     });
     closeMenus();
   }
@@ -1293,10 +1337,108 @@ export function ThemeEditorPage() {
 
     patchTheme((draft) => {
       for (const id of selectedSlotConfig.ids) {
-        draft.components[id] = structuredClone(savedSnapshot.components[id]) as ThemeDefinition["components"][ComponentId];
+        Object.assign(draft.components[id], structuredClone(savedSnapshot.components[id]));
       }
     });
     closeMenus();
+  }
+
+  function nextFreeComponentLabel(prefix: string) {
+    const used = new Set((themeResource.data?.freeComponents ?? []).map((component) => component.label));
+    let index = 1;
+    while (used.has(`${prefix} ${index}`)) {
+      index += 1;
+    }
+    return `${prefix} ${index}`;
+  }
+
+  function addFreeTextComponent() {
+    if (!themeResource.data) {
+      return;
+    }
+    const id = createFreeComponentId();
+    patchTheme((draft) => {
+      const base = structuredClone(draft.components.homeName);
+      const width = 440;
+      const height = 54;
+      const component: FreeTextComponent = {
+        ...base,
+        id,
+        label: nextFreeComponentLabel("Custom Text"),
+        contentMode: "static",
+        defaultText: "Custom text",
+        maxLength: 120,
+        multiline: false,
+        x: Math.round((draft.canvas.width - width) / 2),
+        y: Math.round((draft.canvas.height - height) / 2),
+        width,
+        height,
+        zIndex: getNextComponentZIndex(draft),
+        visible: true
+      };
+      draft.freeComponents.push(component);
+    });
+    selectComponent(id);
+  }
+
+  function addFreeImageComponent() {
+    if (!themeResource.data) {
+      return;
+    }
+    const id = createFreeComponentId();
+    patchTheme((draft) => {
+      const base = structuredClone(draft.components.eventLogo);
+      const width = 180;
+      const height = 120;
+      const component: FreeImageComponent = {
+        ...base,
+        id,
+        label: nextFreeComponentLabel("Custom Image"),
+        assetId: null,
+        x: Math.round((draft.canvas.width - width) / 2),
+        y: Math.round((draft.canvas.height - height) / 2),
+        width,
+        height,
+        zIndex: getNextComponentZIndex(draft),
+        visible: true
+      };
+      draft.freeComponents.push(component);
+    });
+    selectComponent(id);
+  }
+
+  function duplicateSelectedFreeComponent() {
+    if (!themeResource.data || !selectedEntry || selectedEntry.source !== "free") {
+      return;
+    }
+    const id = createFreeComponentId();
+    patchTheme((draft) => {
+      const source = draft.freeComponents.find((component) => component.id === selectedEntry.id);
+      if (!source) {
+        return;
+      }
+      const copy = structuredClone(source);
+      copy.id = id;
+      copy.label = `${source.label} Copy`.slice(0, 80);
+      copy.x = clamp(source.x + 24, 0, Math.max(0, draft.canvas.width - source.width));
+      copy.y = clamp(source.y + 24, 0, Math.max(0, draft.canvas.height - source.height));
+      copy.zIndex = getNextComponentZIndex(draft);
+      draft.freeComponents.push(copy);
+    });
+    selectComponent(id);
+  }
+
+  function deleteSelectedFreeComponent() {
+    if (!selectedEntry || selectedEntry.source !== "free") {
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedEntry.label}?`)) {
+      return;
+    }
+    patchTheme((draft) => {
+      draft.freeComponents = draft.freeComponents.filter((component) => component.id !== selectedEntry.id);
+    });
+    clearSelectionState();
   }
 
   function applyLayoutPreset(builtinId: string) {
@@ -1329,7 +1471,7 @@ export function ThemeEditorPage() {
     setSelectAllMode(false);
     setInspectorView("component");
 
-    if (!selected || !ids.includes(selected)) {
+    if (!selected || !isFixedComponentId(selected) || !ids.includes(selected)) {
       const next = direction > 0 ? ids[0] : ids[ids.length - 1];
       setSelected(next);
       setSelectedIds([next]);
@@ -1427,6 +1569,14 @@ export function ThemeEditorPage() {
     }
 
     if (target === "logo") {
+      if (selectedEntry?.source === "free" && selectedImageComponent) {
+        patchSelectedComponent((component) => {
+          if (component.kind === "image") {
+            component.assetId = asset.id;
+          }
+        });
+        return;
+      }
       patchTheme((draft) => {
         draft.components.eventLogo.assetId = asset.id;
         draft.components.eventLogo.visible = true;
@@ -1592,7 +1742,9 @@ export function ThemeEditorPage() {
       : selectedIds.length > 1
         ? `Editing ${selectedIds.length} pieces`
         : selected
-          ? `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}`
+          ? selectedEntry?.source === "free"
+            ? `Editing Custom > ${selectedShortLabel}`
+            : `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}`
           : "No piece selected";
   const selectedIdSet = new Set(selectedIds);
   const selectionModeDetail = selectAllMode
@@ -1656,6 +1808,12 @@ export function ThemeEditorPage() {
               </div>
               <div className="editor-sidebar-card-body">
                 <div className="editor-sidebar-actions editor-sidebar-actions--tight">
+                  <button type="button" className="secondary-button" onClick={addFreeTextComponent}>
+                    + Text
+                  </button>
+                  <button type="button" className="secondary-button" onClick={addFreeImageComponent}>
+                    + Image
+                  </button>
                   <button
                     type="button"
                     className={selectAllMode ? "secondary-button active-utility" : "secondary-button"}
@@ -1713,6 +1871,36 @@ export function ThemeEditorPage() {
                       </div>
                     </section>
                   ))}
+                  <section className="component-rail-group">
+                    <header className="component-rail-group-header">
+                      <strong>Custom</strong>
+                    </header>
+                    <div className="component-rail-list">
+                      {theme.freeComponents.length ? (
+                        theme.freeComponents.map((component) => {
+                          const isActive = selectedIdSet.has(component.id) || (selected === component.id && selectedIds.length === 0);
+                          return (
+                            <button
+                              key={component.id}
+                              type="button"
+                              className={isActive ? "component-rail-item component-rail-item--active" : "component-rail-item"}
+                              onClick={() => selectComponent(component.id)}
+                            >
+                              <span className="component-rail-item-main">
+                                <strong>{component.label}</strong>
+                                <small>{component.kind === "text" && component.contentMode === "operator" ? "Operator text" : component.kind}</small>
+                              </span>
+                              <span className={component.visible ? "component-rail-visibility" : "component-rail-visibility component-rail-visibility--muted"}>
+                                {component.visible ? "Visible" : "Hidden"}
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p className="hint">Add text or an image to create a custom layer.</p>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </div>
             </section>
@@ -1914,27 +2102,27 @@ export function ThemeEditorPage() {
                 <SectionCard title="State Preview" description="Simulate game states and scoreboard data." defaultOpen>
                   <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
                     <div className="row-action-menu row-action-menu--up" style={{ "--preset-anchor": "preset-anchor", anchorName: "--preset-anchor" } as any}>
-                      <button type="button" popovertarget="preview-preset-popover" className={buttonVariants({ variant: "secondary" })}>Preview preset</button>
+                      <button type="button" popoverTarget="preview-preset-popover" className={buttonVariants({ variant: "secondary" })}>Preview preset</button>
                       <div id="preview-preset-popover" popover="auto" className="row-action-menu-list" style={{ positionAnchor: "--preset-anchor", positionArea: "top span-left", margin: 0 } as any}>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); }}>
                           Live
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); }}>
                           Game
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); }}>
                           Break
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); }}>
                           Towel Left
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); }}>
                           Towel Right
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); }}>
                           Base Left
                         </button>
-                        <button type="button" popovertarget="preview-preset-popover" popovertargetaction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); }}>
+                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); }}>
                           Base Right
                         </button>
                       </div>
@@ -2405,6 +2593,7 @@ export function ThemeEditorPage() {
                     selectionModeDetail={selectionModeDetail}
                     selectAllMode={selectAllMode}
                     selectedEditableComponent={selectedEditableComponent}
+                    selectedComponentSource={selectedEntry?.source ?? "fixed"}
                     selectedSlotConfig={selectedSlotConfig}
                     selectedShortLabel={selectedShortLabel}
                     patchSelectedComponent={patchSelectedComponent}
@@ -2422,6 +2611,8 @@ export function ThemeEditorPage() {
                     selectedLogoContext={selectedLogoContext}
                     assets={assets.data ?? []}
                     onUploadAsset={(file, target) => void uploadAssetIntoTarget(file, target)}
+                    onDuplicateFreeComponent={duplicateSelectedFreeComponent}
+                    onDeleteFreeComponent={deleteSelectedFreeComponent}
                   />
                 ) : (
                   <SectionCard title="Component" description="Pick a scoreboard block from the structure cards or directly from the canvas." defaultOpen>

@@ -444,6 +444,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "teamLogoFallbackMode": "slotFallback"
       }
     },
+    "freeComponents": [],
     "teamEventOverlay": teamEventOverlay({
       general: {
         placementMode: "center-stamp",
@@ -805,6 +806,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "teamLogoFallbackMode": "slotFallback"
       }
     },
+    "freeComponents": [],
     "teamEventOverlay": teamEventOverlay({
       general: {
         placementMode: "top-ribbon",

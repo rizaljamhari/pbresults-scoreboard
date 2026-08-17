@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { Rnd } from "react-rnd";
-import type { ThemeDefinition, ComponentId } from "../../shared/theme";
+import type { ThemeDefinition } from "../../shared/theme";
 import type { NormalizedLiveState, StoredAsset } from "../../shared/theme";
+import { getThemeComponent, listThemeComponentEntries, type ThemeComponent } from "../../shared/themeComponents";
 import { OverlayRenderer } from "./OverlayRenderer";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
 
@@ -9,14 +10,14 @@ type ThemeCanvasEditorProps = {
   theme: ThemeDefinition;
   live: NormalizedLiveState | null;
   assets: StoredAsset[];
-  selectedId: ComponentId | null;
-  selectedIds?: ComponentId[];
+  selectedId: string | null;
+  selectedIds?: string[];
   selectAll?: boolean;
   zoom?: number;
   onZoomChange?: (nextZoom: number) => void;
   toolbar?: ReactNode;
-  onSelect: (id: ComponentId, options?: { additive?: boolean }) => void;
-  onMarqueeSelect?: (ids: ComponentId[], options?: { additive?: boolean }) => void;
+  onSelect: (id: string, options?: { additive?: boolean }) => void;
+  onMarqueeSelect?: (ids: string[], options?: { additive?: boolean }) => void;
   onSelectAll?: () => void;
   onUpdate: (theme: ThemeDefinition) => void;
 };
@@ -80,7 +81,7 @@ function roundRect(rect: Rect) {
 }
 
 function measureGroup(theme: ThemeDefinition) {
-  const components = Object.values(theme.components);
+  const components = listThemeComponentEntries(theme).map((entry) => entry.component);
   const visibleComponents = components.filter((component) => component.visible);
   const source = visibleComponents.length > 0 ? visibleComponents : components;
   const minX = Math.min(...source.map((component) => component.x));
@@ -95,8 +96,8 @@ function measureGroup(theme: ThemeDefinition) {
   };
 }
 
-function collectOthers(theme: ThemeDefinition, currentId: ComponentId | null) {
-  const components = Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>;
+function collectOthers(theme: ThemeDefinition, currentId: string | null) {
+  const components = listThemeComponentEntries(theme).map((entry) => [entry.id, entry.component] as const);
   const visibleComponents = components.filter(([, component]) => component.visible);
   const source = visibleComponents.length > 0 ? visibleComponents : components;
   return source.filter(([id]) => id !== currentId).map(([, component]) => component);
@@ -105,7 +106,7 @@ function collectOthers(theme: ThemeDefinition, currentId: ComponentId | null) {
 function collectAxisGuides(
   limit: number,
   safeInset: number,
-  others: Array<ThemeDefinition["components"][ComponentId]>,
+  others: ThemeComponent[],
   axis: "x" | "y",
   options: {
     includeCanvas: boolean;
@@ -157,7 +158,7 @@ function snapToGrid(value: number, gridSize: number) {
 function snapMoveRect(
   rect: Rect,
   theme: ThemeDefinition,
-  currentId: ComponentId | null,
+  currentId: string | null,
   snapSettings: SnapSettings
 ) {
   if (!snapSettings.enabled) {
@@ -276,7 +277,7 @@ function snapResizeRect(
   rect: Rect,
   resizeDirection: string,
   theme: ThemeDefinition,
-  currentId: ComponentId | null,
+  currentId: string | null,
   snapSettings: SnapSettings
 ) {
   if (!snapSettings.enabled) {
@@ -468,7 +469,10 @@ export function ThemeCanvasEditor({
       return;
     }
 
-    const component = theme.components[selectedId];
+    const component = getThemeComponent(theme, selectedId);
+    if (!component) {
+      return;
+    }
     const currentScale = stageScaleRef.current || 1;
     const worldCenterX = component.x + component.width / 2;
     const worldCenterY = component.y + component.height / 2;
@@ -701,11 +705,9 @@ export function ThemeCanvasEditor({
     if (marqueeSelection && marqueeSelection.pointerId === event.pointerId) {
       const worldRect = getMarqueeWorldRect(marqueeSelection);
       if (worldRect.width >= 3 || worldRect.height >= 3) {
-        const intersectingIds = (
-          Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>
-        )
-          .filter(([, component]) => component.visible)
-          .filter(([, component]) => {
+        const intersectingIds = listThemeComponentEntries(theme)
+          .filter(({ component }) => component.visible)
+          .filter(({ component }) => {
             const componentRight = component.x + component.width;
             const componentBottom = component.y + component.height;
             const rectRight = worldRect.x + worldRect.width;
@@ -717,7 +719,7 @@ export function ThemeCanvasEditor({
               componentBottom > worldRect.y
             );
           })
-          .map(([id]) => id);
+          .map(({ id }) => id);
 
         onMarqueeSelect?.(intersectingIds, { additive: true });
       }
@@ -818,7 +820,7 @@ export function ThemeCanvasEditor({
               {snapSummary}
             </button>
             <div style={{ "--anchor-snap": "anchor-snap", anchorName: "--anchor-snap" } as any}>
-              <button popovertarget="canvas-snap-popover" className="secondary-button">Snap options</button>
+              <button type="button" popoverTarget="canvas-snap-popover" className="secondary-button">Snap options</button>
               <div id="canvas-snap-popover" popover="auto" className="canvas-snap-controls-panel" style={{ positionAnchor: "--anchor-snap", positionArea: "bottom span-left", margin: 0 } as any}>
                 <label className="checkbox">
                   <input
@@ -1126,7 +1128,7 @@ export function ThemeCanvasEditor({
                   const snappedDeltaX = nextRect.x - groupRect.x;
                   const snappedDeltaY = nextRect.y - groupRect.y;
                   const next = structuredClone(theme);
-                  for (const component of Object.values(next.components)) {
+                  for (const { component } of listThemeComponentEntries(next)) {
                     component.x += snapSettings.enabled ? snappedDeltaX : deltaX;
                     component.y += snapSettings.enabled ? snappedDeltaY : deltaY;
                   }
@@ -1142,9 +1144,7 @@ export function ThemeCanvasEditor({
               </Rnd>
             ) : null}
 
-            {(
-              Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>
-            ).map(([id, component]) => (
+            {listThemeComponentEntries(theme).map(({ id, label, component }) => (
               <Rnd
                 key={id}
                 bounds="parent"
@@ -1161,7 +1161,7 @@ export function ThemeCanvasEditor({
                     y: component.y,
                     width: component.width,
                     height: component.height,
-                    label: id,
+                    label,
                     guides: { vertical: [], horizontal: [] }
                   });
                 }}
@@ -1174,7 +1174,7 @@ export function ThemeCanvasEditor({
                   );
                   setInteraction({
                     ...nextRect,
-                    label: id
+                    label
                   });
                 }}
                 onResizeStart={() => {
@@ -1184,7 +1184,7 @@ export function ThemeCanvasEditor({
                     y: component.y,
                     width: component.width,
                     height: component.height,
-                    label: id,
+                    label,
                     guides: { vertical: [], horizontal: [] }
                   });
                 }}
@@ -1196,8 +1196,11 @@ export function ThemeCanvasEditor({
                     snapSettings
                   );
                   const next = structuredClone(theme);
-                  next.components[id].x = nextRect.x;
-                  next.components[id].y = nextRect.y;
+                  const nextComponent = getThemeComponent(next, id);
+                  if (nextComponent) {
+                    nextComponent.x = nextRect.x;
+                    nextComponent.y = nextRect.y;
+                  }
                   setInteraction(null);
                   onUpdate(next);
                 }}
@@ -1211,7 +1214,7 @@ export function ThemeCanvasEditor({
                   );
                   setInteraction({
                     ...nextRect,
-                    label: id
+                    label
                   });
                 }}
                 onResizeStop={(_, direction, ref, ___, position) => {
@@ -1223,10 +1226,13 @@ export function ThemeCanvasEditor({
                     snapSettings
                   );
                   const next = structuredClone(theme);
-                  next.components[id].x = nextRect.x;
-                  next.components[id].y = nextRect.y;
-                  next.components[id].width = nextRect.width;
-                  next.components[id].height = nextRect.height;
+                  const nextComponent = getThemeComponent(next, id);
+                  if (nextComponent) {
+                    nextComponent.x = nextRect.x;
+                    nextComponent.y = nextRect.y;
+                    nextComponent.width = nextRect.width;
+                    nextComponent.height = nextRect.height;
+                  }
                   setInteraction(null);
                   onUpdate(next);
                 }}
@@ -1238,7 +1244,7 @@ export function ThemeCanvasEditor({
                   className="editor-hitbox"
                   onClick={(event) => onSelect(id, { additive: event.shiftKey })}
                 >
-                  {id}
+                  {label}
                 </button>
               </Rnd>
             ))}

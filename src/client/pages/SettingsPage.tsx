@@ -228,7 +228,6 @@ export function SettingsPage() {
           <label className="checkbox">
             <Checkbox
               name="pollEnabled"
-              type="checkbox"
               checked={draft?.pollEnabled ?? settings.data.pollEnabled}
               onChange={(event) =>
                 setDraft((current) =>
@@ -246,7 +245,6 @@ export function SettingsPage() {
           <label className="checkbox">
             <Checkbox
               name="autoRemoveBackgroundUploads"
-              type="checkbox"
               checked={draft?.autoRemoveBackgroundUploads ?? settings.data.autoRemoveBackgroundUploads}
               onChange={(event) =>
                 setDraft((current) =>

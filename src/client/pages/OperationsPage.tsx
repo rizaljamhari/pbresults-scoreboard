@@ -10,7 +10,7 @@ import type {
   ThemeDefinition
 } from "../../shared/theme";
 import { ApiError, api } from "../api";
-import { useAutoCloseRowActionMenus, useLiveState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { useAutoCloseRowActionMenus, useLiveState, useOperatorTextState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import {
   AdminPageFrame,
@@ -24,8 +24,10 @@ import {
   CardHeader,
   CardTitle,
   FieldHint,
+  Input,
   Select,
   StatusPanel,
+  Textarea,
   buttonVariants
 } from "../components/ui";
 
@@ -886,12 +888,17 @@ export function OperationsPage() {
   const teams = useTeams();
   const runtimeInfo = useRuntimeInfo();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
+  const operatorText = useOperatorTextState();
   const [togglingPoll, setTogglingPoll] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [resolutionDrafts, setResolutionDrafts] = useState<{ left: string; right: string }>({ left: "", right: "" });
   const [resolvingSide, setResolvingSide] = useState<"left" | "right" | null>(null);
   const [clearingSide, setClearingSide] = useState<"left" | "right" | null>(null);
   const previousRawNamesRef = useRef<{ left: string; right: string }>({ left: "", right: "" });
+  const operatorThemeIdRef = useRef<string | null>(null);
+  const [operatorTextDrafts, setOperatorTextDrafts] = useState<Record<string, string>>({});
+  const [dirtyOperatorTextIds, setDirtyOperatorTextIds] = useState<Set<string>>(() => new Set());
+  const [operatorTextBusyId, setOperatorTextBusyId] = useState<string | null>(null);
 
   const publishedTheme = useMemo(
     () => themes.data?.find((theme) => theme.id === settings.data?.publishedThemeId) ?? null,
@@ -1103,6 +1110,28 @@ export function OperationsPage() {
     }));
   }, [live.data?.displayLeftTeamMatch.inputName, live.data?.displayLeftTeamMatch.teamId, live.data?.displayRightTeamMatch.inputName, live.data?.displayRightTeamMatch.teamId]);
 
+  useEffect(() => {
+    const state = operatorText.data;
+    if (!state) {
+      return;
+    }
+    const themeChanged = operatorThemeIdRef.current !== state.themeId;
+    operatorThemeIdRef.current = state.themeId;
+    if (themeChanged) {
+      setDirtyOperatorTextIds(new Set());
+      setOperatorTextDrafts(Object.fromEntries(state.fields.map((field) => [field.componentId, field.value])));
+      return;
+    }
+    setOperatorTextDrafts((current) =>
+      Object.fromEntries(
+        state.fields.map((field) => [
+          field.componentId,
+          dirtyOperatorTextIds.has(field.componentId) ? current[field.componentId] ?? field.value : field.value
+        ])
+      )
+    );
+  }, [dirtyOperatorTextIds, operatorText.data]);
+
   async function handleSetPolling(enabled: boolean) {
     setTogglingPoll(true);
     try {
@@ -1210,6 +1239,48 @@ export function OperationsPage() {
     }
   }
 
+  async function handleTakeOperatorText(componentId: string) {
+    const themeId = operatorText.data?.themeId;
+    if (!themeId) {
+      return;
+    }
+    setOperatorTextBusyId(componentId);
+    try {
+      await api.updateOperatorText(themeId, componentId, operatorTextDrafts[componentId] ?? "");
+      setDirtyOperatorTextIds((current) => {
+        const next = new Set(current);
+        next.delete(componentId);
+        return next;
+      });
+      showToast({ kind: "success", message: "Operator text taken live.", durationMs: 1600 });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to take operator text live." });
+    } finally {
+      setOperatorTextBusyId(null);
+    }
+  }
+
+  async function handleResetOperatorText(componentId: string) {
+    const themeId = operatorText.data?.themeId;
+    if (!themeId) {
+      return;
+    }
+    setOperatorTextBusyId(componentId);
+    try {
+      await api.resetOperatorText(themeId, componentId);
+      setDirtyOperatorTextIds((current) => {
+        const next = new Set(current);
+        next.delete(componentId);
+        return next;
+      });
+      showToast({ kind: "success", message: "Operator text reset to its theme default.", durationMs: 1800 });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to reset operator text." });
+    } finally {
+      setOperatorTextBusyId(null);
+    }
+  }
+
   if (!settings.data || !themes.data || !teams.data) {
     return (
       <Card>
@@ -1300,6 +1371,79 @@ export function OperationsPage() {
 
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)] items-start gap-4 max-[1200px]:grid-cols-1">
         <div className="panel-stack min-w-0 gap-4">
+          <Card>
+            <CardHeader>
+              <div>
+                <p className="eyebrow">On-air text</p>
+                <CardTitle className="text-xl">Operator-controlled graphics</CardTitle>
+                <CardDescription>Draft changes privately, then use Take to send a completed value to every live overlay.</CardDescription>
+              </div>
+            </CardHeader>
+            {operatorText.error ? <FieldHint>{operatorText.error}</FieldHint> : null}
+            {operatorText.data?.fields.length ? (
+              <div className="grid gap-4">
+                {operatorText.data.fields.map((field) => {
+                  const draft = operatorTextDrafts[field.componentId] ?? field.value;
+                  const dirty = dirtyOperatorTextIds.has(field.componentId);
+                  const busy = operatorTextBusyId === field.componentId;
+                  const updateDraft = (value: string) => {
+                    setOperatorTextDrafts((current) => ({ ...current, [field.componentId]: value }));
+                    setDirtyOperatorTextIds((current) => new Set(current).add(field.componentId));
+                  };
+                  return (
+                    <div key={field.componentId} className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainerLow p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="grid gap-1">
+                          <strong>{field.label}</strong>
+                          <span className="text-sm text-md3-onSurfaceVariant">On air: {field.value || "(blank)"}</span>
+                        </div>
+                        <Badge variant={dirty ? "warning" : field.hasOverride ? "success" : "default"}>
+                          {dirty ? "Draft" : field.hasOverride ? "Live override" : "Theme default"}
+                        </Badge>
+                      </div>
+                      {field.multiline ? (
+                        <Textarea
+                          rows={3}
+                          maxLength={field.maxLength}
+                          value={draft}
+                          onChange={(event) => updateDraft(event.target.value)}
+                        />
+                      ) : (
+                        <Input
+                          maxLength={field.maxLength}
+                          value={draft}
+                          onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
+                        />
+                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <FieldHint>{draft.length}/{field.maxLength} characters</FieldHint>
+                        <div className="action-row compact">
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            disabled={busy || !field.hasOverride}
+                            onClick={() => void handleResetOperatorText(field.componentId)}
+                          >
+                            Reset
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={busy || !dirty || draft.length > field.maxLength}
+                            onClick={() => void handleTakeOperatorText(field.componentId)}
+                          >
+                            {busy ? "Updating..." : "Take"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <FieldHint>The published theme has no operator-controlled text components.</FieldHint>
+            )}
+          </Card>
+
           <Card>
             <CardHeader>
               <div>

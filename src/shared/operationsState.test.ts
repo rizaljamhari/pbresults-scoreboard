@@ -38,6 +38,7 @@ describe("operationsStateSchema", () => {
         updatedAt: "2026-05-18T10:27:12.226Z"
       }
     ]);
+    expect(parsed.operatorTextOverrides).toEqual([]);
   });
 
   it("keeps the new override array format unchanged", () => {
@@ -55,5 +56,6 @@ describe("operationsStateSchema", () => {
 
     expect(parsed.overrides).toHaveLength(1);
     expect(parsed.overrides[0]?.normalizedInputName).toBe("SBJ");
+    expect(parsed.operatorTextOverrides).toEqual([]);
   });
 });

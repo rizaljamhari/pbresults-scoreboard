@@ -6,9 +6,10 @@ type OverlayRendererProps = {
   theme: ThemeDefinition;
   live: NormalizedLiveState | null;
   assets?: StoredAsset[];
+  operatorTextValues?: Record<string, string>;
   editable?: boolean;
-  selectedComponentId?: ComponentId | null;
-  onSelectComponent?: (id: ComponentId) => void;
+  selectedComponentId?: string | null;
+  onSelectComponent?: (id: string) => void;
 };
 
 type OverlaySnapshot = {
@@ -385,6 +386,7 @@ export function OverlayRenderer({
   theme,
   live,
   assets = [],
+  operatorTextValues = {},
   editable = false,
   selectedComponentId,
   onSelectComponent
@@ -1013,6 +1015,85 @@ export function OverlayRenderer({
                   {theme.centerSecondary.timeout.text}
                 </span>
               ) : null}
+            </span>
+          </button>
+        );
+      })}
+
+      {theme.freeComponents.map((component) => {
+        const commonClass = editable && selectedComponentId === component.id ? "component-slot selected" : "component-slot";
+        const surface = surfaceStyles(component, assets, theme, live);
+
+        if (component.kind === "image") {
+          const imageAsset = component.assetId ? assets.find((asset) => asset.id === component.assetId) ?? null : null;
+          return (
+            <button
+              key={component.id}
+              type="button"
+              className={commonClass}
+              style={imageStyles(component)}
+              onClick={() => onSelectComponent?.(component.id)}
+            >
+              <span className="component-body">
+                <span className="component-surface" style={surface.background} />
+                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+                <span
+                  className="component-content image-content"
+                  style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}
+                >
+                  {imageAsset ? (
+                    <img
+                      alt={component.label}
+                      src={imageAsset.url}
+                      className="event-logo-image"
+                      style={{
+                        objectFit: resolveObjectFit(component.backgroundImageFit),
+                        objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
+                      }}
+                    />
+                  ) : editable ? (
+                    <span>{component.label}</span>
+                  ) : null}
+                </span>
+              </span>
+            </button>
+          );
+        }
+
+        const content =
+          component.contentMode === "operator"
+            ? operatorTextValues[component.id] ?? component.defaultText
+            : component.defaultText;
+        return (
+          <button
+            key={component.id}
+            type="button"
+            className={commonClass}
+            style={{ ...frameStyles(component), display: component.visible ? "flex" : "none" }}
+            onClick={() => onSelectComponent?.(component.id)}
+          >
+            <span className="component-body">
+              <span className="component-surface" style={surface.background} />
+              {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+              <span
+                className="component-content text-content"
+                style={{
+                  justifyContent:
+                    component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+                  padding: resolveComponentPadding(component),
+                  ...resolveComponentOffset(component),
+                  color: component.color,
+                  fontFamily: `"${component.fontFamily}", sans-serif`,
+                  fontSize: component.fontSize,
+                  fontWeight: component.fontWeight,
+                  letterSpacing: component.letterSpacing,
+                  lineHeight: component.lineHeight,
+                  whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
+                  overflow: "hidden"
+                }}
+              >
+                {content}
+              </span>
             </span>
           </button>
         );

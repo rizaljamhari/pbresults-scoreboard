@@ -51,7 +51,7 @@ const statusPanelVariants = cva("grid gap-3 rounded-md3m border p-4", {
   }
 });
 
-interface StatusPanelProps extends React.ComponentProps<"section">, VariantProps<typeof statusPanelVariants> {
+interface StatusPanelProps extends Omit<React.ComponentProps<"section">, "title">, VariantProps<typeof statusPanelVariants> {
   icon?: React.ReactNode;
   title?: React.ReactNode;
   description?: React.ReactNode;

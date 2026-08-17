@@ -9,6 +9,8 @@ import {
   assetSchema,
   createThemeId,
   operationsStateSchema,
+  operatorTextOverrideSchema,
+  operatorTextStateSchema,
   settingsSchema,
   teamRegistryExportSchema,
   teamMatchResultSchema,
@@ -19,6 +21,8 @@ import {
   type AppExportPackage,
   type AppSettings,
   type OperationsState,
+  type OperatorTextOverride,
+  type OperatorTextState,
   type StoredAsset,
   type TeamMatchResult,
   type TeamRecord,
@@ -31,6 +35,7 @@ import { createThemeExportPackage } from "../shared/exportTheme.js";
 import { builtinThemes } from "../shared/builtinThemes.js";
 import { defaultSettings } from "../shared/theme.js";
 import { listExplicitTeamMatchNames, matchTeamName, normalizeTeamName } from "../shared/teamMatching.js";
+import { listOperatorTextComponents } from "../shared/themeComponents.js";
 import { removeImageBackground } from "./imageProcessing.js";
 import { dataDir, uploadsDir } from "./runtimePaths.js";
 const settingsPath = path.join(dataDir, "settings.json");
@@ -42,7 +47,8 @@ const legacyDatabasePath = path.join(dataDir, "scoreboard.db");
 const preferredBuiltinThemeId = "theme-7ad8adb8-e017-4853-93b1-fb608a750253";
 const allowedBuiltinThemeIds = new Set([preferredBuiltinThemeId, "builtin-minimal-strip"]);
 const defaultOperationsState: OperationsState = {
-  overrides: []
+  overrides: [],
+  operatorTextOverrides: []
 };
 
 type StoredAssetRecord = StoredAsset & { filePath: string };
@@ -116,7 +122,7 @@ function findReusedAssetByHash(contentHash: string, mode: "any" | "processed-onl
 
 function collectThemeAssetIds(theme: ThemeDefinition): string[] {
   const assetIds = new Set<string>();
-  for (const component of Object.values(theme.components)) {
+  for (const component of [...Object.values(theme.components), ...theme.freeComponents]) {
     if (component.kind === "image" && component.assetId) {
       assetIds.add(component.assetId);
     }
@@ -147,7 +153,7 @@ function collectTeamAssetIds(teams: TeamRecord[]): string[] {
 }
 
 function remapThemeAssetIds(theme: ThemeDefinition, idMap: Map<string, string>) {
-  for (const component of Object.values(theme.components)) {
+  for (const component of [...Object.values(theme.components), ...theme.freeComponents]) {
     if (component.kind === "image") {
       component.assetId = component.assetId ? (idMap.get(component.assetId) ?? null) : null;
     }
@@ -363,6 +369,131 @@ function writeOperationsState(next: OperationsState) {
   writeJson(operationsPath, operationsStateSchema.parse(next));
 }
 
+export function getOperatorTextState(): OperatorTextState {
+  const publishedThemeId = getSettings().publishedThemeId;
+  const theme = publishedThemeId ? getTheme(publishedThemeId) : null;
+  if (!theme) {
+    return operatorTextStateSchema.parse({ themeId: null, fields: [] });
+  }
+
+  const operations = getOperationsState();
+  const overrides = new Map(
+    operations.operatorTextOverrides
+      .filter((override) => override.themeId === theme.id)
+      .map((override) => [override.componentId, override])
+  );
+  const fields = listOperatorTextComponents(theme).map((component) => {
+    const override = overrides.get(component.id);
+    return {
+      componentId: component.id,
+      label: component.label,
+      defaultValue: component.defaultText,
+      value: override?.value ?? component.defaultText,
+      hasOverride: Boolean(override),
+      maxLength: component.maxLength,
+      multiline: component.multiline,
+      updatedAt: override?.updatedAt ?? null
+    };
+  });
+
+  return operatorTextStateSchema.parse({ themeId: theme.id, fields });
+}
+
+export function saveOperatorTextOverride(themeId: string, componentId: string, inputValue: string): OperatorTextOverride {
+  const settings = getSettings();
+  if (settings.publishedThemeId !== themeId) {
+    throw new Error("Published theme changed; reload the operator text controls");
+  }
+  const theme = getTheme(themeId);
+  if (!theme) {
+    throw new Error("Theme not found");
+  }
+  const component = listOperatorTextComponents(theme).find((candidate) => candidate.id === componentId);
+  if (!component) {
+    throw new Error("Operator text component not found");
+  }
+
+  const value = inputValue.replace(/\r\n?/g, "\n");
+  if (!component.multiline && value.includes("\n")) {
+    throw new Error("This operator text field only supports one line");
+  }
+  if (value.length > component.maxLength) {
+    throw new Error(`Operator text must be ${component.maxLength} characters or fewer`);
+  }
+
+  const now = new Date().toISOString();
+  const operations = getOperationsState();
+  const existing = operations.operatorTextOverrides.find(
+    (override) => override.themeId === themeId && override.componentId === componentId
+  );
+  const next = operatorTextOverrideSchema.parse({
+    themeId,
+    componentId,
+    value,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  });
+  writeOperationsState({
+    ...operations,
+    operatorTextOverrides: [
+      ...operations.operatorTextOverrides.filter(
+        (override) => override.themeId !== themeId || override.componentId !== componentId
+      ),
+      next
+    ]
+  });
+  return next;
+}
+
+export function clearOperatorTextOverride(themeId: string, componentId: string): void {
+  if (getSettings().publishedThemeId !== themeId) {
+    throw new Error("Published theme changed; reload the operator text controls");
+  }
+  const theme = getTheme(themeId);
+  if (!theme || !listOperatorTextComponents(theme).some((component) => component.id === componentId)) {
+    throw new Error("Operator text component not found");
+  }
+  const operations = getOperationsState();
+  writeOperationsState({
+    ...operations,
+    operatorTextOverrides: operations.operatorTextOverrides.filter(
+      (override) => override.themeId !== themeId || override.componentId !== componentId
+    )
+  });
+}
+
+export function clearAllOperatorTextOverrides(themeId: string): void {
+  if (getSettings().publishedThemeId !== themeId) {
+    throw new Error("Published theme changed; reload the operator text controls");
+  }
+  const operations = getOperationsState();
+  writeOperationsState({
+    ...operations,
+    operatorTextOverrides: operations.operatorTextOverrides.filter((override) => override.themeId !== themeId)
+  });
+}
+
+function pruneOperatorTextOverridesForTheme(theme: ThemeDefinition): void {
+  const validComponents = new Map(listOperatorTextComponents(theme).map((component) => [component.id, component]));
+  const operations = getOperationsState();
+  const nextOverrides = operations.operatorTextOverrides.filter(
+    (override) => {
+      if (override.themeId !== theme.id) {
+        return true;
+      }
+      const component = validComponents.get(override.componentId);
+      return Boolean(
+        component &&
+          override.value.length <= component.maxLength &&
+          (component.multiline || !override.value.includes("\n"))
+      );
+    }
+  );
+  if (nextOverrides.length !== operations.operatorTextOverrides.length) {
+    writeOperationsState({ ...operations, operatorTextOverrides: nextOverrides });
+  }
+}
+
 export function saveTeamResolutionOverride(rawInputName: string, teamId: string): TeamResolutionOverride {
   const team = getTeamRecord(teamId);
   if (!team) {
@@ -386,6 +517,7 @@ export function saveTeamResolutionOverride(rawInputName: string, teamId: string)
     updatedAt: now
   });
   writeOperationsState({
+    ...operations,
     overrides: [...operations.overrides.filter((override) => override.normalizedInputName !== normalizedInputName), nextOverride]
   });
   return nextOverride;
@@ -398,6 +530,7 @@ export function clearTeamResolutionOverride(rawInputName: string) {
   }
   const operations = getOperationsState();
   writeOperationsState({
+    ...operations,
     overrides: operations.overrides.filter((override) => override.normalizedInputName !== normalizedInputName)
   });
 }
@@ -600,6 +733,7 @@ export function saveTheme(theme: ThemeDefinition): ThemeDefinition {
     themes.push(toSave);
   }
   writeJson(themesPath, themes);
+  pruneOperatorTextOverridesForTheme(toSave);
   return toSave;
 }
 
@@ -616,6 +750,11 @@ export function deleteTheme(id: string): void {
     themesPath,
     themes.filter((theme) => theme.id !== id)
   );
+  const operations = getOperationsState();
+  writeOperationsState({
+    ...operations,
+    operatorTextOverrides: operations.operatorTextOverrides.filter((override) => override.themeId !== id)
+  });
   const settings = getSettings();
   if (settings.publishedThemeId === id) {
     const fallbackThemeId = resolvePrimaryThemeId(listThemes().filter((theme) => theme.id !== id));
@@ -894,6 +1033,10 @@ export async function importAppPackage(pkg: AppExportPackage): Promise<{ setting
   writeJson(themesPath, restoredThemes);
   writeJson(assetsPath, restoredAssets);
   writeJson(teamsPath, restoredTeams);
+  writeOperationsState({
+    ...getOperationsState(),
+    operatorTextOverrides: []
+  });
 
   return {
     settings: restoredSettings,

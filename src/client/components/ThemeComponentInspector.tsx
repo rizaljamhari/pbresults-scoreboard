@@ -1,6 +1,7 @@
 import React from "react";
-import { ThemeDefinition, ComponentId, fontFamilies, backgroundImageFitValues, backgroundImagePositionValues } from "../../shared/theme";
-import { SectionCard, buttonVariants } from "./ui";
+import { ThemeDefinition, fontFamilies, backgroundImageFitValues, backgroundImagePositionValues } from "../../shared/theme";
+import type { ThemeComponent } from "../../shared/themeComponents";
+import { buttonVariants } from "./ui";
 import { ColorField, NumberField, TextField } from "../pages/ThemeEditorPage";
 
 export interface ThemeComponentInspectorProps {
@@ -10,7 +11,8 @@ export interface ThemeComponentInspectorProps {
   selectedSummaryLabel: string;
   selectionModeDetail: string;
   selectAllMode: boolean;
-  selectedEditableComponent: (ThemeDefinition["components"][ComponentId] & { id: ComponentId, visible: boolean }) | null;
+  selectedEditableComponent: ThemeComponent | null;
+  selectedComponentSource: "fixed" | "free";
   selectedSlotConfig: any;
   selectedShortLabel: string;
   patchSelectedComponent: (updater: (draft: any) => void) => void;
@@ -28,6 +30,8 @@ export interface ThemeComponentInspectorProps {
   selectedLogoContext: any;
   assets: any[];
   onUploadAsset?: (file: File, target: "surface" | "logo") => void;
+  onDuplicateFreeComponent?: () => void;
+  onDeleteFreeComponent?: () => void;
 }
 
 function PropertyAccordion({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
@@ -44,11 +48,11 @@ function PropertyAccordion({ title, defaultOpen = true, children }: { title: str
 export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
   const {
     theme, patchTheme, selectedSlot, selectedSummaryLabel, selectionModeDetail, selectAllMode,
-    selectedEditableComponent, selectedSlotConfig, selectedShortLabel, patchSelectedComponent,
+    selectedEditableComponent, selectedComponentSource, selectedSlotConfig, selectedShortLabel, patchSelectedComponent,
     canBringBackward, canBringForward, reorderSelectedComponent, selectedMirroredPair,
     mirrorSelectedPieceLayout, bringSelectedIntoView, resetSelectedPieceToSaved, savedSnapshot,
     selectedTextComponent, patchSelectedTextComponent, selectedImageComponent,
-    selectedLogoContext, assets, onUploadAsset
+    selectedLogoContext, assets, onUploadAsset, onDuplicateFreeComponent, onDeleteFreeComponent
   } = props;
 
   return (
@@ -67,9 +71,9 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
       </div>
 
       {!selectAllMode && selectedEditableComponent && (
-        <div className="inspector-panel-body" style={{ display: "flex", flexDirection: "column", marginTop: "0.5rem" }}>
+        <div className="inspector-panel-body">
           
-          <div className="inspector-header-actions" style={{ padding: "0 0.5rem 0.75rem", display: "flex", flexWrap: "wrap", gap: "0.25rem", alignItems: "center", justifyContent: "space-between" }}>
+          <div className="inspector-header-actions">
             <label className="checkbox" style={{ margin: 0, fontWeight: 500 }}>
               <input
                 type="checkbox"
@@ -78,7 +82,7 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
               />
               Visible
             </label>
-            <div style={{ display: "flex", gap: "0.25rem", marginLeft: "auto" }}>
+            <div className="inspector-header-action-group">
               <div className="z-order-inline">
                 <button type="button" className="z-order-btn" title="Send to back" onClick={() => reorderSelectedComponent("sendToBack")} disabled={!canBringBackward}>⇤</button>
                 <button type="button" className="z-order-btn" title="Bring backward" onClick={() => reorderSelectedComponent("bringBackward")} disabled={!canBringBackward}>↓</button>
@@ -90,8 +94,81 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
               )}
               <button type="button" className={buttonVariants({ variant: "secondary", size: "sm" })} style={{ padding: "0 6px" }} onClick={bringSelectedIntoView} title="Bring into view">👁</button>
               <button type="button" className={buttonVariants({ variant: "secondary", size: "sm" })} style={{ padding: "0 6px" }} onClick={resetSelectedPieceToSaved} disabled={!savedSnapshot} title="Reset to saved">↺</button>
+              {selectedComponentSource === "free" ? (
+                <>
+                  <button type="button" className={buttonVariants({ variant: "secondary", size: "sm" })} onClick={onDuplicateFreeComponent}>Duplicate</button>
+                  <button type="button" className={buttonVariants({ variant: "danger", size: "sm" })} onClick={onDeleteFreeComponent}>Delete</button>
+                </>
+              ) : null}
             </div>
           </div>
+
+          {selectedComponentSource === "free" ? (
+            <PropertyAccordion title="Component" defaultOpen>
+              <label>
+                <span className="hint">Label</span>
+                <input
+                  value={(selectedEditableComponent as { label?: string }).label ?? ""}
+                  maxLength={80}
+                  onChange={(event) => patchSelectedComponent((component: any) => { component.label = event.target.value })}
+                />
+              </label>
+              {selectedTextComponent && "contentMode" in selectedTextComponent ? (
+                <div className="form-grid" style={{ marginTop: "0.75rem" }}>
+                  <label>
+                    <span className="hint">Content mode</span>
+                    <select
+                      value={selectedTextComponent.contentMode}
+                      onChange={(event) => patchSelectedTextComponent((component: any) => { component.contentMode = event.target.value })}
+                    >
+                      <option value="static">Static</option>
+                      <option value="operator">Operator controlled</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="hint">Default text</span>
+                    {selectedTextComponent.multiline ? (
+                      <textarea
+                        rows={3}
+                        value={selectedTextComponent.defaultText}
+                        maxLength={selectedTextComponent.maxLength}
+                        onChange={(event) => patchSelectedTextComponent((component: any) => { component.defaultText = event.target.value })}
+                      />
+                    ) : (
+                      <input
+                        value={selectedTextComponent.defaultText}
+                        maxLength={selectedTextComponent.maxLength}
+                        onChange={(event) => patchSelectedTextComponent((component: any) => { component.defaultText = event.target.value.replace(/[\r\n]+/g, " ") })}
+                      />
+                    )}
+                  </label>
+                  <NumberField
+                    label="Maximum characters"
+                    min={1}
+                    max={500}
+                    value={selectedTextComponent.maxLength}
+                    onChange={(value) => patchSelectedTextComponent((component: any) => {
+                      component.maxLength = Math.max(1, Math.min(500, Math.round(value)));
+                      component.defaultText = component.defaultText.slice(0, component.maxLength);
+                    })}
+                  />
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedTextComponent.multiline}
+                      onChange={(event) => patchSelectedTextComponent((component: any) => {
+                        component.multiline = event.target.checked;
+                        if (!event.target.checked) {
+                          component.defaultText = component.defaultText.replace(/[\r\n]+/g, " ");
+                        }
+                      })}
+                    />
+                    Allow multiple lines
+                  </label>
+                </div>
+              ) : null}
+            </PropertyAccordion>
+          ) : null}
 
           <PropertyAccordion title="Layout" defaultOpen>
             <div className="compact-grid">

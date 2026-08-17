@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
-import { useAssets, useLiveState, useSettings } from "../hooks";
+import { useAssets, useLiveState, useOperatorTextState, useSettings } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
 import type { ThemeDefinition } from "../../shared/theme";
@@ -11,6 +11,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   const [theme, setTheme] = useState<ThemeDefinition | null>(null);
   const settings = useSettings();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
+  const operatorText = useOperatorTextState();
   const assets = useAssets();
 
   useEffect(() => {
@@ -79,7 +80,16 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
         innerClassName="overlay-stage"
         mode="contain"
       >
-        <OverlayRenderer theme={theme} live={live.data} assets={assets.data ?? []} />
+        <OverlayRenderer
+          theme={theme}
+          live={live.data}
+          assets={assets.data ?? []}
+          operatorTextValues={
+            operatorText.data?.themeId === theme.id
+              ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))
+              : {}
+          }
+        />
       </ScaledCanvasFrame>
     </div>
   );

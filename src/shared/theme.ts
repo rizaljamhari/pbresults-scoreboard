@@ -103,6 +103,24 @@ const imageComponentBaseSchema = commonFrameBaseSchema.extend({
 
 export const imageComponentSchema = z.preprocess(migrateLegacyFrame, imageComponentBaseSchema);
 
+const freeTextComponentBaseSchema = textComponentBaseSchema.extend({
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(80),
+  contentMode: z.enum(["static", "operator"]).default("static"),
+  defaultText: z.string().default(""),
+  maxLength: z.number().int().min(1).max(500).default(120),
+  multiline: z.boolean().default(false)
+});
+
+const freeImageComponentBaseSchema = imageComponentBaseSchema.extend({
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(80)
+});
+
+export const freeTextComponentSchema = z.preprocess(migrateLegacyFrame, freeTextComponentBaseSchema);
+export const freeImageComponentSchema = z.preprocess(migrateLegacyFrame, freeImageComponentBaseSchema);
+export const freeComponentSchema = z.union([freeTextComponentSchema, freeImageComponentSchema]);
+
 const defaultImageComponentValue = {
   kind: "image" as const,
   x: 0,
@@ -401,6 +419,7 @@ export const themeSchema = z.object({
     breakTime: textComponentSchema,
     eventLogo: imageComponentSchema
   }),
+  freeComponents: z.array(freeComponentSchema).default([]),
   teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({})
 });
@@ -475,6 +494,30 @@ export const teamResolutionOverrideSchema = z.object({
   updatedAt: z.string()
 });
 
+export const operatorTextOverrideSchema = z.object({
+  themeId: z.string(),
+  componentId: z.string(),
+  value: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const operatorTextFieldSchema = z.object({
+  componentId: z.string(),
+  label: z.string(),
+  defaultValue: z.string(),
+  value: z.string(),
+  hasOverride: z.boolean(),
+  maxLength: z.number().int().positive(),
+  multiline: z.boolean(),
+  updatedAt: z.string().nullable()
+});
+
+export const operatorTextStateSchema = z.object({
+  themeId: z.string().nullable(),
+  fields: z.array(operatorTextFieldSchema)
+});
+
 function migrateLegacyOperationsState(input: unknown): unknown {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return input;
@@ -514,7 +557,8 @@ function migrateLegacyOperationsState(input: unknown): unknown {
 export const operationsStateSchema = z.preprocess(
   migrateLegacyOperationsState,
   z.object({
-    overrides: z.array(teamResolutionOverrideSchema).default([])
+    overrides: z.array(teamResolutionOverrideSchema).default([]),
+    operatorTextOverrides: z.array(operatorTextOverrideSchema).default([])
   })
 );
 
@@ -593,6 +637,9 @@ export const teamRegistryExportSchema = z.object({
 
 export type TextThemeComponent = z.infer<typeof textComponentSchema>;
 export type ImageThemeComponent = z.infer<typeof imageComponentSchema>;
+export type FreeTextComponent = z.infer<typeof freeTextComponentSchema>;
+export type FreeImageComponent = z.infer<typeof freeImageComponentSchema>;
+export type FreeComponent = z.infer<typeof freeComponentSchema>;
 export type ThemeDefinition = z.infer<typeof themeSchema>;
 export type AppSettings = z.infer<typeof settingsSchema>;
 export type NormalizedLiveState = z.infer<typeof normalizedLiveStateSchema>;
@@ -600,6 +647,9 @@ export type StoredAsset = z.infer<typeof assetSchema>;
 export type TeamRecord = z.infer<typeof teamRecordSchema>;
 export type TeamMatchResult = z.infer<typeof teamMatchResultSchema>;
 export type TeamResolutionOverride = z.infer<typeof teamResolutionOverrideSchema>;
+export type OperatorTextOverride = z.infer<typeof operatorTextOverrideSchema>;
+export type OperatorTextField = z.infer<typeof operatorTextFieldSchema>;
+export type OperatorTextState = z.infer<typeof operatorTextStateSchema>;
 export type OperationsState = z.infer<typeof operationsStateSchema>;
 export type ThemeExportPackage = z.infer<typeof themeExportSchema>;
 export type AppExportPackage = z.infer<typeof appExportSchema>;

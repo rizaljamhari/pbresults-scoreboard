@@ -347,6 +347,34 @@ Effect:
 - asks the poller to fetch immediately
 - works even if polling is paused
 
+## Operator text endpoints
+
+### `GET /api/operations/text-fields`
+
+Returns the operator-controlled free-text fields in the currently published theme, including each field's label, default value, current on-air value, limits, and override status.
+
+### `GET /api/operations/text/stream`
+
+Server-Sent Events endpoint that immediately publishes the current operator-text state and emits again after Take, Reset, theme publication, or relevant theme changes.
+
+### `PUT /api/operations/text/:themeId/:componentId`
+
+Request body:
+
+```json
+{ "value": "DAY 2 | CHAMPIONS DIV | FINALS" }
+```
+
+Validates that the theme is currently published and the component is operator-controlled text before taking the value live.
+
+### `DELETE /api/operations/text/:themeId/:componentId`
+
+Removes the live override so the component returns to its theme default.
+
+### `POST /api/operations/text/:themeId/reset`
+
+Clears every operator-text override for the currently published theme.
+
 ## Settings endpoints
 
 ### `GET /api/settings`

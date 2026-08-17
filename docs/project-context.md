@@ -355,6 +355,13 @@ Important components:
 - `breakTime`
 - `eventLogo`
 
+Themes can also contain any number of `freeComponents`:
+
+- free text with static or operator-controlled content
+- free images backed by uploaded assets
+
+Free components have immutable IDs and editable labels. Operator-controlled text is stored in `operations.json`, scoped by theme and component ID, so taking text live never mutates the published theme. Operations uses an explicit Take action; typing remains a private draft until then.
+
 Important runtime additions:
 
 - `teamEventOverlay`

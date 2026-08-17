@@ -6,9 +6,12 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { livePoller } from "./livePoller.js";
+import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { clientDistDir, uploadsDir } from "./runtimePaths.js";
 import {
   attachTeamLogo,
+  clearAllOperatorTextOverrides,
+  clearOperatorTextOverride,
   createTeamRecord,
   deleteTheme,
   deleteTeamRecord,
@@ -16,6 +19,7 @@ import {
   exportTeamRegistryPackage,
   exportThemePackage,
   getOperationsState,
+  getOperatorTextState,
   getSettings,
   getTheme,
   getTeamRecord,
@@ -29,6 +33,7 @@ import {
   publishTheme,
   rememberTeamLiveMatchName,
   saveTeamRecord,
+  saveOperatorTextOverride,
   saveTeamResolutionOverride,
   saveTheme,
   storeAsset,
@@ -122,6 +127,7 @@ app.put("/api/settings", async (request, reply) => {
   const settings = settingsSchema.parse(request.body);
   const next = updateSettings(settings);
   livePoller.reconfigure();
+  operatorTextRuntime.emitCurrent();
   return reply.send(next);
 });
 app.post("/api/live/poll/start", async () => {
@@ -145,6 +151,65 @@ app.post("/api/live/poll/refresh", async () => {
   return { ok: true };
 });
 app.get("/api/operations", async () => getOperationsState());
+app.get("/api/operations/text-fields", async () => getOperatorTextState());
+app.get("/api/operations/text/stream", async (_request, reply) => {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive"
+  });
+
+  const unsubscribe = operatorTextRuntime.subscribe((state) => {
+    reply.raw.write(`data: ${JSON.stringify(state)}\n\n`);
+  });
+  const keepAlive = setInterval(() => {
+    reply.raw.write(": keep-alive\n\n");
+  }, 15000);
+  reply.raw.on("close", () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+  });
+});
+app.put("/api/operations/text/:themeId/:componentId", async (request, reply) => {
+  const { themeId, componentId } = request.params as { themeId: string; componentId: string };
+  const value = (request.body as { value?: unknown } | undefined)?.value;
+  if (typeof value !== "string") {
+    return reply.code(400).send({ message: "value must be a string" });
+  }
+  try {
+    const override = saveOperatorTextOverride(themeId, componentId, value);
+    operatorTextRuntime.emitCurrent();
+    return override;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update operator text";
+    const status = message.startsWith("Published theme changed") ? 409 : message.includes("not found") ? 404 : 400;
+    return reply.code(status).send({ message });
+  }
+});
+app.delete("/api/operations/text/:themeId/:componentId", async (request, reply) => {
+  const { themeId, componentId } = request.params as { themeId: string; componentId: string };
+  try {
+    clearOperatorTextOverride(themeId, componentId);
+    operatorTextRuntime.emitCurrent();
+    return reply.code(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to reset operator text";
+    const status = message.startsWith("Published theme changed") ? 409 : message.includes("not found") ? 404 : 400;
+    return reply.code(status).send({ message });
+  }
+});
+app.post("/api/operations/text/:themeId/reset", async (request, reply) => {
+  const { themeId } = request.params as { themeId: string };
+  try {
+    clearAllOperatorTextOverrides(themeId);
+    operatorTextRuntime.emitCurrent();
+    return reply.code(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to reset operator text";
+    return reply.code(message.startsWith("Published theme changed") ? 409 : 400).send({ message });
+  }
+});
 app.post("/api/operations/resolve", async (request, reply) => {
   const body = ((request.body as { teamId?: string; rawInputName?: string; remember?: boolean; forceReassign?: boolean } | undefined) ?? {});
   if (!body.teamId?.trim() || !body.rawInputName?.trim()) {
@@ -202,6 +267,7 @@ app.post("/api/app/import", async (request, reply) => {
   const pkg = appExportSchema.parse(request.body);
   const restored = await importAppPackage(pkg);
   livePoller.reconfigure();
+  operatorTextRuntime.emitCurrent();
   return reply.code(201).send(restored);
 });
 app.get("/api/teams/export", async () => exportTeamRegistryPackage());
@@ -286,17 +352,22 @@ app.put("/api/themes/:id", async (request, reply) => {
   if (theme.id !== (request.params as { id: string }).id) {
     return reply.code(400).send({ message: "Theme id mismatch" });
   }
-  return saveTheme(theme);
+  const saved = saveTheme(theme);
+  operatorTextRuntime.emitCurrent();
+  return saved;
 });
 
 app.delete("/api/themes/:id", async (request, reply) => {
   deleteTheme((request.params as { id: string }).id);
+  operatorTextRuntime.emitCurrent();
   return reply.code(204).send();
 });
 
 app.post("/api/themes/:id/publish", async (request, reply) => {
   try {
-    return publishTheme((request.params as { id: string }).id);
+    const theme = publishTheme((request.params as { id: string }).id);
+    operatorTextRuntime.emitCurrent();
+    return theme;
   } catch (error) {
     return reply.code(404).send({ message: error instanceof Error ? error.message : "Theme not found" });
   }

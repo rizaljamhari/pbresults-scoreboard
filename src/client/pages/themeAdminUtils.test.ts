@@ -1,23 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { builtinThemes } from "../../shared/builtinThemes";
 import type { ThemeDefinition } from "../../shared/theme";
 import { filterAndSortThemes } from "./themeAdminUtils";
 
 function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   return {
-    id: overrides.id ?? "theme-1",
-    name: overrides.name ?? "Theme",
-    description: overrides.description ?? "Description",
-    builtin: overrides.builtin ?? false,
-    canvas: overrides.canvas ?? {
-      width: 1920,
-      height: 1080,
-      backgroundColor: "#00000000",
-      transparentPreview: true,
-      safeArea: true
-    },
-    components: overrides.components as ThemeDefinition["components"],
-    concedeState: overrides.concedeState as ThemeDefinition["concedeState"],
-    centerSecondary: overrides.centerSecondary as ThemeDefinition["centerSecondary"]
+    ...structuredClone(builtinThemes[0]),
+    id: "theme-1",
+    name: "Theme",
+    description: "Description",
+    builtin: false,
+    ...overrides
   };
 }
 

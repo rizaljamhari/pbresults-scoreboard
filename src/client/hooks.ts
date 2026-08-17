@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { defaultSettings } from "../shared/theme";
-import type { AppSettings, NormalizedLiveState, StoredAsset, TeamRecord, ThemeDefinition } from "../shared/theme";
+import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, TeamRecord, ThemeDefinition } from "../shared/theme";
 import type { RuntimeInfo } from "./api";
 
 export function useSettings() {
@@ -129,6 +129,65 @@ export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollI
   }, [nowMs, state]);
 
   return { data: derivedState, error };
+}
+
+export function useOperatorTextState() {
+  const [data, setData] = useState<OperatorTextState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let stream: EventSource | null = null;
+    let fallbackIntervalId: number | undefined;
+
+    const load = async () => {
+      try {
+        const next = await api.getOperatorTextFields();
+        if (active) {
+          setData(next);
+          setError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Failed to load operator text");
+        }
+      }
+    };
+
+    void load();
+    stream = new EventSource("/api/operations/text/stream");
+    stream.onmessage = (event) => {
+      if (!active) {
+        return;
+      }
+      try {
+        setData(JSON.parse(event.data) as OperatorTextState);
+        setError(null);
+      } catch {
+        setError("Failed to parse operator text stream");
+      }
+    };
+    stream.onerror = () => {
+      if (!active) {
+        return;
+      }
+      stream?.close();
+      stream = null;
+      if (!fallbackIntervalId) {
+        fallbackIntervalId = window.setInterval(() => void load(), 2000);
+      }
+    };
+
+    return () => {
+      active = false;
+      stream?.close();
+      if (fallbackIntervalId) {
+        window.clearInterval(fallbackIntervalId);
+      }
+    };
+  }, []);
+
+  return { data, error, setData };
 }
 
 export function useAutoCloseRowActionMenus() {

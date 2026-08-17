@@ -2,6 +2,8 @@ import type {
   AppExportPackage,
   AppSettings,
   NormalizedLiveState,
+  OperatorTextOverride,
+  OperatorTextState,
   OperationsState,
   StoredAsset,
   TeamMatchResult,
@@ -72,6 +74,21 @@ async function handle<T>(response: Response): Promise<T> {
 export const api = {
   getSettings: () => fetch("/api/settings").then(handle<AppSettings>),
   getOperations: () => fetch("/api/operations").then(handle<OperationsState>),
+  getOperatorTextFields: () => fetch("/api/operations/text-fields").then(handle<OperatorTextState>),
+  updateOperatorText: (themeId: string, componentId: string, value: string) =>
+    fetch(`/api/operations/text/${encodeURIComponent(themeId)}/${encodeURIComponent(componentId)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value })
+    }).then(handle<OperatorTextOverride>),
+  resetOperatorText: (themeId: string, componentId: string) =>
+    fetch(`/api/operations/text/${encodeURIComponent(themeId)}/${encodeURIComponent(componentId)}`, {
+      method: "DELETE"
+    }).then(handle<void>),
+  resetAllOperatorText: (themeId: string) =>
+    fetch(`/api/operations/text/${encodeURIComponent(themeId)}/reset`, {
+      method: "POST"
+    }).then(handle<void>),
   updateSettings: (settings: AppSettings) =>
     fetch("/api/settings", {
       method: "PUT",
