@@ -143,6 +143,32 @@ See also:
 - [docs/project-context.md](./docs/project-context.md)
 - [docs/api-reference.md](./docs/api-reference.md)
 
+## Creating a release
+
+Maintainers can start a complete Windows release from a clean, synchronized `main` branch:
+
+```sh
+pnpm release 1.7.0
+```
+
+The command validates the version and repository, runs the local checks, creates the annotated `v1.7.0` tag, and pushes only that tag. The tag triggers GitHub Actions, which builds the Windows portable package, creates the matching GitHub Release, attaches the versioned ZIP, and publishes it.
+
+Useful options:
+
+```sh
+pnpm release 1.7.0 --dry-run
+pnpm release 1.7.0 --yes
+pnpm release 1.7.0 --skip-checks
+```
+
+Manual runs of the Windows workflow create an Actions artifact for testing but do not publish a GitHub Release.
+
+Versioning convention:
+
+- new feature: increment the minor version, such as `1.6.0` to `1.7.0`
+- bug fix: increment the patch version, such as `1.7.0` to `1.7.1`
+- breaking compatibility or data change: increment the major version
+
 ## Documentation
 
 - [docs/project-context.md](./docs/project-context.md)

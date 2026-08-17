@@ -454,6 +454,18 @@ pnpm package:windows:portable
 Important:
 - this must run on Windows or Windows CI because of the bundled Windows runtime and native dependencies
 
+### Maintainer release flow
+
+Formal releases are tag-driven. From a clean `main` branch synchronized with `origin/main`, run:
+
+```sh
+pnpm release 1.7.0
+```
+
+The local command validates the stable semantic version, repository state, existing tags, and local checks before pushing an annotated `v1.7.0` tag. The Windows workflow then builds the portable ZIP, retains an Actions artifact, creates or reuses a draft GitHub Release, uploads the versioned ZIP, and publishes the release. Manual workflow dispatches remain build-only and never publish a release.
+
+Tagged workflows provide `RELEASE_TAG` to the portable packager. This controls the ZIP filename and the `appVersion`/`releaseTag` values written to `BUILD-INFO.json` without requiring a version-only source commit.
+
 ## Known implementation details worth remembering
 
 ### 1. `/api/operations/resolve/:side`

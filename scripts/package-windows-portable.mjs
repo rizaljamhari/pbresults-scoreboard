@@ -5,10 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
+import { resolvePortableReleaseMetadata } from "./release-utils.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, "..");
 const packageJson = JSON.parse(await fs.readFile(path.join(projectDir, "package.json"), "utf8"));
+const releaseMetadata = resolvePortableReleaseMetadata(process.env.RELEASE_TAG, packageJson.version);
 const releaseDir = path.join(projectDir, "release", "windows-portable");
 const bundleName = "PBResults-Scoreboard";
 const bundleRoot = path.join(releaseDir, bundleName);
@@ -22,7 +24,10 @@ const portableLauncherTarget = path.join(appDir, "start-portable.mjs");
 const nodeVersion = process.versions.node;
 const nodeRuntimeZipName = `node-v${nodeVersion}-win-x64.zip`;
 const nodeRuntimeUrl = `https://nodejs.org/dist/v${nodeVersion}/${nodeRuntimeZipName}`;
-const zipOutput = path.join(releaseDir, `${bundleName}-win-x64.zip`);
+const zipOutput = path.join(
+  releaseDir,
+  releaseMetadata.zipFileName
+);
 
 function fail(message) {
   throw new Error(message);
@@ -286,7 +291,8 @@ Writable folders
 `;
 
   const buildInfo = {
-    appVersion: packageJson.version,
+    appVersion: releaseMetadata.appVersion,
+    releaseTag: releaseMetadata.releaseTag,
     builtAt: new Date().toISOString(),
     target: "windows-x64-portable",
     bundledNodeVersion: nodeVersion

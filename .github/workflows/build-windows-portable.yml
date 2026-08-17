@@ -7,16 +7,46 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   windows-portable:
     name: Windows portable package
     runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release source
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Release tag '$env:RELEASE_TAG' must use stable semantic version format vMAJOR.MINOR.PATCH."
+          }
+
+          & git fetch --no-tags origin 'main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to fetch origin/main for release validation.'
+          }
+          $releaseCommit = (& git rev-list -n 1 $env:RELEASE_TAG).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $releaseCommit) {
+            throw "Unable to resolve release tag '$env:RELEASE_TAG' to a commit."
+          }
+          & git merge-base --is-ancestor $releaseCommit 'refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag '$env:RELEASE_TAG' does not point to a commit on main."
+          }
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -35,8 +65,16 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Run client TypeScript check
+        run: pnpm exec tsc -p tsconfig.json --pretty false
+
+      - name: Check overlay CSS scope
+        run: pnpm check:overlay-scope
+
       - name: Build portable package
         run: pnpm package:windows:portable
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
       - name: Upload portable zip
         uses: actions/upload-artifact@v4
@@ -45,3 +83,49 @@ jobs:
           path: release/windows-portable/*.zip
           if-no-files-found: error
 
+      - name: Create GitHub release and attach portable zip
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $assets = @(Get-ChildItem 'release/windows-portable/*.zip' -File)
+          if ($assets.Count -ne 1) {
+            throw "Expected exactly one portable zip, found $($assets.Count)."
+          }
+
+          $releaseJson = & gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if ($releaseExists) {
+            $isDraft = ($releaseJson | ConvertFrom-Json).isDraft
+          } else {
+            & gh release create $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --verify-tag `
+              --draft `
+              --title $env:RELEASE_TAG `
+              --generate-notes
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create draft release $env:RELEASE_TAG."
+            }
+            $isDraft = $true
+          }
+
+          & gh release upload $env:RELEASE_TAG $assets[0].FullName `
+            --repo $env:GITHUB_REPOSITORY `
+            --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload the portable zip to release $env:RELEASE_TAG."
+          }
+
+          if ($isDraft) {
+            & gh release edit $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --draft=false `
+              --latest
+            if ($LASTEXITCODE -ne 0) {
+              throw "The asset was uploaded, but release $env:RELEASE_TAG could not be published."
+            }
+          }
