@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import { assertTrustedDownloadUrl, isLoopbackAddress, resolveContainedPath } from "./updateSecurity";
 
 describe("update security", () => {
@@ -16,8 +17,10 @@ describe("update security", () => {
   });
 
   it("rejects paths outside a trusted root", () => {
-    expect(resolveContainedPath("/tmp/root", "/tmp/root/app")).toBe("/tmp/root/app");
-    expect(() => resolveContainedPath("/tmp/root", "/tmp/other")).toThrow();
-    expect(() => resolveContainedPath("/tmp/root", "/tmp/root")).toThrow();
+    const root = path.resolve("tmp", "root");
+    const child = path.join(root, "app");
+    expect(resolveContainedPath(root, child)).toBe(child);
+    expect(() => resolveContainedPath(root, path.resolve(root, "..", "other"))).toThrow();
+    expect(() => resolveContainedPath(root, root)).toThrow();
   });
 });
