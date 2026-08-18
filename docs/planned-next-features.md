@@ -21,12 +21,13 @@ The onsite application remains the source of truth. Cloud services may add conve
 | Priority | Feature | Value | Complexity | Current status |
 | --- | --- | --- | --- | --- |
 | 1 | Automatic updates from GitHub Releases | Very high | Medium | Implemented; Windows qualification pending |
-| 2 | Automatic local and cloud backups | Very high | Medium | Proposed |
-| 3 | Authentication and remote-access security | Required foundation | High | Proposed |
-| 4 | Remote configuration tunnel | High | High | Proposed |
-| 5 | Additional backup and tunnel providers | Medium | Medium | Proposed |
+| 2 | Event-driven UI refresh | High | Medium | Proposed |
+| 3 | Automatic local and cloud backups | Very high | Medium | Proposed |
+| 4 | Authentication and remote-access security | Required foundation | High | Proposed |
+| 5 | Remote configuration tunnel | High | High | Proposed |
+| 6 | Additional backup and tunnel providers | Medium | Medium | Proposed |
 
-Automatic local backup is a dependency of safe update installation. Feature 1 therefore includes a narrowly scoped pre-update safety snapshot, while the complete scheduled-backup product remains Feature 2.
+Automatic local backup is a dependency of safe update installation. Feature 1 therefore includes a narrowly scoped pre-update safety snapshot, while the complete scheduled-backup product remains Feature 3.
 
 ## Feature 1: automatic updates from GitHub Releases
 
@@ -53,7 +54,89 @@ The first version targets the packaged Windows x64 portable release only. Develo
 
 See [automatic-updates-technical-plan.md](./automatic-updates-technical-plan.md) for the implemented protocol and remaining Windows qualification matrix.
 
-## Feature 2: automatic local and cloud backups
+## Feature 2: event-driven UI refresh
+
+### Outcome
+
+The admin UI and browser overlay refresh changed settings, published themes, and assets shortly after a successful mutation without repeatedly polling each resource every few seconds.
+
+The application remains correct across browser sleep, network loss, proxy interruptions, and application restarts. Events are notifications only; the existing resource APIs remain the source of truth.
+
+### Proposed architecture
+
+Add a dedicated Server-Sent Events endpoint, separate from the live scoreboard stream:
+
+```text
+GET /api/events
+```
+
+The server owns a small in-process event hub that:
+
+- tracks connected browser clients
+- broadcasts typed events after successful persistence
+- assigns monotonically increasing event IDs
+- sends heartbeats to keep connections alive
+- removes disconnected clients without blocking other clients
+
+Initial event types:
+
+- `settings.changed`
+- `theme.published`
+- `assets.changed`
+- `runtime.changed`
+
+Events should identify the changed resource or revision without placing sensitive settings or full resource payloads on the event stream. Clients refetch the existing API endpoint after receiving an event.
+
+### Client behavior
+
+Clients should:
+
+1. Fetch initial settings, theme, assets, and runtime metadata normally.
+2. Open one shared `/api/events` connection.
+3. Refetch only the resource affected by each event.
+4. Coalesce bursts of duplicate events into one refresh.
+5. Reconnect automatically after disconnects.
+6. Refresh a small current-state snapshot after reconnect so missed events do not cause stale UI.
+
+The overlay should stop using fast settings, theme, and asset timers once the event path is reliable. A slow fallback refresh remains for environments that cannot maintain SSE connections.
+
+### Runtime and automatic-update interaction
+
+Application updates restart the server and terminate existing browser connections. The overlay should reconnect to `/api/events`, fetch `/api/runtime-info`, and reload once if the application version or release tag changed.
+
+The existing runtime-version safety check should remain during rollout and only be relaxed after reconnect behavior is proven in Windows and production-like environments.
+
+### Reliability and security requirements
+
+- Event delivery is best-effort; API snapshots remain authoritative.
+- Reconnects must recover without requiring a full manual page refresh.
+- Event IDs and `Last-Event-ID` may support short replay buffers, but correctness must not depend on replay.
+- Events must be emitted only after a successful write.
+- The event endpoint must follow existing local/LAN access rules.
+- Event payloads must not expose secrets or private settings values.
+- Slow or broken clients must not block server mutations or other subscribers.
+
+### Delivery phases
+
+1. Implement the server event hub and dedicated SSE endpoint.
+2. Emit events from settings, theme, publish, and asset mutation paths.
+3. Add a shared client subscription hook with reconnect and refresh coalescing.
+4. Replace overlay fast polling while retaining a slow fallback.
+5. Integrate runtime-version detection with reconnect recovery.
+6. Measure request volume, connection stability, missed-event recovery, and browser overlay freshness.
+
+### Testing scope
+
+- event delivery to multiple clients
+- disconnect cleanup and heartbeat behavior
+- event emission only after successful writes
+- reconnect and snapshot recovery
+- duplicate-event coalescing
+- runtime-change reload exactly once
+- fallback behavior when SSE is unavailable
+- no regression to live scoreboard SSE or managed update restart/rollback
+
+## Feature 3: automatic local and cloud backups
 
 ### Outcome
 
@@ -103,7 +186,7 @@ All destinations should implement one provider interface so scheduling, retentio
 
 The current full-app JSON export already includes settings, themes, teams, asset metadata, and uploaded asset contents. It does not include operations state, and the current restore removes old asset files before the replacement has fully completed. Backup v2 should be backward-compatible with v1 imports and make restoration transactional.
 
-## Feature 3: authentication and remote-access security
+## Feature 4: authentication and remote-access security
 
 ### Outcome
 
@@ -125,7 +208,7 @@ The application has a security boundary suitable for remote access instead of re
 
 The update install and rollback endpoints must remain loopback-only until this authentication and authorization work is complete.
 
-## Feature 4: remote configuration tunnel
+## Feature 5: remote configuration tunnel
 
 ### Outcome
 
@@ -177,12 +260,13 @@ Cloudflare Quick Tunnels should not be the production default because they are i
 1. Implement the release manifest and packaged build metadata needed by managed updates.
 2. Install a stable root launcher and updater coordinator.
 3. Implement update checking, verified download, installation, health checking, and rollback.
-4. Add the pre-update local data snapshot used by Feature 1.
-5. Generalize that snapshot into backup v2 with scheduled local destinations.
-6. Add an S3-compatible backup destination.
-7. Add application authentication, authorization, audit history, and edit revisions.
-8. Add the Cloudflare named-tunnel integration.
-9. Add Google Drive and optional Tailscale integrations based on operator demand.
+4. Add the event hub and event-driven UI refresh path.
+5. Add the pre-update local data snapshot used by Feature 1.
+6. Generalize that snapshot into backup v2 with scheduled local destinations.
+7. Add an S3-compatible backup destination.
+8. Add application authentication, authorization, audit history, and edit revisions.
+9. Add the Cloudflare named-tunnel integration.
+10. Add Google Drive and optional Tailscale integrations based on operator demand.
 
 ## Product principles for this roadmap
 
