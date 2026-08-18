@@ -186,3 +186,5 @@ Versioning convention:
   - prioritized operational roadmap for updates, backups, and secure remote configuration
 - [docs/automatic-updates-technical-plan.md](./docs/automatic-updates-technical-plan.md)
   - implementation-grade plan for managed Windows portable updates and rollback
+- [docs/remote-access-technical-plan.md](./docs/remote-access-technical-plan.md)
+  - implementation-grade plan for temporary ngrok remote access and its security boundary
