@@ -274,7 +274,7 @@ function Remove-CompletedArtifacts([object]$Transaction) {
         Write-UpdaterLog "Removed completed update artifact $Resolved."
       }
     } catch {
-      Write-UpdaterLog "Deferred cleanup for $Candidate: $($_.Exception.Message)"
+      Write-UpdaterLog "Deferred cleanup for ${Candidate}: $($_.Exception.Message)"
     }
   }
 }
