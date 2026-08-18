@@ -175,3 +175,7 @@ Versioning convention:
   - architecture, runtime assumptions, team resolution, packaging model
 - [docs/api-reference.md](./docs/api-reference.md)
   - route-by-route API surface and important response shapes
+- [docs/planned-next-features.md](./docs/planned-next-features.md)
+  - prioritized operational roadmap for updates, backups, and secure remote configuration
+- [docs/automatic-updates-technical-plan.md](./docs/automatic-updates-technical-plan.md)
+  - implementation-grade plan for managed Windows portable updates and rollback
