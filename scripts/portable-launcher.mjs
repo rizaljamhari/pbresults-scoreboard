@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import readline from "node:readline";
 
 const appDir = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(appDir, "..");
+const rootDir = path.resolve(process.env.APP_ROOT_DIR ?? path.resolve(appDir, ".."));
 const dataDir = path.join(rootDir, "data");
 const uploadsDir = path.join(dataDir, "uploads");
 const logsDir = path.join(rootDir, "logs");
@@ -16,6 +16,7 @@ const serverEntry = path.join(appDir, "dist", "server", "server", "index.js");
 const bundledNode = process.execPath;
 const preferredServerPort = Number(process.env.APP_SERVER_PORT ?? 3000);
 const openBrowser = process.env.APP_OPEN_BROWSER !== "0";
+const requirePreferredPort = process.env.APP_REQUIRE_PORT === "1";
 
 function ensureDirectory(target) {
   fs.mkdirSync(target, { recursive: true });
@@ -81,7 +82,7 @@ async function main() {
     throw new Error(`Packaged client build not found: ${clientDistDir}`);
   }
 
-  const serverPort = await findFreePort(preferredServerPort);
+  const serverPort = requirePreferredPort ? preferredServerPort : await findFreePort(preferredServerPort);
   const adminUrl = `http://localhost:${serverPort}/admin/operations`;
   const liveUrl = `http://localhost:${serverPort}/overlay/live`;
   const logStream = createLogStream();
@@ -108,7 +109,10 @@ async function main() {
       APP_DATA_DIR: dataDir,
       APP_UPLOADS_DIR: uploadsDir,
       APP_CLIENT_DIST_DIR: clientDistDir,
-      APP_LOG_DIR: logsDir
+      APP_LOG_DIR: logsDir,
+      APP_ACTIVE_DIR: appDir,
+      APP_BUILD_INFO_PATH: path.join(appDir, "BUILD-INFO.json"),
+      APP_UPDATES_DIR: path.join(rootDir, "updates")
     },
     stdio: ["inherit", "pipe", "pipe"]
   });
@@ -147,4 +151,3 @@ main().catch((error) => {
   process.stderr.write(`[portable] ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
 });
-

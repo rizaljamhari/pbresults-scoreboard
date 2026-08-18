@@ -13,6 +13,7 @@ import type {
   ThemeDefinition,
   ThemeExportPackage
 } from "../shared/theme";
+import type { UpdateStatus } from "../shared/update";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -33,6 +34,8 @@ export type UploadTeamLogoResponse = {
 export type RuntimeInfo = {
   preferredHost: string | null;
   preferredOrigin: string | null;
+  appVersion: string;
+  releaseTag: string | null;
 };
 
 export type ApiErrorPayload = {
@@ -188,6 +191,33 @@ export const api = {
   getLive: () => fetch("/api/live").then(handle<NormalizedLiveState>),
   getRawLive: () => fetch("/api/live/raw").then(handle<unknown>),
   getRuntimeInfo: () => fetch("/api/runtime-info").then(handle<RuntimeInfo>),
+  getUpdateStatus: () => fetch("/api/update/status").then(handle<UpdateStatus>),
+  checkForUpdate: () => fetch("/api/update/check", { method: "POST" }).then(handle<UpdateStatus>),
+  downloadUpdate: (version: string) =>
+    fetch("/api/update/download", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version })
+    }).then(handle<UpdateStatus>),
+  installUpdate: (version: string) =>
+    fetch("/api/update/install", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version, confirmation: "INSTALL_AND_RESTART" })
+    }).then(handle<UpdateStatus>),
+  toggleSkipUpdate: (version: string) =>
+    fetch("/api/update/skip", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version })
+    }).then(handle<UpdateStatus>),
+  rollbackUpdate: () =>
+    fetch("/api/update/rollback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmation: "ROLL_BACK_AND_RESTART" })
+    }).then(handle<UpdateStatus>),
+  dismissUpdateResult: () => fetch("/api/update/result/dismiss", { method: "POST" }).then(handle<UpdateStatus>),
   getAssets: () => fetch("/api/assets").then(handle<StoredAsset[]>),
   uploadAsset: (file: File) => {
     const form = new FormData();

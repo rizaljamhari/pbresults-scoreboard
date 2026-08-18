@@ -429,7 +429,10 @@ export const settingsSchema = z.object({
   publishedThemeId: z.string().nullable(),
   pollEnabled: z.boolean().default(true),
   pollIntervalMs: z.number().int().min(100).max(10000).default(1000),
-  autoRemoveBackgroundUploads: z.boolean().default(true)
+  autoRemoveBackgroundUploads: z.boolean().default(true),
+  updateCheckEnabled: z.boolean().default(true),
+  updateCheckIntervalHours: z.number().int().min(1).max(168).default(6),
+  updateAutoDownload: z.boolean().default(false)
 });
 
 export const timerSchema = z.object({
@@ -660,7 +663,10 @@ export const defaultSettings: AppSettings = {
   publishedThemeId: "theme-7ad8adb8-e017-4853-93b1-fb608a750253",
   pollEnabled: true,
   pollIntervalMs: 1000,
-  autoRemoveBackgroundUploads: true
+  autoRemoveBackgroundUploads: true,
+  updateCheckEnabled: true,
+  updateCheckIntervalHours: 6,
+  updateAutoDownload: false
 };
 
 export function createThemeId(prefix = "theme"): string {

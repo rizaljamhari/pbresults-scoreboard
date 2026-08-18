@@ -344,6 +344,23 @@ export function updateSettings(input: AppSettings): AppSettings {
   return next;
 }
 
+export function validatePersistentStorage(): boolean {
+  try {
+    settingsSchema.parse(readJson(settingsPath, defaultSettings));
+    zodParseThemes();
+    listAssets();
+    listTeamRecords();
+    operationsStateSchema.parse(readJson(operationsPath, defaultOperationsState));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function zodParseThemes() {
+  return readJson<ThemeDefinition[]>(themesPath, []).map((theme) => themeSchema.parse(theme));
+}
+
 export function listThemes(): ThemeDefinition[] {
   return withBuiltinThemes(readJson<ThemeDefinition[]>(themesPath, []))
     .map((theme) => themeSchema.parse(theme))

@@ -15,6 +15,7 @@ import {
   buttonVariants
 } from "../components/ui";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
+import { SoftwareUpdateCard } from "../components/SoftwareUpdateCard";
 
 export function SettingsPage() {
   const settings = useSettings();
@@ -259,6 +260,39 @@ export function SettingsPage() {
             />
             Automatically remove image backgrounds on upload
           </label>
+          <label className="checkbox">
+            <Checkbox
+              name="updateCheckEnabled"
+              checked={draft?.updateCheckEnabled ?? settings.data.updateCheckEnabled}
+              onChange={(event) =>
+                setDraft((current) => (current ? { ...current, updateCheckEnabled: event.target.checked } : current))
+              }
+            />
+            Check automatically for software updates
+          </label>
+          <label>
+            Update check interval (hours)
+            <Input
+              name="updateCheckIntervalHours"
+              type="number"
+              min={1}
+              max={168}
+              value={draft?.updateCheckIntervalHours ?? settings.data.updateCheckIntervalHours}
+              onChange={(event) =>
+                setDraft((current) => (current ? { ...current, updateCheckIntervalHours: Number(event.target.value || 6) } : current))
+              }
+            />
+          </label>
+          <label className="checkbox">
+            <Checkbox
+              name="updateAutoDownload"
+              checked={draft?.updateAutoDownload ?? settings.data.updateAutoDownload}
+              onChange={(event) =>
+                setDraft((current) => (current ? { ...current, updateAutoDownload: event.target.checked } : current))
+              }
+            />
+            Download verified updates automatically (installation still requires confirmation)
+          </label>
           <div className="action-row compact">
             <Button disabled={saving || !hasUnsavedChanges} type="submit">
               {saving ? "Saving…" : "Save settings"}
@@ -267,6 +301,8 @@ export function SettingsPage() {
           </div>
         </form>
       </Card>
+
+      <SoftwareUpdateCard hasUnsavedChanges={hasUnsavedChanges} />
 
       <Card>
         <p className="admin-page-eyebrow">Portability</p>

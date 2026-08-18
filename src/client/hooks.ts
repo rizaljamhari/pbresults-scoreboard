@@ -3,6 +3,7 @@ import { api } from "./api";
 import { defaultSettings } from "../shared/theme";
 import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, TeamRecord, ThemeDefinition } from "../shared/theme";
 import type { RuntimeInfo } from "./api";
+import type { UpdateStatus } from "../shared/update";
 
 export function useSettings() {
   return useResource(api.getSettings, []);
@@ -22,6 +23,68 @@ export function useAssets() {
 
 export function useRuntimeInfo() {
   return useResource<RuntimeInfo>(api.getRuntimeInfo, []);
+}
+
+export function useRuntimeVersionWatcher() {
+  useEffect(() => {
+    let active = true;
+    let loadedVersion: string | null = null;
+    const check = async () => {
+      try {
+        const runtime = await api.getRuntimeInfo();
+        if (!active) return;
+        if (!loadedVersion) {
+          loadedVersion = runtime.appVersion;
+          return;
+        }
+        if (runtime.appVersion === loadedVersion) return;
+        const key = `pbresults-version-reload:${runtime.appVersion}`;
+        const lastReload = Number(sessionStorage.getItem(key) ?? 0);
+        if (Date.now() - lastReload < 60_000) return;
+        sessionStorage.setItem(key, String(Date.now()));
+        window.location.reload();
+      } catch {
+        // Restarts and offline periods are expected; the next poll retries.
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+}
+
+export function useUpdateStatus() {
+  const [data, setData] = useState<UpdateStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    const load = async () => {
+      try {
+        const status = await api.getUpdateStatus();
+        if (!active) return;
+        setData(status);
+        setError(null);
+        const busy = ["checking", "downloading", "verifying", "staging", "install-requested", "restarting"].includes(status.phase);
+        timer = window.setTimeout(() => void load(), busy ? 1000 : 10_000);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Failed to load update status");
+        timer = window.setTimeout(() => void load(), 5000);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
+  return { data, error, setData };
 }
 
 export function useTeams() {

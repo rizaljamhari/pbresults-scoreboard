@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
+import type { FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -42,6 +43,16 @@ import {
   clearTeamResolutionOverride
 } from "./storage.js";
 import { appExportSchema, settingsSchema, teamRecordSchema, teamRegistryExportSchema, themeExportSchema, themeSchema } from "../shared/theme.js";
+import {
+  updateDownloadRequestSchema,
+  updateInstallRequestSchema,
+  updateRollbackRequestSchema,
+  updateSkipRequestSchema
+} from "../shared/update.js";
+import { runtimeBuild } from "./buildInfo.js";
+import { getHealthStatus, runStartupHealthProbe } from "./health.js";
+import { isLoopbackRequest } from "./updateSecurity.js";
+import { UpdateFailure, updateService } from "./updateService.js";
 
 const app = Fastify({
   logger: true,
@@ -49,6 +60,38 @@ const app = Fastify({
 });
 
 const port = Number(process.env.PORT ?? 3000);
+const openStreams = new Set<import("node:http").ServerResponse>();
+let shuttingDown = false;
+
+async function gracefulShutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  updateService.stop();
+  livePoller.stop();
+  for (const stream of openStreams) {
+    if (!stream.destroyed) {
+      stream.write("retry: 2000\n\n");
+      stream.end();
+    }
+  }
+  await app.close();
+}
+
+function requireLocalUpdateRequest(request: Parameters<typeof isLoopbackRequest>[0], reply: FastifyReply) {
+  if (isLoopbackRequest(request)) return true;
+  reply.code(403).send({
+    code: "UPDATE_LOCAL_REQUEST_REQUIRED",
+    message: "Software update controls are available only from the local computer."
+  });
+  return false;
+}
+
+function sendUpdateFailure(reply: FastifyReply, error: unknown) {
+  if (error instanceof UpdateFailure) {
+    return reply.code(error.statusCode).send({ code: error.code, message: error.message, retryable: error.retryable });
+  }
+  return reply.code(400).send({ message: error instanceof Error ? error.message : "Invalid update request" });
+}
 
 function findPreferredLanAddress() {
   const interfaces = os.networkInterfaces();
@@ -89,19 +132,75 @@ await app.register(fastifyStatic, {
 });
 
 livePoller.start();
+runStartupHealthProbe();
+
+app.get("/api/health", async () => getHealthStatus());
 
 app.get("/api/runtime-info", async () => {
   const preferredHost = findPreferredLanAddress();
   return {
     preferredHost,
-    preferredOrigin: preferredHost ? `http://${preferredHost}:${port}` : null
+    preferredOrigin: preferredHost ? `http://${preferredHost}:${port}` : null,
+    appVersion: runtimeBuild.info.appVersion,
+    releaseTag: runtimeBuild.info.releaseTag
   };
+});
+
+app.get("/api/update/status", async () => updateService.getStatus());
+app.post("/api/update/check", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  try {
+    return await updateService.check(true);
+  } catch (error) {
+    return sendUpdateFailure(reply, error);
+  }
+});
+app.post("/api/update/download", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  try {
+    const body = updateDownloadRequestSchema.parse(request.body);
+    return reply.code(202).send(updateService.download(body.version));
+  } catch (error) {
+    return sendUpdateFailure(reply, error);
+  }
+});
+app.post("/api/update/install", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  try {
+    const body = updateInstallRequestSchema.parse(request.body);
+    return reply.code(202).send(await updateService.install(body.version));
+  } catch (error) {
+    return sendUpdateFailure(reply, error);
+  }
+});
+app.post("/api/update/skip", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  try {
+    const body = updateSkipRequestSchema.parse(request.body);
+    return updateService.skip(body.version);
+  } catch (error) {
+    return sendUpdateFailure(reply, error);
+  }
+});
+app.post("/api/update/rollback", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  try {
+    updateRollbackRequestSchema.parse(request.body);
+    return reply.code(202).send(await updateService.rollback());
+  } catch (error) {
+    return sendUpdateFailure(reply, error);
+  }
+});
+app.post("/api/update/result/dismiss", async (request, reply) => {
+  if (!requireLocalUpdateRequest(request, reply)) return;
+  return updateService.dismissResult();
 });
 
 app.get("/api/live", async () => livePoller.getState().normalized);
 app.get("/api/live/raw", async () => livePoller.getState().raw);
 app.get("/api/live/stream", async (_request, reply) => {
   reply.hijack();
+  openStreams.add(reply.raw);
   reply.raw.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache, no-transform",
@@ -117,6 +216,7 @@ app.get("/api/live/stream", async (_request, reply) => {
   }, 15000);
 
   reply.raw.on("close", () => {
+    openStreams.delete(reply.raw);
     clearInterval(keepAlive);
     unsubscribe();
   });
@@ -127,6 +227,7 @@ app.put("/api/settings", async (request, reply) => {
   const settings = settingsSchema.parse(request.body);
   const next = updateSettings(settings);
   livePoller.reconfigure();
+  updateService.reconfigureAutomaticChecks();
   operatorTextRuntime.emitCurrent();
   return reply.send(next);
 });
@@ -154,6 +255,7 @@ app.get("/api/operations", async () => getOperationsState());
 app.get("/api/operations/text-fields", async () => getOperatorTextState());
 app.get("/api/operations/text/stream", async (_request, reply) => {
   reply.hijack();
+  openStreams.add(reply.raw);
   reply.raw.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache, no-transform",
@@ -167,6 +269,7 @@ app.get("/api/operations/text/stream", async (_request, reply) => {
     reply.raw.write(": keep-alive\n\n");
   }, 15000);
   reply.raw.on("close", () => {
+    openStreams.delete(reply.raw);
     clearInterval(keepAlive);
     unsubscribe();
   });
@@ -421,4 +524,9 @@ if (fs.existsSync(clientRoot)) {
   }));
 }
 
+updateService.configureLifecycle({ port, shutdown: gracefulShutdown });
 await app.listen({ port, host: "0.0.0.0" });
+updateService.startAutomaticChecks();
+
+process.on("SIGINT", () => void gracefulShutdown());
+process.on("SIGTERM", () => void gracefulShutdown());

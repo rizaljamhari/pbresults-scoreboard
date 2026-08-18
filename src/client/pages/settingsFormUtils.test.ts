@@ -6,7 +6,10 @@ const sample = {
   publishedThemeId: "theme-1",
   pollEnabled: true,
   pollIntervalMs: 1000,
-  autoRemoveBackgroundUploads: true
+  autoRemoveBackgroundUploads: true,
+  updateCheckEnabled: true,
+  updateCheckIntervalHours: 6,
+  updateAutoDownload: false
 };
 
 describe("settingsFormUtils", () => {

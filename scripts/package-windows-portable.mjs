@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
-import { existsSync, cpSync, rmSync } from "node:fs";
+import { createReadStream, existsSync, cpSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { resolvePortableReleaseMetadata } from "./release-utils.mjs";
+import { createUpdateManifest, resolvePortableReleaseMetadata } from "./release-utils.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, "..");
@@ -21,6 +22,8 @@ const logsDir = path.join(bundleRoot, "logs");
 const runtimeDir = path.join(appDir, "node");
 const portableLauncherSource = path.join(projectDir, "scripts", "portable-launcher.mjs");
 const portableLauncherTarget = path.join(appDir, "start-portable.mjs");
+const rootLauncherSource = path.join(projectDir, "scripts", "portable-launcher.ps1");
+const rootUpdaterSource = path.join(projectDir, "scripts", "portable-updater.ps1");
 const nodeVersion = process.versions.node;
 const nodeRuntimeZipName = `node-v${nodeVersion}-win-x64.zip`;
 const nodeRuntimeUrl = `https://nodejs.org/dist/v${nodeVersion}/${nodeRuntimeZipName}`;
@@ -28,6 +31,10 @@ const zipOutput = path.join(
   releaseDir,
   releaseMetadata.zipFileName
 );
+const manifestOutput = path.join(releaseDir, releaseMetadata.manifestFileName);
+const builtAt = new Date().toISOString();
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectDir, encoding: "utf8" }).trim().toLowerCase();
+let buildInfo;
 
 function fail(message) {
   throw new Error(message);
@@ -243,12 +250,17 @@ async function writeBootstrapData() {
 
 async function writeLauncherFiles() {
   await fs.copyFile(portableLauncherSource, portableLauncherTarget);
+  const bootstrapDir = path.join(appDir, "updater-bootstrap");
+  await fs.mkdir(bootstrapDir, { recursive: true });
+  await fs.copyFile(rootLauncherSource, path.join(bootstrapDir, "portable-launcher.ps1"));
+  await fs.copyFile(rootUpdaterSource, path.join(bootstrapDir, "portable-updater.ps1"));
+  await fs.copyFile(rootLauncherSource, path.join(bundleRoot, "portable-launcher.ps1"));
+  await fs.copyFile(rootUpdaterSource, path.join(bundleRoot, "portable-updater.ps1"));
 
   const launcher = `@echo off
 setlocal
 set "ROOT_DIR=%~dp0"
-set "APP_OPEN_BROWSER=1"
-"%ROOT_DIR%app\\node\\node.exe" "%ROOT_DIR%app\\start-portable.mjs"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%portable-launcher.ps1"
 `;
 
   const readme = `PBResults Scoreboard - Windows Portable
@@ -276,13 +288,13 @@ If you already have a setup on macOS, Linux, or another PC:
 3. Import the full app backup JSON.
 4. Confirm the upstream URL, published theme, and team logos.
 
-Update to a new release
------------------------
-1. Stop the app.
-2. Keep a copy of the "data" folder.
-3. Replace the "app" folder with the one from the new release.
-4. Keep the existing "data" folder.
-5. Run "Run Scoreboard.cmd" again.
+Software updates
+----------------
+Open Settings in the local admin page to check for, download, and install updates.
+Installation always requires confirmation and briefly restarts the admin page and overlay.
+Before switching versions, the updater stores a safety snapshot under backups\\pre-update.
+If the new version fails its health check, the previous app and data snapshot are restored automatically.
+Detailed update events are written to logs\\updater.log.
 
 Writable folders
 ----------------
@@ -290,17 +302,52 @@ Writable folders
 - logs\\   runtime logs
 `;
 
-  const buildInfo = {
+  buildInfo = {
+    schemaVersion: 1,
     appVersion: releaseMetadata.appVersion,
     releaseTag: releaseMetadata.releaseTag,
-    builtAt: new Date().toISOString(),
+    builtAt,
     target: "windows-x64-portable",
-    bundledNodeVersion: nodeVersion
+    bundledNodeVersion: nodeVersion,
+    updaterProtocolVersion: 1,
+    sourceRepository: "rizaljamhari/pbresults-scoreboard",
+    sourceCommit
   };
 
   await fs.writeFile(path.join(bundleRoot, "Run Scoreboard.cmd"), launcher.replace(/\n/g, "\r\n"));
   await fs.writeFile(path.join(bundleRoot, "README-OPERATOR.txt"), readme.replace(/\n/g, "\r\n"));
   await fs.writeFile(path.join(bundleRoot, "BUILD-INFO.json"), `${JSON.stringify(buildInfo, null, 2)}\n`);
+  await fs.writeFile(path.join(appDir, "BUILD-INFO.json"), `${JSON.stringify(buildInfo, null, 2)}\n`);
+  await fs.writeFile(
+    path.join(bundleRoot, "current-version.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      generation: 1,
+      active: { version: buildInfo.appVersion, releaseTag: buildInfo.releaseTag, relativePath: "app" },
+      previous: null,
+      updatedAt: builtAt
+    }, null, 2)}\n`
+  );
+}
+
+async function calculateDirectorySize(target) {
+  let total = 0;
+  for (const entry of await fs.readdir(target, { withFileTypes: true })) {
+    const child = path.join(target, entry.name);
+    total += entry.isDirectory() ? await calculateDirectorySize(child) : entry.isFile() ? (await fs.stat(child)).size : 0;
+  }
+  return total;
+}
+
+async function hashFile(target) {
+  const hash = createHash("sha256");
+  await new Promise((resolve, reject) => {
+    const input = createReadStream(target);
+    input.on("data", (chunk) => hash.update(chunk));
+    input.on("error", reject);
+    input.on("end", resolve);
+  });
+  return hash.digest("hex");
 }
 
 async function createZipArchive() {
@@ -310,6 +357,18 @@ async function createZipArchive() {
     "-Command",
     `Compress-Archive -Path '${bundleRoot.replace(/'/g, "''")}' -DestinationPath '${zipOutput.replace(/'/g, "''")}' -Force`
   ]);
+}
+
+async function writeUpdateManifest() {
+  const stats = await fs.stat(zipOutput);
+  const unpackedSize = await calculateDirectorySize(appDir);
+  const manifest = createUpdateManifest(buildInfo, {
+    name: releaseMetadata.zipFileName,
+    size: stats.size,
+    unpackedSize,
+    sha256: await hashFile(zipOutput)
+  });
+  await fs.writeFile(manifestOutput, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function main() {
@@ -324,9 +383,11 @@ async function main() {
   await writeBootstrapData();
   await writeLauncherFiles();
   await createZipArchive();
+  await writeUpdateManifest();
 
   process.stdout.write(`\n[package] Windows portable bundle ready:\n  ${bundleRoot}\n`);
   process.stdout.write(`[package] Zip archive ready:\n  ${zipOutput}\n`);
+  process.stdout.write(`[package] Update manifest ready:\n  ${manifestOutput}\n`);
 }
 
 await main();

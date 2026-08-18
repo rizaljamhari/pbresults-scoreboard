@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
+import { useRuntimeVersionWatcher } from "../hooks";
 
 function navLinkClass(active: boolean) {
   return cn(
@@ -13,6 +14,7 @@ function navLinkClass(active: boolean) {
 }
 
 export function AppShell() {
+  useRuntimeVersionWatcher();
   const location = useLocation();
 
   const navItems = [

@@ -40,6 +40,7 @@ This project exists to add:
 - resolves uncertain or truncated live team names during production
 - exports/imports full app state, teams, and themes
 - packages a Windows portable build for one-click operator use
+- checks, verifies, installs, health-checks, and rolls back Windows portable updates
 
 ## Main pages
 
@@ -52,7 +53,7 @@ This project exists to add:
 - `/admin/teams`
   - team registry, logos, aliases, live match names
 - `/admin/settings`
-  - upstream URL, publishing, polling, backup/import
+  - upstream URL, publishing, polling, backup/import, software updates
 - `/overlay/live`
   - live overlay output for OBS/vMix/browser source use
 
@@ -136,6 +137,10 @@ Important:
 - portable packaging must be built on Windows or Windows CI
 - the packaged app opens `/admin/operations`
 - operators use `/overlay/live` as the vMix browser source
+- Settings checks the official stable GitHub Release feed automatically by default
+- downloads are verified against the release manifest and SHA-256 before staging
+- installation always requires local confirmation and creates a stopped-state data snapshot
+- failed health checks restore the previous application and data snapshot automatically
 
 See also:
 
@@ -151,7 +156,9 @@ Maintainers can start a complete Windows release from a clean, synchronized `mai
 pnpm release 1.7.0
 ```
 
-The command validates the version and repository, runs the local checks, creates the annotated `v1.7.0` tag, and pushes only that tag. The tag triggers GitHub Actions, which builds the Windows portable package, creates the matching GitHub Release, attaches the versioned ZIP, and publishes it.
+The command validates the version and repository, runs the local checks, creates the annotated `v1.7.0` tag, and pushes only that tag. The tag triggers GitHub Actions, which builds the Windows portable package, validates its manifest and SHA-256, creates the matching GitHub Release, attaches both the versioned ZIP and update manifest, and publishes it.
+
+The first release containing the managed updater must still be installed using the earlier manual `app/` replacement process. Starting it once bootstraps the stable root launcher; later updater-protocol-1 releases can then be installed from Settings.
 
 Useful options:
 

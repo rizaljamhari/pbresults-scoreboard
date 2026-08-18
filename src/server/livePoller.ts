@@ -44,6 +44,15 @@ class LivePoller {
     this.scheduleNext(0);
   }
 
+  stop() {
+    this.started = false;
+    this.runImmediatelyAfterPoll = false;
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
+  }
+
   reconfigure() {
     if (!this.started) {
       return;

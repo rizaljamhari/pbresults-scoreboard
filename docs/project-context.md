@@ -434,16 +434,26 @@ The app now supports a Windows portable release flow.
 Portable folder structure:
 
 - `app/`
+- `versions/`
 - `data/`
 - `logs/`
+- `updates/`
+- `backups/pre-update/`
 - `Run Scoreboard.cmd`
+- `portable-launcher.ps1`
+- `portable-updater.ps1`
+- `current-version.json`
 - `README-OPERATOR.txt`
 
 Rules:
 
-- `app/` is replaceable on update
+- `app/` is the legacy bootstrap application; managed versions are immutable children of `versions/`
+- `current-version.json` atomically selects the active and previous versions
 - `data/` is persistent
 - `logs/` is persistent but disposable
+- `updates/` contains verified downloads, staging, durable transaction journals, and updater state
+- installation takes a complete stopped-state data snapshot before pointer activation
+- a failed start or health check restores the previous pointer and snapshot automatically
 
 Windows packaging command:
 
@@ -464,7 +474,9 @@ pnpm release 1.7.0
 
 The local command validates the stable semantic version, repository state, existing tags, and local checks before pushing an annotated `v1.7.0` tag. The Windows workflow then builds the portable ZIP, retains an Actions artifact, creates or reuses a draft GitHub Release, uploads the versioned ZIP, and publishes the release. Manual workflow dispatches remain build-only and never publish a release.
 
-Tagged workflows provide `RELEASE_TAG` to the portable packager. This controls the ZIP filename and the `appVersion`/`releaseTag` values written to `BUILD-INFO.json` without requiring a version-only source commit.
+Tagged workflows provide `RELEASE_TAG` to the portable packager. This controls the ZIP and manifest filenames and the `appVersion`/`releaseTag` values embedded in `app/BUILD-INFO.json` without requiring a version-only source commit. The workflow recomputes the ZIP size and SHA-256 before uploading both release assets.
+
+Managed update mutations are loopback-only until authentication exists. Checking and downloading keep the running scoreboard available; installation requires explicit confirmation, restarts on the same port, and is verified independently of PBResults feed health through `/api/health`.
 
 ## Known implementation details worth remembering
 

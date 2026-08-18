@@ -1,11 +1,11 @@
 # Automatic Updates Technical Plan
 
-Status: proposed for implementation  
+Status: implemented; physical/VM Windows qualification pending
 Roadmap priority: 1  
 Initial target: Windows x64 portable package  
 Release channel: stable GitHub Releases only  
 Source repository: `rizaljamhari/pbresults-scoreboard`  
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-18
 
 ## 1. Objective
 

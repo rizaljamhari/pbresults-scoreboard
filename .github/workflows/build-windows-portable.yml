@@ -76,11 +76,32 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
-      - name: Upload portable zip
+      - name: Validate update release assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zips = @(Get-ChildItem 'release/windows-portable/*.zip' -File)
+          $manifests = @(Get-ChildItem 'release/windows-portable/*-update-manifest-*.json' -File)
+          if ($zips.Count -ne 1 -or $manifests.Count -ne 1) {
+            throw "Expected one ZIP and one update manifest; found $($zips.Count) ZIP(s) and $($manifests.Count) manifest(s)."
+          }
+          $manifest = Get-Content $manifests[0].FullName -Raw | ConvertFrom-Json
+          if ($manifest.asset.name -ne $zips[0].Name) { throw 'Manifest asset filename does not match the ZIP.' }
+          if ([int64]$manifest.asset.size -ne $zips[0].Length) { throw 'Manifest asset size does not match the ZIP.' }
+          $digest = (Get-FileHash $zips[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($manifest.asset.sha256 -ne $digest) { throw 'Manifest SHA-256 does not match the ZIP.' }
+          if ('v' + $manifest.release.version -ne $manifest.release.tag) { throw 'Manifest release tag and version disagree.' }
+          if ('${{ github.ref_type }}' -eq 'tag' -and $manifest.release.tag -ne '${{ github.ref_name }}') {
+            throw 'Manifest release tag does not match the Git tag.'
+          }
+
+      - name: Upload portable release assets
         uses: actions/upload-artifact@v4
         with:
           name: pbresults-scoreboard-windows-portable
-          path: release/windows-portable/*.zip
+          path: |
+            release/windows-portable/*.zip
+            release/windows-portable/*-update-manifest-*.json
           if-no-files-found: error
 
       - name: Create GitHub release and attach portable zip
@@ -91,9 +112,12 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $assets = @(Get-ChildItem 'release/windows-portable/*.zip' -File)
-          if ($assets.Count -ne 1) {
-            throw "Expected exactly one portable zip, found $($assets.Count)."
+          $assets = @(
+            Get-ChildItem 'release/windows-portable/*.zip' -File
+            Get-ChildItem 'release/windows-portable/*-update-manifest-*.json' -File
+          )
+          if ($assets.Count -ne 2) {
+            throw "Expected exactly one portable ZIP and one manifest, found $($assets.Count) assets."
           }
 
           $releaseJson = & gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
@@ -113,7 +137,7 @@ jobs:
             $isDraft = $true
           }
 
-          & gh release upload $env:RELEASE_TAG $assets[0].FullName `
+          & gh release upload $env:RELEASE_TAG $assets[0].FullName $assets[1].FullName `
             --repo $env:GITHUB_REPOSITORY `
             --clobber
           if ($LASTEXITCODE -ne 0) {

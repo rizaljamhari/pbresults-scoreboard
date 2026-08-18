@@ -64,16 +64,53 @@ export function githubRepositoryFromRemote(remoteUrl) {
 
 export function resolvePortableReleaseMetadata(releaseTag, packageVersion) {
   if (!releaseTag?.trim()) {
+    const release = normalizeStableVersion(packageVersion);
     return {
-      appVersion: packageVersion,
-      releaseTag: null,
-      zipFileName: "PBResults-Scoreboard-win-x64.zip"
+      appVersion: release.version,
+      releaseTag: release.tag,
+      zipFileName: `pbresults-scoreboard-windows-portable-${release.tag}.zip`,
+      manifestFileName: `pbresults-scoreboard-update-manifest-${release.tag}.json`,
+      stableRelease: false
     };
   }
   const release = normalizeStableVersion(releaseTag);
   return {
     appVersion: release.version,
     releaseTag: release.tag,
-    zipFileName: `pbresults-scoreboard-windows-portable-${release.tag}.zip`
+    zipFileName: `pbresults-scoreboard-windows-portable-${release.tag}.zip`,
+    manifestFileName: `pbresults-scoreboard-update-manifest-${release.tag}.json`,
+    stableRelease: true
+  };
+}
+
+export function createUpdateManifest(buildInfo, asset) {
+  return {
+    schemaVersion: 1,
+    release: {
+      version: buildInfo.appVersion,
+      tag: buildInfo.releaseTag,
+      channel: "stable",
+      builtAt: buildInfo.builtAt
+    },
+    target: {
+      platform: "win32",
+      arch: "x64",
+      packageKind: "portable"
+    },
+    protocol: {
+      minimumUpdaterVersion: buildInfo.updaterProtocolVersion
+    },
+    asset: {
+      name: asset.name,
+      size: asset.size,
+      unpackedSize: asset.unpackedSize,
+      sha256: asset.sha256
+    },
+    payload: {
+      rootDirectory: "PBResults-Scoreboard",
+      applicationDirectory: "app",
+      buildInfoFile: "app/BUILD-INFO.json",
+      serverEntry: "app/dist/server/server/index.js"
+    }
   };
 }

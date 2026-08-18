@@ -45,6 +45,9 @@ type AppSettings = {
   pollEnabled: boolean;
   pollIntervalMs: number;
   autoRemoveBackgroundUploads: boolean;
+  updateCheckEnabled: boolean;
+  updateCheckIntervalHours: number;
+  updateAutoDownload: boolean;
 }
 ```
 
@@ -183,6 +186,81 @@ Important behavior notes:
 - `displayLeftTeamMatch` and `displayRightTeamMatch` are the key operator-facing match objects.
 - `unresolvedTeamNames` contains the raw live names that still need confirmation.
 - `sourceStatus` tells you whether the polling layer is healthy, not just whether the last payload exists.
+
+## Runtime and update endpoints
+
+### `GET /api/health`
+
+Returns local readiness independently of the upstream PBResults feed:
+
+```json
+{
+  "status": "ok",
+  "ready": true,
+  "appVersion": "1.8.0",
+  "releaseTag": "v1.8.0",
+  "target": "windows-x64-portable",
+  "dataReadable": true,
+  "clientBuildPresent": true
+}
+```
+
+### `GET /api/runtime-info`
+
+Returns the preferred LAN origin plus the active application version and release tag. Admin and overlay clients poll this endpoint and reload once when the server version changes after an update.
+
+### `GET /api/update/status`
+
+Returns the public managed-update state. This read-only route does not start network work and may be read over the LAN.
+
+Important phases include `unsupported`, `idle`, `checking`, `update-available`, `downloading`, `verifying`, `staging`, `ready-to-install`, `install-requested`, `succeeded`, `rolled-back`, and `failed`.
+
+### `POST /api/update/check`
+
+Performs a fresh GitHub Release and manifest check using ETag validation. Loopback-only.
+
+### `POST /api/update/download`
+
+Loopback-only request:
+
+```json
+{ "version": "1.8.0" }
+```
+
+Returns `202` and downloads asynchronously. The server streams to a partial file, enforces declared size and disk capacity, verifies SHA-256, and invokes the safe Windows staging helper.
+
+### `POST /api/update/install`
+
+Loopback-only request:
+
+```json
+{
+  "version": "1.8.0",
+  "confirmation": "INSTALL_AND_RESTART"
+}
+```
+
+Requires the exact prepared version. The durable updater transaction takes over after the `202` response and graceful server shutdown.
+
+### `POST /api/update/skip`
+
+Toggles automatic-notice suppression for the specified available version:
+
+```json
+{ "version": "1.8.0" }
+```
+
+### `POST /api/update/rollback`
+
+Loopback-only manual rollback request:
+
+```json
+{ "confirmation": "ROLL_BACK_AND_RESTART" }
+```
+
+The coordinator snapshots current data before selecting and health-checking the previous application version.
+
+All update mutation errors include a stable `UPDATE_*` code. Remote LAN mutation attempts return `403 UPDATE_LOCAL_REQUEST_REQUIRED`.
 
 ## Live endpoints
 

@@ -1,7 +1,7 @@
 # Planned Next Features
 
-Status: proposed roadmap  
-Last reviewed: 2026-08-17
+Status: active roadmap
+Last reviewed: 2026-08-18
 
 ## Why these features are next
 
@@ -20,7 +20,7 @@ The onsite application remains the source of truth. Cloud services may add conve
 
 | Priority | Feature | Value | Complexity | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Automatic updates from GitHub Releases | Very high | Medium | Detailed technical plan ready |
+| 1 | Automatic updates from GitHub Releases | Very high | Medium | Implemented; Windows qualification pending |
 | 2 | Automatic local and cloud backups | Very high | Medium | Proposed |
 | 3 | Authentication and remote-access security | Required foundation | High | Proposed |
 | 4 | Remote configuration tunnel | High | High | Proposed |
@@ -51,7 +51,7 @@ An onsite operator can discover, download, install, and roll back a stable Windo
 
 The first version targets the packaged Windows x64 portable release only. Development checkouts, macOS helpers, and generic Node installations report that managed updates are unsupported.
 
-See [automatic-updates-technical-plan.md](./automatic-updates-technical-plan.md) for the complete implementation plan.
+See [automatic-updates-technical-plan.md](./automatic-updates-technical-plan.md) for the implemented protocol and remaining Windows qualification matrix.
 
 ## Feature 2: automatic local and cloud backups
 

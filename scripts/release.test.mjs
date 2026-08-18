@@ -10,7 +10,8 @@ import {
   findLatestStableVersion,
   githubRepositoryFromRemote,
   normalizeStableVersion,
-  resolvePortableReleaseMetadata
+  resolvePortableReleaseMetadata,
+  createUpdateManifest
 } from "./release-utils.mjs";
 
 const tempRoots = [];
@@ -87,13 +88,37 @@ describe("release version helpers", () => {
     expect(resolvePortableReleaseMetadata("v1.7.0", "0.1.0")).toEqual({
       appVersion: "1.7.0",
       releaseTag: "v1.7.0",
-      zipFileName: "pbresults-scoreboard-windows-portable-v1.7.0.zip"
+      zipFileName: "pbresults-scoreboard-windows-portable-v1.7.0.zip",
+      manifestFileName: "pbresults-scoreboard-update-manifest-v1.7.0.json",
+      stableRelease: true
     });
     expect(resolvePortableReleaseMetadata("", "0.1.0")).toEqual({
       appVersion: "0.1.0",
-      releaseTag: null,
-      zipFileName: "PBResults-Scoreboard-win-x64.zip"
+      releaseTag: "v0.1.0",
+      zipFileName: "pbresults-scoreboard-windows-portable-v0.1.0.zip",
+      manifestFileName: "pbresults-scoreboard-update-manifest-v0.1.0.json",
+      stableRelease: false
     });
+  });
+
+  it("builds a version-aligned update manifest", () => {
+    const manifest = createUpdateManifest(
+      {
+        appVersion: "1.7.0",
+        releaseTag: "v1.7.0",
+        builtAt: "2026-08-18T00:00:00.000Z",
+        updaterProtocolVersion: 1
+      },
+      {
+        name: "pbresults-scoreboard-windows-portable-v1.7.0.zip",
+        size: 123,
+        unpackedSize: 456,
+        sha256: "a".repeat(64)
+      }
+    );
+    expect(manifest.release.tag).toBe("v1.7.0");
+    expect(manifest.asset.sha256).toBe("a".repeat(64));
+    expect(manifest.payload.buildInfoFile).toBe("app/BUILD-INFO.json");
   });
 });
 
@@ -128,6 +153,8 @@ describe("GitHub release workflow", () => {
     expect(workflow).toContain("gh release create");
     expect(workflow).toContain("gh release upload");
     expect(workflow).toContain("gh release edit");
+    expect(workflow).toContain("update-manifest");
+    expect(workflow).toContain("Get-FileHash");
   });
 });
 

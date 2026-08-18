@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
-import { useAssets, useLiveState, useOperatorTextState, useSettings } from "../hooks";
+import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
 import type { ThemeDefinition } from "../../shared/theme";
 
 export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
+  useRuntimeVersionWatcher();
   const { id } = useParams();
   const [theme, setTheme] = useState<ThemeDefinition | null>(null);
   const settings = useSettings();

@@ -39,3 +39,10 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+      - name: Validate portable PowerShell syntax
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [void][scriptblock]::Create((Get-Content 'scripts/portable-launcher.ps1' -Raw))
+          [void][scriptblock]::Create((Get-Content 'scripts/portable-updater.ps1' -Raw))
