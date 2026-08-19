@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const updaterPath = path.join(scriptDirectory, "portable-updater.ps1");
 const temporaryDirectories = [];
+const powershellProcessTimeoutMs = 20_000;
+const powershellTestTimeoutMs = 30_000;
 
 function temporaryRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pbresults-updater-test-"));
@@ -90,6 +92,7 @@ function invokeHarness(root, action) {
   return JSON.parse(
     execFileSync("powershell.exe", ["-NoProfile", "-Command", harness], {
       encoding: "utf8",
+      timeout: powershellProcessTimeoutMs,
       env: {
         ...process.env,
         PB_TEST_UPDATER_PATH: updaterPath,
@@ -109,12 +112,12 @@ afterEach(() => {
 describe.runIf(process.platform === "win32")("portable updater PowerShell primitives", () => {
   it("atomically replaces an existing JSON file and removes retry artifacts", () => {
     expect(invokeHarness(temporaryRoot(), "atomic")).toEqual({ value: 2, artifactCount: 0 });
-  });
+  }, powershellTestTimeoutMs);
 
   it("creates a complete snapshot for an empty data directory", () => {
     const result = invokeHarness(temporaryRoot(), "snapshot");
     expect(result).toMatchObject({ phase: "snapshot-created", fileCount: 0, totalBytes: 0, complete: true, artifactCount: 0 });
-  });
+  }, powershellTestTimeoutMs);
 
   it("snapshots normal JSON files", () => {
     const root = temporaryRoot();
@@ -122,7 +125,7 @@ describe.runIf(process.platform === "win32")("portable updater PowerShell primit
     fs.writeFileSync(path.join(root, "data", "teams.json"), "[]\n");
     const expected = fs.statSync(path.join(root, "data", "settings.json")).size + fs.statSync(path.join(root, "data", "teams.json")).size;
     expect(invokeHarness(root, "snapshot")).toMatchObject({ fileCount: 2, totalBytes: expected, complete: true, artifactCount: 0 });
-  });
+  }, powershellTestTimeoutMs);
 
   it("snapshots nested uploads", () => {
     const root = temporaryRoot();
@@ -130,13 +133,13 @@ describe.runIf(process.platform === "win32")("portable updater PowerShell primit
     fs.mkdirSync(nested, { recursive: true });
     fs.writeFileSync(path.join(nested, "logo.png"), Buffer.from([1, 2, 3, 4, 5]));
     expect(invokeHarness(root, "snapshot")).toMatchObject({ fileCount: 1, totalBytes: 5, complete: true, artifactCount: 0 });
-  });
+  }, powershellTestTimeoutMs);
 
   it("uses Int64 byte accumulation for larger files", () => {
     const root = temporaryRoot();
     fs.writeFileSync(path.join(root, "data", "large.bin"), Buffer.alloc(12 * 1024 * 1024, 0x5a));
     expect(invokeHarness(root, "snapshot")).toMatchObject({ fileCount: 1, totalBytes: 12 * 1024 * 1024, complete: true, artifactCount: 0 });
-  });
+  }, powershellTestTimeoutMs);
 
   it("cleans a failed partial snapshot and succeeds on retry", () => {
     expect(invokeHarness(temporaryRoot(), "snapshot-retry")).toMatchObject({
@@ -145,5 +148,5 @@ describe.runIf(process.platform === "win32")("portable updater PowerShell primit
       complete: true,
       artifactCount: 0
     });
-  });
+  }, powershellTestTimeoutMs);
 });
