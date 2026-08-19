@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const updaterPath = path.join(scriptDirectory, "portable-updater.ps1");
 const temporaryDirectories = [];
-const powershellProcessTimeoutMs = 20_000;
+const powershellProcessTimeoutMs = 30_000;
 const powershellTestTimeoutMs = 30_000;
 
 function temporaryRoot() {

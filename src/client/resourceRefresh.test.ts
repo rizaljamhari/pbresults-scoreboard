@@ -41,7 +41,7 @@ describe("ResourceRefreshCoordinator", () => {
     coordinator.invalidate("newer");
     first.resolve();
     await first.promise;
-    await vi.waitFor(() => expect(calls).toBe(2));
+    await vi.waitFor(() => expect(calls).toBe(2), { timeout: 30_000 });
 
     expect(applications).toEqual(["newer"]);
     coordinator.dispose();

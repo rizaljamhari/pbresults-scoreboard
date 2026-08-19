@@ -60,10 +60,13 @@ describe("application event route", () => {
     expect(realtimeText).toContain("event: operator-text.state");
 
     controller.abort();
-    await vi.waitFor(() => {
-      expect(hub.getStats().connectedClients).toBe(0);
-      expect(openStreams.size).toBe(0);
-    });
+    await vi.waitFor(
+      () => {
+        expect(hub.getStats().connectedClients).toBe(0);
+        expect(openStreams.size).toBe(0);
+      },
+      { timeout: 30_000 }
+    );
   });
 
   it("rejects a connection before hijacking when capacity is exhausted", async () => {

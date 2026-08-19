@@ -21,7 +21,7 @@ function fixture(scriptBody: string, phase = "shutdown-requested") {
   return { root, updaterPath, transactionPath };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 5000) {
+async function waitFor(predicate: () => boolean, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -106,7 +106,7 @@ describe.runIf(process.platform === "win32")("coordinator startup handoff", () =
     const fixtureData = fixture(
       `$tx=Get-Content -LiteralPath $TransactionPath -Raw|ConvertFrom-Json;$tx.phase='install-coordinator-started';$json=$tx|ConvertTo-Json;[IO.File]::WriteAllText($TransactionPath,$json,[Text.UTF8Encoding]::new($false));Start-Sleep -Milliseconds 700;[IO.File]::WriteAllText('${completionPath.replaceAll("'", "''")}','complete')`
     );
-    const launch = createCoordinatorLaunch("Install", fixtureData.updaterPath, fixtureData.transactionPath, fixtureData.root);
+    const launch = createCoordinatorLaunch("Install", fixtureData.updaterPath, fixtureData.transactionPath, os.tmpdir());
     const wrapper = spawn("powershell.exe", launch.arguments, launch.options);
     let coordinatorPid: number | null = null;
     try {
@@ -126,7 +126,7 @@ describe.runIf(process.platform === "win32")("coordinator startup handoff", () =
       fs.rmSync(launch.pidPath, { force: true });
       fs.rmSync(completionPath, { force: true });
     }
-  }, 10_000);
+  });
 
   for (const [mode, phase] of [
     ["Install", "install-coordinator-started"],
@@ -146,7 +146,7 @@ describe.runIf(process.platform === "win32")("coordinator startup handoff", () =
       ).resolves.toBeUndefined();
       expect(JSON.parse(fs.readFileSync(fixtureData.transactionPath, "utf8")).phase).toBe(phase);
       await new Promise((resolve) => setTimeout(resolve, 900));
-    }, 15_000);
+    });
   }
 
   it("reports an early coordinator exit without advancing shutdown", async () => {

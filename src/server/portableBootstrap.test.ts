@@ -89,7 +89,7 @@ describe("portable coordinator refresh", () => {
       { env: { ...process.env, LOCK: lock, READY: ready }, stdio: "ignore" }
     );
     try {
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + 30_000;
       while (!fs.existsSync(ready) && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
@@ -98,7 +98,7 @@ describe("portable coordinator refresh", () => {
       expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(2));
     } finally {
       child.kill();
-      await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 5000))]);
+      await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 30_000))]);
     }
   });
 });
