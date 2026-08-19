@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Palette, Radio } from "lucide-react";
+import { Activity, AlertTriangle, Clock3, Palette, Radio } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type {
   AppSettings,
@@ -26,7 +26,6 @@ import {
   FieldHint,
   Input,
   Select,
-  StatusPanel,
   Textarea,
   buttonVariants
 } from "../components/ui";
@@ -104,12 +103,6 @@ type LogoResolution = {
 type ReadinessCheck = {
   label: string;
   ok: boolean;
-  detail: string;
-};
-
-type OperatorPriority = {
-  tone: "success" | "warning" | "critical";
-  title: string;
   detail: string;
 };
 
@@ -926,54 +919,6 @@ export function OperationsPage() {
     return buildWarnings(settings.data, live.data, publishedTheme, leftLogo, rightLogo);
   }, [leftLogo, live.data, publishedTheme, settings.data, rightLogo]);
 
-  const operatorPriority = useMemo<OperatorPriority>(() => {
-    if (!settings.data?.pollEnabled) {
-      return {
-        tone: "critical",
-        title: "Polling is paused",
-        detail: "Start polling first so every other checklist item can update in real time."
-      };
-    }
-
-    if (!publishedTheme) {
-      return {
-        tone: "critical",
-        title: "No published theme selected",
-        detail: "Publish or select a theme before going on air to avoid incomplete overlays."
-      };
-    }
-
-    if (!live.data) {
-      return {
-        tone: "warning",
-        title: "Waiting for live feed data",
-        detail: "Keep this page open until the first successful /live fetch arrives."
-      };
-    }
-
-    if (live.data.displayLeftTeamMatch.status !== "matched" || live.data.displayRightTeamMatch.status !== "matched") {
-      return {
-        tone: "warning",
-        title: "Team name resolution needs attention",
-        detail: "Use the Team resolution section below and confirm both sides are matched before on-air."
-      };
-    }
-
-    if (warnings.length) {
-      return {
-        tone: "critical",
-        title: "Operator attention required before go-live",
-        detail: "Check Operator status on the right. Each item includes cause and fix steps."
-      };
-    }
-
-    return {
-      tone: "success",
-      title: "System ready for live operation",
-      detail: "Feed health, matching, and published theme checks are all green."
-    };
-  }, [live.data, publishedTheme, settings.data?.pollEnabled, warnings.length]);
-
   const readinessChecks = useMemo<ReadinessCheck[]>(() => {
     if (!settings.data) {
       return [];
@@ -1294,7 +1239,7 @@ export function OperationsPage() {
       <AdminPageHeader
         eyebrow="Operations"
         title="Live operator overview"
-        description="Prioritize Go-live status first, then Team resolution. Everything else is secondary."
+        description="Live graphics and team resolution stay in view; setup and diagnostics remain secondary."
         actions={(
           <div className="action-row compact items-center max-[1200px]:w-full max-[1200px]:justify-start">
             <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
@@ -1312,31 +1257,37 @@ export function OperationsPage() {
         )}
       />
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className={dataTileClassName()}>
-          <strong className={dataTileLabelClassName()}>vMix live URL</strong>
-          <span className={dataTileValueClassName()}>{vmixLiveUrl}</span>
-        </div>
-        <div className={dataTileClassName()}>
-          <strong className={dataTileLabelClassName()}>Host IP for vMix</strong>
-          <span className={dataTileValueClassName()}>{runtimeInfo.data?.preferredHost ?? "Current origin in use"}</span>
-        </div>
-      </div>
-
-      <StatusPanel
-        tone={operatorPriority.tone === "critical" ? "critical" : operatorPriority.tone === "warning" ? "warning" : "success"}
-        icon={
-          operatorPriority.tone === "critical" ? (
-            <AlertTriangle className="h-4 w-4" />
-          ) : operatorPriority.tone === "warning" ? (
-            <AlertTriangle className="h-4 w-4" />
-          ) : (
-            <CheckCircle2 className="h-4 w-4" />
-          )
-        }
-        title={operatorPriority.title}
-        description={operatorPriority.detail}
-      />
+      <Card className="p-0">
+        <details>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+            <div className="grid gap-0.5">
+              <strong className="text-sm">vMix and browser-source setup</strong>
+              <span className="text-xs text-md3-onSurfaceVariant">Live URL, host address, and overlay shortcuts</span>
+            </div>
+            <span className="text-xs font-semibold text-md3-primary">Show configuration</span>
+          </summary>
+          <div className="grid gap-3 border-t border-md3-outlineVariant/70 px-4 py-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className={dataTileClassName()}>
+                <strong className={dataTileLabelClassName()}>vMix live URL</strong>
+                <span className={dataTileValueClassName()}>{vmixLiveUrl}</span>
+              </div>
+              <div className={dataTileClassName()}>
+                <strong className={dataTileLabelClassName()}>Host IP for vMix</strong>
+                <span className={dataTileValueClassName()}>{runtimeInfo.data?.preferredHost ?? "Current origin in use"}</span>
+              </div>
+            </div>
+            <div className="action-row compact">
+              <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={vmixLiveUrl} target="_blank" rel="noreferrer">
+                Open live overlay
+              </a>
+              <Button variant="secondary" size="sm" type="button" onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
+                Copy live URL
+              </Button>
+            </div>
+          </div>
+        </details>
+      </Card>
 
       <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
         <AdminStatTile
@@ -1371,79 +1322,6 @@ export function OperationsPage() {
 
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)] items-start gap-4 max-[1200px]:grid-cols-1">
         <div className="panel-stack min-w-0 gap-4">
-          <Card>
-            <CardHeader>
-              <div>
-                <p className="eyebrow">On-air text</p>
-                <CardTitle className="text-xl">Operator-controlled graphics</CardTitle>
-                <CardDescription>Draft changes privately, then use Take to send a completed value to every live overlay.</CardDescription>
-              </div>
-            </CardHeader>
-            {operatorText.error ? <FieldHint>{operatorText.error}</FieldHint> : null}
-            {operatorText.data?.fields.length ? (
-              <div className="grid gap-4">
-                {operatorText.data.fields.map((field) => {
-                  const draft = operatorTextDrafts[field.componentId] ?? field.value;
-                  const dirty = dirtyOperatorTextIds.has(field.componentId);
-                  const busy = operatorTextBusyId === field.componentId;
-                  const updateDraft = (value: string) => {
-                    setOperatorTextDrafts((current) => ({ ...current, [field.componentId]: value }));
-                    setDirtyOperatorTextIds((current) => new Set(current).add(field.componentId));
-                  };
-                  return (
-                    <div key={field.componentId} className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainerLow p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="grid gap-1">
-                          <strong>{field.label}</strong>
-                          <span className="text-sm text-md3-onSurfaceVariant">On air: {field.value || "(blank)"}</span>
-                        </div>
-                        <Badge variant={dirty ? "warning" : field.hasOverride ? "success" : "default"}>
-                          {dirty ? "Draft" : field.hasOverride ? "Live override" : "Theme default"}
-                        </Badge>
-                      </div>
-                      {field.multiline ? (
-                        <Textarea
-                          rows={3}
-                          maxLength={field.maxLength}
-                          value={draft}
-                          onChange={(event) => updateDraft(event.target.value)}
-                        />
-                      ) : (
-                        <Input
-                          maxLength={field.maxLength}
-                          value={draft}
-                          onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
-                        />
-                      )}
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <FieldHint>{draft.length}/{field.maxLength} characters</FieldHint>
-                        <div className="action-row compact">
-                          <Button
-                            variant="secondary"
-                            type="button"
-                            disabled={busy || !field.hasOverride}
-                            onClick={() => void handleResetOperatorText(field.componentId)}
-                          >
-                            Reset
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={busy || !dirty || draft.length > field.maxLength}
-                            onClick={() => void handleTakeOperatorText(field.componentId)}
-                          >
-                            {busy ? "Updating..." : "Take"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <FieldHint>The published theme has no operator-controlled text components.</FieldHint>
-            )}
-          </Card>
-
           <Card>
             <CardHeader>
               <div>
@@ -1562,6 +1440,80 @@ export function OperationsPage() {
               </div>
             </CardHeader>
             <OverlayPreviewWithZoom liveUrl={liveUrl} />
+          </Card>
+
+          <Card className="p-4">
+            <CardHeader className="mb-3">
+              <div>
+                <CardTitle className="text-lg">Operator-controlled graphics</CardTitle>
+                <CardDescription>Draft a value, then Take it live.</CardDescription>
+              </div>
+            </CardHeader>
+            {operatorText.error ? <FieldHint>{operatorText.error}</FieldHint> : null}
+            {operatorText.data?.fields.length ? (
+              <div className="grid gap-2">
+                {operatorText.data.fields.map((field) => {
+                  const draft = operatorTextDrafts[field.componentId] ?? field.value;
+                  const dirty = dirtyOperatorTextIds.has(field.componentId);
+                  const busy = operatorTextBusyId === field.componentId;
+                  const updateDraft = (value: string) => {
+                    setOperatorTextDrafts((current) => ({ ...current, [field.componentId]: value }));
+                    setDirtyOperatorTextIds((current) => new Set(current).add(field.componentId));
+                  };
+                  return (
+                    <div key={field.componentId} className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainerLow p-3">
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <strong className="text-sm">{field.label}</strong>
+                          <span className="truncate text-xs text-md3-onSurfaceVariant">On air: {field.value || "(blank)"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-md3-onSurfaceVariant">{draft.length}/{field.maxLength}</span>
+                          <Badge variant={dirty ? "warning" : field.hasOverride ? "success" : "default"}>
+                            {dirty ? "Draft" : field.hasOverride ? "Live override" : "Theme default"}
+                          </Badge>
+                        </div>
+                      </div>
+                      {field.multiline ? (
+                        <Textarea
+                          rows={2}
+                          maxLength={field.maxLength}
+                          value={draft}
+                          onChange={(event) => updateDraft(event.target.value)}
+                        />
+                      ) : (
+                        <Input
+                          maxLength={field.maxLength}
+                          value={draft}
+                          onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
+                        />
+                      )}
+                      <div className="action-row compact justify-end">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="button"
+                          disabled={busy || !field.hasOverride}
+                          onClick={() => void handleResetOperatorText(field.componentId)}
+                        >
+                          Reset
+                        </Button>
+                        <Button
+                          size="sm"
+                          type="button"
+                          disabled={busy || !dirty || draft.length > field.maxLength}
+                          onClick={() => void handleTakeOperatorText(field.componentId)}
+                        >
+                          {busy ? "Updating..." : "Take"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <FieldHint>The published theme has no operator-controlled text components.</FieldHint>
+            )}
           </Card>
 
           <Card className={riskCardClassName()}>
