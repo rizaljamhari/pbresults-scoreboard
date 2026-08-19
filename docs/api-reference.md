@@ -4,6 +4,7 @@ This document describes the current HTTP API used by the browser client.
 
 Important:
 - response shapes are based on the shared schemas in [src/shared/theme.ts](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/src/shared/theme.ts)
+- application-event shapes are defined in [src/shared/appEvents.ts](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/src/shared/appEvents.ts)
 - routes are defined in [src/server/index.ts](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/src/server/index.ts)
 - client usage is in [src/client/api.ts](/Users/rizaljamhari/Projects/personal/pbresults-scoreboard/src/client/api.ts)
 
@@ -207,7 +208,51 @@ Returns local readiness independently of the upstream PBResults feed:
 
 ### `GET /api/runtime-info`
 
-Returns the preferred LAN origin plus the active application version and release tag. Admin and overlay clients poll this endpoint and reload once when the server version changes after an update.
+Returns the preferred LAN origin plus the active application version and release tag. Clients use this route for initial LAN-link discovery and as a serialized 60-second runtime fallback while the event stream is disconnected.
+
+### `GET /api/events`
+
+Opens the single multiplexed SSE transport used by admin and overlay clients. It carries configuration invalidations, normalized live-scoreboard state, and operator-text state. The response uses `text/event-stream`, disables transformation/buffering, sends a 15-second heartbeat, and supplies a two-second reconnect hint.
+
+Every connection immediately receives `system.snapshot`:
+
+```text
+retry: 2000
+id: <instance-id>:<sequence>
+event: system.snapshot
+data: {"protocol":1,"type":"system.snapshot","instanceId":"...","sequence":12,"occurredAt":"...","revisions":{"settings":2,"themes":4,"assets":3,"teams":5},"runtime":{"appVersion":"1.8.0","releaseTag":"v1.8.0"},"liveState":{"sourceStatus":"ok","...":"NormalizedLiveState"},"operatorTextState":{"themeId":"theme-...","fields":[]}}
+```
+
+Mutation notifications use these event names:
+
+- `settings.changed`
+- `themes.changed`
+- `theme.published`
+- `assets.changed`
+- `teams.changed`
+
+Data-bearing real-time messages use:
+
+- `live.state`, containing a validated `NormalizedLiveState`
+- `operator-text.state`, containing a validated `OperatorTextState`
+
+Example:
+
+```text
+id: <instance-id>:13
+event: themes.changed
+data: {"protocol":1,"type":"themes.changed","instanceId":"...","sequence":13,"occurredAt":"...","revision":5,"resourceIds":["theme-..."]}
+```
+
+Important:
+
+- configuration events contain invalidation metadata only; clients refetch the existing REST resource
+- live and operator-text events contain their complete validated state so they do not trigger per-update REST requests
+- revisions are process-local; every reconnect snapshot reconciles active resources, and a new process instance is treated as a restart
+- v1 does not replay `Last-Event-ID`; snapshot reconciliation and a disconnected 60-second fallback provide correctness
+- `resourceIds` may be omitted when the entire domain changed
+- the process accepts at most 100 concurrent application-event streams and returns `503 EVENT_STREAM_CAPACITY` before opening an additional stream
+- `/api/live/stream` and `/api/operations/text/stream` have been removed; their REST equivalents remain available for disconnected fallback
 
 ### `GET /api/update/status`
 
@@ -381,20 +426,6 @@ Used mainly for:
 - diagnostics
 - troubleshooting feed issues
 
-### `GET /api/live/stream`
-
-Server-Sent Events endpoint.
-
-Behavior:
-- sends normalized live state as `data: ...`
-- keep-alive comments every 15 seconds
-
-Payload per event:
-
-```text
-data: {NormalizedLiveState JSON}
-```
-
 ### `POST /api/live/poll/start`
 
 Returns:
@@ -430,10 +461,6 @@ Effect:
 ### `GET /api/operations/text-fields`
 
 Returns the operator-controlled free-text fields in the currently published theme, including each field's label, default value, current on-air value, limits, and override status.
-
-### `GET /api/operations/text/stream`
-
-Server-Sent Events endpoint that immediately publishes the current operator-text state and emits again after Take, Reset, theme publication, or relevant theme changes.
 
 ### `PUT /api/operations/text/:themeId/:componentId`
 

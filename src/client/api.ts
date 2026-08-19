@@ -77,7 +77,7 @@ async function handle<T>(response: Response): Promise<T> {
 export const api = {
   getSettings: () => fetch("/api/settings").then(handle<AppSettings>),
   getOperations: () => fetch("/api/operations").then(handle<OperationsState>),
-  getOperatorTextFields: () => fetch("/api/operations/text-fields").then(handle<OperatorTextState>),
+  getOperatorTextFields: (signal?: AbortSignal) => fetch("/api/operations/text-fields", { signal }).then(handle<OperatorTextState>),
   updateOperatorText: (themeId: string, componentId: string, value: string) =>
     fetch(`/api/operations/text/${encodeURIComponent(themeId)}/${encodeURIComponent(componentId)}`, {
       method: "PUT",
@@ -188,9 +188,9 @@ export const api = {
     fetch(`/api/themes/${id}/publish`, {
       method: "POST"
     }).then(handle<ThemeDefinition>),
-  getLive: () => fetch("/api/live").then(handle<NormalizedLiveState>),
+  getLive: (signal?: AbortSignal) => fetch("/api/live", { signal }).then(handle<NormalizedLiveState>),
   getRawLive: () => fetch("/api/live/raw").then(handle<unknown>),
-  getRuntimeInfo: () => fetch("/api/runtime-info").then(handle<RuntimeInfo>),
+  getRuntimeInfo: (signal?: AbortSignal) => fetch("/api/runtime-info", { signal }).then(handle<RuntimeInfo>),
   getUpdateStatus: () => fetch("/api/update/status").then(handle<UpdateStatus>),
   checkForUpdate: () => fetch("/api/update/check", { method: "POST" }).then(handle<UpdateStatus>),
   downloadUpdate: (version: string) =>

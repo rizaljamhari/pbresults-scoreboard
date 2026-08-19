@@ -1,69 +1,22 @@
-import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api } from "../api";
-import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings } from "../hooks";
+import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings, useTheme } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
-import type { ThemeDefinition } from "../../shared/theme";
 
 export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   useRuntimeVersionWatcher();
   const { id } = useParams();
-  const [theme, setTheme] = useState<ThemeDefinition | null>(null);
   const settings = useSettings();
+  const selectedThemeId = mode === "preview" ? id : settings.data?.publishedThemeId ?? undefined;
+  const themeResource = useTheme(selectedThemeId, true);
+  const theme = themeResource.data;
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const operatorText = useOperatorTextState();
   const assets = useAssets();
 
-  useEffect(() => {
-    let active = true;
-
-    async function refreshAssets() {
-      try {
-        const next = await api.getAssets();
-        if (active) {
-          assets.setData(next);
-        }
-      } catch {
-        // Keep overlay resilient; best-effort refresh only.
-      }
-    }
-
-    void refreshAssets();
-    const timer = window.setInterval(() => void refreshAssets(), 3000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      if (mode === "preview" && id) {
-        const next = await api.getTheme(id);
-        if (active) {
-          setTheme(next);
-        }
-        return;
-      }
-
-      const settings = await api.getSettings();
-      if (!settings.publishedThemeId) {
-        return;
-      }
-      const next = await api.getTheme(settings.publishedThemeId);
-      if (active) {
-        setTheme(next);
-      }
-    }
-    void load();
-    const timer = window.setInterval(() => void load(), 5000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [id, mode]);
+  if (mode === "live" && settings.data && !settings.data.publishedThemeId) {
+    return <div className="overlay-page loading">No published theme.</div>;
+  }
 
   if (!theme) {
     return <div className="overlay-page loading">Loading overlay…</div>;

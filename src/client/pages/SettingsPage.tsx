@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
@@ -22,6 +22,8 @@ export function SettingsPage() {
   const themes = useThemes();
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(settings.data ? createSettingsDraft(settings.data) : null);
+  const [externallyChanged, setExternallyChanged] = useState(false);
+  const lastServerSettingsRef = useRef(settings.data);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!settings.data || !draft) {
@@ -34,14 +36,24 @@ export function SettingsPage() {
     if (!settings.data) {
       return;
     }
+    const previous = lastServerSettingsRef.current;
+    lastServerSettingsRef.current = settings.data;
     if (!draft) {
       setDraft(createSettingsDraft(settings.data));
+      setExternallyChanged(false);
       return;
     }
-    if (!hasUnsavedChanges) {
-      setDraft(createSettingsDraft(settings.data));
+    if (previous && areSettingsEqual(previous, settings.data)) {
+      return;
     }
-  }, [settings.data, hasUnsavedChanges]);
+    const wasDirty = previous ? !areSettingsEqual(draft, previous) : false;
+    if (!wasDirty) {
+      setDraft(createSettingsDraft(settings.data));
+      setExternallyChanged(false);
+    } else {
+      setExternallyChanged(true);
+    }
+  }, [settings.data]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -63,8 +75,10 @@ export function SettingsPage() {
     setSaving(true);
     try {
       const next = await api.updateSettings(draft);
+      lastServerSettingsRef.current = next;
       settings.setData(next);
       setDraft(createSettingsDraft(next));
+      setExternallyChanged(false);
       showToast({ kind: "success", message: "Settings saved." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to save settings." });
@@ -98,6 +112,7 @@ export function SettingsPage() {
       return;
     }
     setDraft(createSettingsDraft(settings.data));
+    setExternallyChanged(false);
     showToast({ kind: "info", message: "Draft changes discarded.", durationMs: 1800 });
   }
 
@@ -128,8 +143,11 @@ export function SettingsPage() {
     try {
       const text = await file.text();
       const imported = await api.importApp(JSON.parse(text));
+      lastServerSettingsRef.current = imported.settings;
       settings.setData(imported.settings);
       themes.setData(imported.themes);
+      setDraft(createSettingsDraft(imported.settings));
+      setExternallyChanged(false);
       showToast({ kind: "success", message: "App backup restored." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to restore app backup." });
@@ -144,7 +162,21 @@ export function SettingsPage() {
         description="Control live polling, publish target theme, and source configuration."
         actions={(
           <div className="action-row compact">
+            {externallyChanged ? <Badge variant="warning">Changed elsewhere</Badge> : null}
             {hasUnsavedChanges ? <Badge variant="default">Unsaved changes</Badge> : <Badge variant="success">Saved</Badge>}
+            {externallyChanged ? (
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => {
+                  if (!settings.data) return;
+                  setDraft(createSettingsDraft(settings.data));
+                  setExternallyChanged(false);
+                }}
+              >
+                Reload server version
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               type="button"

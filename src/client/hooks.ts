@@ -1,24 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { defaultSettings } from "../shared/theme";
 import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, TeamRecord, ThemeDefinition } from "../shared/theme";
 import type { RuntimeInfo } from "./api";
 import type { UpdateStatus } from "../shared/update";
+import type { AppResourceDomain } from "../shared/appEvents";
+import { useAppEventLiveState, useAppEventOperatorTextState, useAppEvents } from "./appEvents";
+import { ResourceRefreshCoordinator } from "./resourceRefresh";
+
+let resourceRefreshToken = 0;
+
+function nextResourceRefreshToken(prefix: string) {
+  resourceRefreshToken += 1;
+  return `${prefix}:${resourceRefreshToken}`;
+}
+
+function versionAssetUrl(url: string, token: string) {
+  const parsed = new URL(url, window.location.origin);
+  parsed.searchParams.set("v", token);
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
 
 export function useSettings() {
-  return useResource(api.getSettings, []);
+  return useResource(api.getSettings, [], { domain: "settings", refreshOnEvents: true });
 }
 
 export function useThemes() {
-  return useResource(api.getThemes, []);
+  return useResource(api.getThemes, [], { domain: "themes", refreshOnEvents: true });
 }
 
-export function useTheme(id: string | undefined) {
-  return useResource(() => (id ? api.getTheme(id) : Promise.resolve(null)), [id]);
+export function useTheme(id: string | undefined, refreshOnEvents = false) {
+  return useResource(() => (id ? api.getTheme(id) : Promise.resolve(null)), [id], {
+    domain: "themes",
+    resourceId: id,
+    refreshOnEvents
+  });
 }
 
 export function useAssets() {
-  return useResource(api.getAssets, []);
+  return useResource(api.getAssets, [], {
+    domain: "assets",
+    refreshOnEvents: true,
+    transform: (assets, token) => assets.map((asset) => ({ ...asset, url: versionAssetUrl(asset.url, token) }))
+  });
 }
 
 export function useRuntimeInfo() {
@@ -26,18 +50,23 @@ export function useRuntimeInfo() {
 }
 
 export function useRuntimeVersionWatcher() {
+  const appEvents = useAppEvents();
+  const loadedVersionRef = useRef<string | null>(null);
+
   useEffect(() => {
     let active = true;
-    let loadedVersion: string | null = null;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
     const check = async () => {
+      controller = new AbortController();
       try {
-        const runtime = await api.getRuntimeInfo();
+        const runtime = await api.getRuntimeInfo(controller.signal);
         if (!active) return;
-        if (!loadedVersion) {
-          loadedVersion = runtime.appVersion;
+        if (!loadedVersionRef.current) {
+          loadedVersionRef.current = runtime.appVersion;
           return;
         }
-        if (runtime.appVersion === loadedVersion) return;
+        if (runtime.appVersion === loadedVersionRef.current) return;
         const key = `pbresults-version-reload:${runtime.appVersion}`;
         const lastReload = Number(sessionStorage.getItem(key) ?? 0);
         if (Date.now() - lastReload < 60_000) return;
@@ -45,15 +74,20 @@ export function useRuntimeVersionWatcher() {
         window.location.reload();
       } catch {
         // Restarts and offline periods are expected; the next poll retries.
+      } finally {
+        controller = null;
+        if (active && appEvents?.connectionState === "disconnected") {
+          timer = window.setTimeout(() => void check(), 60_000);
+        }
       }
     };
-    void check();
-    const timer = window.setInterval(() => void check(), 5000);
+    if (!loadedVersionRef.current || appEvents?.connectionState === "disconnected") void check();
     return () => {
       active = false;
-      window.clearInterval(timer);
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
     };
-  }, []);
+  }, [appEvents?.connectionState]);
 }
 
 export function useUpdateStatus() {
@@ -88,80 +122,61 @@ export function useUpdateStatus() {
 }
 
 export function useTeams() {
-  return useResource(api.getTeams, []);
+  return useResource(api.getTeams, [], { domain: "teams", refreshOnEvents: true });
 }
 
 export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollIntervalMs) {
-  const [state, setState] = useState<NormalizedLiveState | null>(null);
+  const state = useAppEventLiveState();
+  const appEvents = useAppEvents();
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
-    let clockId: number | undefined;
-    let fallbackIntervalId: number | undefined;
-    let stream: EventSource | null = null;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+    const repeat = poll && appEvents?.connectionState === "disconnected";
 
     const load = async () => {
+      controller = new AbortController();
       try {
-        const live = await api.getLive();
+        const live = await api.getLive(controller.signal);
         if (!active) {
           return;
         }
-        setState(live);
+        appEvents?.updateLiveState(live);
         setError(null);
       } catch (err) {
-        if (!active) {
+        if (!active || (err instanceof DOMException && err.name === "AbortError")) {
           return;
         }
         setError(err instanceof Error ? err.message : "Failed to load live state");
+      } finally {
+        controller = null;
+        if (active && repeat) {
+          timer = window.setTimeout(() => void load(), Math.max(100, pollIntervalMs));
+        }
       }
     };
 
-    void load();
-    if (poll) {
-      stream = new EventSource("/api/live/stream");
-      stream.onmessage = (event) => {
-        if (!active) {
-          return;
-        }
-        try {
-          setState(JSON.parse(event.data) as NormalizedLiveState);
-          setError(null);
-        } catch {
-          setError("Failed to parse live stream");
-        }
-      };
-      stream.onerror = () => {
-        if (!active) {
-          return;
-        }
-        if (stream) {
-          stream.close();
-          stream = null;
-        }
-        if (!fallbackIntervalId) {
-          fallbackIntervalId = window.setInterval(() => void load(), Math.max(100, pollIntervalMs));
-        }
-      };
-      clockId = window.setInterval(() => {
-        setNowMs(Date.now());
-      }, 250);
-    }
+    if (!state || repeat) void load();
 
     return () => {
       active = false;
-      if (stream) {
-        stream.close();
-      }
-      if (fallbackIntervalId) {
-        window.clearInterval(fallbackIntervalId);
-      }
-      if (clockId) {
-        window.clearInterval(clockId);
-      }
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
     };
-  }, [poll, pollIntervalMs]);
+  }, [appEvents?.connectionState, appEvents?.updateLiveState, Boolean(state), poll, pollIntervalMs]);
+
+  useEffect(() => {
+    if (state) setError(null);
+  }, [state]);
+
+  useEffect(() => {
+    if (!poll) return;
+    const clockId = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(clockId);
+  }, [poll]);
 
   const derivedState = useMemo(() => {
     if (!state || state.sourceStatus !== "ok" || !state.fetchedAt) {
@@ -195,62 +210,48 @@ export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollI
 }
 
 export function useOperatorTextState() {
-  const [data, setData] = useState<OperatorTextState | null>(null);
+  const data = useAppEventOperatorTextState();
+  const appEvents = useAppEvents();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    let stream: EventSource | null = null;
-    let fallbackIntervalId: number | undefined;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+    const repeat = appEvents?.connectionState === "disconnected";
 
     const load = async () => {
+      controller = new AbortController();
       try {
-        const next = await api.getOperatorTextFields();
+        const next = await api.getOperatorTextFields(controller.signal);
         if (active) {
-          setData(next);
+          appEvents?.updateOperatorTextState(next);
           setError(null);
         }
       } catch (err) {
-        if (active) {
+        if (active && !(err instanceof DOMException && err.name === "AbortError")) {
           setError(err instanceof Error ? err.message : "Failed to load operator text");
         }
+      } finally {
+        controller = null;
+        if (active && repeat) timer = window.setTimeout(() => void load(), 2000);
       }
     };
 
-    void load();
-    stream = new EventSource("/api/operations/text/stream");
-    stream.onmessage = (event) => {
-      if (!active) {
-        return;
-      }
-      try {
-        setData(JSON.parse(event.data) as OperatorTextState);
-        setError(null);
-      } catch {
-        setError("Failed to parse operator text stream");
-      }
-    };
-    stream.onerror = () => {
-      if (!active) {
-        return;
-      }
-      stream?.close();
-      stream = null;
-      if (!fallbackIntervalId) {
-        fallbackIntervalId = window.setInterval(() => void load(), 2000);
-      }
-    };
+    if (!data || repeat) void load();
 
     return () => {
       active = false;
-      stream?.close();
-      if (fallbackIntervalId) {
-        window.clearInterval(fallbackIntervalId);
-      }
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
     };
-  }, []);
+  }, [appEvents?.connectionState, appEvents?.updateOperatorTextState, Boolean(data)]);
 
-  return { data, error, setData };
+  useEffect(() => {
+    if (data) setError(null);
+  }, [data]);
+
+  return { data, error, setData: appEvents?.updateOperatorTextState };
 }
 
 export function useAutoCloseRowActionMenus() {
@@ -315,40 +316,92 @@ export function useAutoCloseRowActionMenus() {
   }, []);
 }
 
-function useResource<T>(loader: () => Promise<T>, deps: unknown[]) {
+type ResourceOptions<T> = {
+  domain?: AppResourceDomain;
+  resourceId?: string;
+  refreshOnEvents?: boolean;
+  transform?: (value: T, refreshToken: string) => T;
+};
+
+function useResource<T>(loader: () => Promise<T>, deps: unknown[], options: ResourceOptions<T> = {}) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const appEvents = useAppEvents();
+  const loaderRef = useRef(loader);
+  const transformRef = useRef(options.transform);
+  const dataRef = useRef(data);
+  const coordinatorRef = useRef<ResourceRefreshCoordinator | null>(null);
+  loaderRef.current = loader;
+  transformRef.current = options.transform;
+  dataRef.current = data;
+
+  const refresh = useCallback(() => {
+    setStale(true);
+    coordinatorRef.current?.refreshNow(nextResourceRefreshToken("manual"));
+  }, []);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    loader()
-      .then((next) => {
-        if (!active) {
-          return;
+    let retryTimer: number | undefined;
+    let coordinator: ResourceRefreshCoordinator;
+    coordinator = new ResourceRefreshCoordinator(async (token, shouldApply) => {
+      if (dataRef.current === null) setLoading(true);
+      else setRefreshing(true);
+      try {
+        const loaded = await loaderRef.current();
+        if (!active || !shouldApply()) return;
+        if (retryTimer) {
+          window.clearTimeout(retryTimer);
+          retryTimer = undefined;
         }
+        const next = transformRef.current ? transformRef.current(loaded, token) : loaded;
+        dataRef.current = next;
         setData(next);
         setError(null);
-      })
-      .catch((err) => {
-        if (!active) {
-          return;
-        }
+        setStale(false);
+      } catch (err) {
+        if (!active || !shouldApply()) return;
         setError(err instanceof Error ? err.message : "Request failed");
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
+        setStale(true);
+        if (!retryTimer) {
+          retryTimer = window.setTimeout(() => {
+            retryTimer = undefined;
+            coordinator.invalidate(nextResourceRefreshToken("retry"));
+          }, 5000);
         }
-      });
+      } finally {
+        if (active && shouldApply()) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    });
+    coordinatorRef.current = coordinator;
+    coordinator.refreshNow(nextResourceRefreshToken("initial"));
+
+    const unsubscribe = options.domain && options.refreshOnEvents
+      ? appEvents?.subscribe(options.domain, (invalidation) => {
+          if (options.resourceId && invalidation.resourceIds && !invalidation.resourceIds.includes(options.resourceId)) {
+            return;
+          }
+          setStale(true);
+          coordinator.invalidate(invalidation.cacheToken);
+        })
+      : undefined;
 
     return () => {
       active = false;
+      unsubscribe?.();
+      coordinator.dispose();
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (coordinatorRef.current === coordinator) coordinatorRef.current = null;
     };
-  }, deps);
+  }, [appEvents?.subscribe, options.domain, options.refreshOnEvents, options.resourceId, ...deps]);
 
-  return { data, loading, error, setData };
+  return { data, loading, refreshing, stale, error, setData, refresh };
 }
 
 export type Resource<T> = ReturnType<typeof useResource<T>>;

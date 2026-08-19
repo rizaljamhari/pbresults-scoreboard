@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
@@ -19,6 +19,8 @@ import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
 import { AdminPageFrame, AdminPageHeader, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
 import { ThemeComponentInspector } from "../components/ThemeComponentInspector";
 import { showToast } from "../toast";
+import { useAppEvents } from "../appEvents";
+import { ResourceRefreshCoordinator } from "../resourceRefresh";
 
 
 type EditorMode = "basic" | "advanced";
@@ -528,6 +530,7 @@ export function ThemeEditorPage() {
   const navigate = useNavigate();
   const settings = useSettings();
   const themeResource = useTheme(id);
+  const appEvents = useAppEvents();
   const assets = useAssets();
   const teams = useTeams();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
@@ -538,6 +541,7 @@ export function ThemeEditorPage() {
   const [history, setHistory] = useState<ThemeDefinition[]>([]);
   const [future, setFuture] = useState<ThemeDefinition[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<ThemeDefinition | null>(null);
+  const [externalTheme, setExternalTheme] = useState<ThemeDefinition | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("basic");
   const [inspectorView, setInspectorView] = useState<InspectorView>("component");
@@ -561,6 +565,10 @@ export function ThemeEditorPage() {
   const [previewGameTimerValue, setPreviewGameTimerValue] = useState(371);
   const [previewBreakTimerValue, setPreviewBreakTimerValue] = useState(3);
   const theme = themeResource.data;
+  const themeRef = useRef(theme);
+  const savedSnapshotRef = useRef(savedSnapshot);
+  themeRef.current = theme;
+  savedSnapshotRef.current = savedSnapshot;
 
   const selectedEntry = theme && selected ? getThemeComponentEntry(theme, selected) : null;
   const selectedEditableComponent = selectedEntry?.component ?? null;
@@ -800,6 +808,43 @@ export function ThemeEditorPage() {
   function sameTheme(left: ThemeDefinition, right: ThemeDefinition) {
     return JSON.stringify(left) === JSON.stringify(right);
   }
+
+  function applyServerTheme(next: ThemeDefinition) {
+    const normalized = clampThemeToCanvas(next);
+    themeResource.setData(structuredClone(normalized));
+    setSavedSnapshot(structuredClone(normalized));
+    setHistory([structuredClone(normalized)]);
+    setFuture([]);
+    setExternalTheme(null);
+  }
+
+  useEffect(() => {
+    if (!id || !appEvents) return;
+    const coordinator = new ResourceRefreshCoordinator(async (_token, shouldApply) => {
+      try {
+        const next = await api.getTheme(id);
+        if (!shouldApply()) return;
+        const current = themeRef.current;
+        const baseline = savedSnapshotRef.current;
+        const dirty = Boolean(current && baseline && !sameTheme(current, baseline));
+        if (!dirty || (current && sameTheme(current, next))) {
+          applyServerTheme(next);
+          return;
+        }
+        setExternalTheme(next);
+      } catch {
+        // Keep the current draft if the external version cannot be loaded.
+      }
+    });
+    const unsubscribe = appEvents.subscribe("themes", (invalidation) => {
+      if (invalidation.resourceIds && !invalidation.resourceIds.includes(id)) return;
+      coordinator.invalidate(invalidation.cacheToken);
+    });
+    return () => {
+      unsubscribe();
+      coordinator.dispose();
+    };
+  }, [appEvents?.subscribe, id]);
 
   function updateTheme(next: ThemeDefinition, options?: { recordHistory?: boolean }) {
     const normalizedNext = clampThemeToCanvas(next);
@@ -1513,6 +1558,7 @@ export function ThemeEditorPage() {
       setSavedSnapshot(structuredClone(saved));
       setHistory([structuredClone(saved)]);
       setFuture([]);
+      setExternalTheme(null);
     } finally {
       setSaving(false);
     }
@@ -1534,6 +1580,7 @@ export function ThemeEditorPage() {
       setSavedSnapshot(structuredClone(saved));
       setHistory([structuredClone(saved)]);
       setFuture([]);
+      setExternalTheme(null);
       navigate(`/admin/themes/${saved.id}`);
     } finally {
       setSaving(false);
@@ -1764,6 +1811,7 @@ export function ThemeEditorPage() {
           description={
             <div className="editor-header-status">
               {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : <span>Ready to publish</span>}
+              {externalTheme ? <Badge variant="critical">Changed elsewhere</Badge> : null}
               <span>{theme.builtin ? "Built-in theme" : "Custom theme"}</span>
             </div>
           }
@@ -1778,6 +1826,22 @@ export function ThemeEditorPage() {
               <Button variant="secondary" onClick={redo} disabled={future.length === 0} title="Redo">
                 ↷ Redo
               </Button>
+              {externalTheme ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (hasUnsavedChanges && !window.confirm("Discard your draft and load the server version?")) return;
+                      applyServerTheme(externalTheme);
+                    }}
+                  >
+                    Reload server version
+                  </Button>
+                  <Button variant="secondary" onClick={() => setExternalTheme(null)}>
+                    Keep editing
+                  </Button>
+                </>
+              ) : null}
               <a
                 className={buttonVariants({ variant: "secondary" })}
                 href={`/overlay/preview/${theme.id}`}
@@ -2433,7 +2497,7 @@ export function ThemeEditorPage() {
                       <div className="editor-subsection-card">
                         <div className="editor-subsection-header">
                           <h4>Game Finished Overlay</h4>
-                          <p>Show or suppress the automatic `GAME FINISHED` replacement on the lower center line when the match ends.</p>
+                          <p>Show or suppress the automatic `GAME FINISHED` replacement on the lower center line. This does not control the winner treatment.</p>
                         </div>
                         <div className="form-grid editor-subsection-grid">
                           <label className="checkbox editor-subsection-toggle">
@@ -2822,7 +2886,7 @@ export function ThemeEditorPage() {
                     </label>
                   </div>
                 </SectionCard>
-                <SectionCard title="Winner Overlay" description="Text and surface styling specific to winner reveal." defaultOpen={false}>
+                <SectionCard title="Winner Overlay" description="Independent team-side winner reveal shown for a non-tied finished match." defaultOpen={false}>
                   <div className="form-grid">
                     <label className="checkbox">
                       <input type="checkbox" checked={theme.teamEventOverlay.winner.enabled} onChange={(event) => patchWinnerOverlay((winner) => (winner.enabled = event.target.checked))} />

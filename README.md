@@ -41,6 +41,7 @@ This project exists to add:
 - exports/imports full app state, teams, and themes
 - packages a Windows portable build for one-click operator use
 - checks, verifies, installs, health-checks, and rolls back Windows portable updates
+- refreshes configuration across open admin tabs and overlays through typed SSE invalidations
 
 ## Main pages
 

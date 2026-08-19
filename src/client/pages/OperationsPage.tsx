@@ -905,6 +905,7 @@ export function OperationsPage() {
       ? runtimeInfo.data.preferredOrigin
       : browserOrigin;
   const liveUrl = browserOrigin ? `${browserOrigin}/overlay/live` : "/overlay/live";
+  const embeddedLiveUrl = `${liveUrl}?embeddedEvents=1`;
   const previewUrl = publishedTheme && browserOrigin ? `${browserOrigin}/overlay/preview/${publishedTheme.id}` : publishedTheme ? `/overlay/preview/${publishedTheme.id}` : null;
   const vmixLiveUrl = vmixOrigin ? `${vmixOrigin}/overlay/live` : liveUrl;
   const vmixPreviewUrl = publishedTheme && vmixOrigin ? `${vmixOrigin}/overlay/preview/${publishedTheme.id}` : previewUrl;
@@ -1439,7 +1440,7 @@ export function OperationsPage() {
                 <CardDescription>Current scoreboard overlay render.</CardDescription>
               </div>
             </CardHeader>
-            <OverlayPreviewWithZoom liveUrl={liveUrl} />
+            <OverlayPreviewWithZoom liveUrl={embeddedLiveUrl} />
           </Card>
 
           <Card className="p-4">

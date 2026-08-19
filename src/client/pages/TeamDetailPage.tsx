@@ -6,7 +6,7 @@ import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { hasTeamUnsavedChanges } from "./teamAdminUtils";
 import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/teamMatching";
-import { AdminPageFrame, AdminPageHeader, Button, Checkbox, FieldHint, Input, Textarea, buttonVariants } from "../components/ui";
+import { AdminPageFrame, AdminPageHeader, Badge, Button, Checkbox, FieldHint, Input, Textarea, buttonVariants } from "../components/ui";
 
 function aliasesToText(aliases: string[]) {
   return aliases.join("\n");
@@ -35,6 +35,8 @@ export function TeamDetailPage() {
   const teams = useTeams();
   const assets = useAssets();
   const [draft, setDraft] = useState<TeamRecord | null>(null);
+  const [savedTeam, setSavedTeam] = useState<TeamRecord | null>(null);
+  const [externallyChanged, setExternallyChanged] = useState(false);
   const [aliasesText, setAliasesText] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -46,19 +48,40 @@ export function TeamDetailPage() {
   const generatedMatchNames = useMemo(() => (draft ? getGeneratedMatchNames(draft) : []), [draft]);
 
   const hasUnsavedChanges = useMemo(() => {
-    return hasTeamUnsavedChanges(draft, selectedTeam);
-  }, [draft, selectedTeam]);
+    return hasTeamUnsavedChanges(draft, savedTeam);
+  }, [draft, savedTeam]);
 
   useEffect(() => {
     if (!selectedTeam) {
       setDraft(null);
+      setSavedTeam(null);
       setAliasesText("");
+      setExternallyChanged(false);
+      return;
+    }
+
+    if (!draft || !savedTeam || savedTeam.id !== selectedTeam.id) {
+      setDraft(structuredClone(selectedTeam));
+      setSavedTeam(structuredClone(selectedTeam));
+      setAliasesText(aliasesToText(selectedTeam.aliases));
+      setExternallyChanged(false);
+      return;
+    }
+
+    if (!hasTeamUnsavedChanges(selectedTeam, savedTeam)) {
+      return;
+    }
+
+    if (hasTeamUnsavedChanges(draft, savedTeam)) {
+      setExternallyChanged(true);
       return;
     }
 
     setDraft(structuredClone(selectedTeam));
+    setSavedTeam(structuredClone(selectedTeam));
     setAliasesText(aliasesToText(selectedTeam.aliases));
-  }, [selectedTeam?.id]);
+    setExternallyChanged(false);
+  }, [selectedTeam]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -118,7 +141,9 @@ export function TeamDetailPage() {
       const saved = await api.saveTeam(nextDraft);
       replaceTeamInCache(saved);
       setDraft(structuredClone(saved));
+      setSavedTeam(structuredClone(saved));
       setAliasesText(aliasesToText(saved.aliases));
+      setExternallyChanged(false);
       showToast({ kind: "success", message: "Team updated." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update team." });
@@ -155,6 +180,8 @@ export function TeamDetailPage() {
     try {
       const result = await api.uploadTeamLogo(selectedTeam.id, file, slot);
       replaceTeamInCache(result.team);
+      setSavedTeam(structuredClone(result.team));
+      setExternallyChanged(false);
       setDraft((current) => {
         if (!current) {
           return structuredClone(result.team);
@@ -243,6 +270,22 @@ export function TeamDetailPage() {
         description="Update team profile, alias matching, and logo assets."
         actions={(
           <div className="action-row compact">
+            {externallyChanged ? <Badge variant="warning">Changed elsewhere</Badge> : null}
+            {externallyChanged ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!selectedTeam) return;
+                  if (hasUnsavedChanges && !window.confirm("Discard your draft and load the server version?")) return;
+                  setDraft(structuredClone(selectedTeam));
+                  setSavedTeam(structuredClone(selectedTeam));
+                  setAliasesText(aliasesToText(selectedTeam.aliases));
+                  setExternallyChanged(false);
+                }}
+              >
+                Reload server version
+              </Button>
+            ) : null}
             <Link
               className={buttonVariants({ variant: "secondary" })}
               to="/admin/teams"

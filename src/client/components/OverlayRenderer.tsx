@@ -415,29 +415,29 @@ export function OverlayRenderer({
   const [towelAnimationTick, setTowelAnimationTick] = useState(0);
   const towelIntervalRef = useRef<number | null>(null);
   const currentTeamEvent = live?.teamEvent ?? "none";
-  const finishState = useMemo(() => {
-    if (!theme.centerSecondary.gameFinished.enabled || !live || live.sourceStatus !== "ok" || live.state !== "END" || live.period !== "BREAK") {
+  const completedMatch = useMemo(() => {
+    if (!live || live.sourceStatus !== "ok" || live.state !== "END" || live.period !== "BREAK") {
       return null;
     }
     const snapshot = createOverlaySnapshot(live);
     const token = `${snapshot.round}|${snapshot.leftName}|${snapshot.rightName}|${snapshot.leftScore}|${snapshot.rightScore}`;
     return { token, snapshot };
-  }, [live, theme.centerSecondary.gameFinished.enabled]);
-  const gameFinishToken = finishState?.token ?? null;
+  }, [live]);
+  const gameFinishToken = theme.centerSecondary.gameFinished.enabled ? completedMatch?.token ?? null : null;
   const winnerReveal = useMemo(() => {
-    if (!finishState) {
+    if (!theme.teamEventOverlay.winner.enabled || !completedMatch) {
       return null;
     }
-    const winnerSide = winnerSideFromSnapshot(finishState.snapshot);
+    const winnerSide = winnerSideFromSnapshot(completedMatch.snapshot);
     if (!winnerSide) {
       return null;
     }
     return {
       side: winnerSide,
-      token: `${finishState.token}|${winnerSide}`
+      token: `${completedMatch.token}|${winnerSide}`
     };
-  }, [finishState]);
-  const majorAnimationActive = Boolean(gameFinishToken || winnerReveal);
+  }, [completedMatch, theme.teamEventOverlay.winner.enabled]);
+  const majorAnimationActive = Boolean(gameFinishToken || (overlayGeneral.enabled && winnerReveal));
 
   useEffect(
     () => () => {

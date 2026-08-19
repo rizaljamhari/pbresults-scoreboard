@@ -1,7 +1,7 @@
 # Planned Next Features
 
 Status: active roadmap
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-19
 
 ## Why these features are next
 
@@ -21,7 +21,7 @@ The onsite application remains the source of truth. Cloud services may add conve
 | Priority | Feature | Value | Complexity | Current status |
 | --- | --- | --- | --- | --- |
 | 1 | Automatic updates from GitHub Releases | Very high | Medium | Implemented; Windows qualification pending |
-| 2 | Event-driven UI refresh | High | Medium | Proposed |
+| 2 | Event-driven UI refresh | High | Medium | Implemented; Windows qualification pending |
 | 3 | Automatic local and cloud backups | Very high | Medium | Proposed |
 | 4 | Temporary ngrok remote access | High | Medium | Planned; technical design complete |
 | 5 | Additional backup and remote-access providers | Medium | Medium | Proposed |
@@ -59,11 +59,11 @@ See [automatic-updates-technical-plan.md](./automatic-updates-technical-plan.md)
 
 The admin UI and browser overlay refresh changed settings, published themes, and assets shortly after a successful mutation without repeatedly polling each resource every few seconds.
 
-The application remains correct across browser sleep, network loss, proxy interruptions, and application restarts. Events are notifications only; the existing resource APIs remain the source of truth.
+The application remains correct across browser sleep, network loss, proxy interruptions, and application restarts. Configuration events are notifications and existing resource APIs remain authoritative; latency-sensitive live and operator state is delivered directly.
 
-### Proposed architecture
+### Implemented architecture
 
-Add a dedicated Server-Sent Events endpoint, separate from the live scoreboard stream:
+Use one multiplexed Server-Sent Events endpoint for configuration invalidations, live scoreboard state, and operator-text state:
 
 ```text
 GET /api/events
@@ -79,31 +79,37 @@ The server owns a small in-process event hub that:
 
 Initial event types:
 
+- `system.snapshot`
 - `settings.changed`
+- `themes.changed`
 - `theme.published`
 - `assets.changed`
-- `runtime.changed`
+- `teams.changed`
+- `live.state`
+- `operator-text.state`
 
-Events should identify the changed resource or revision without placing sensitive settings or full resource payloads on the event stream. Clients refetch the existing API endpoint after receiving an event.
+`system.snapshot` carries the process instance, resource revision vector, runtime build identity, normalized live state, and operator-text state when a client connects. It covers restart recovery and runtime-version detection; the old process cannot truthfully emit the new runtime identity before an update restart.
+
+Configuration events identify the changed resource or revision without placing settings, themes, assets, or teams on the stream. The two latency-sensitive state events carry their validated payloads directly and replace the former dedicated SSE endpoints.
 
 ### Client behavior
 
 Clients should:
 
 1. Fetch initial settings, theme, assets, and runtime metadata normally.
-2. Open one shared `/api/events` connection.
+2. Open one shared `/api/events` connection; same-origin embedded overlays use the parent tab's relay.
 3. Refetch only the resource affected by each event.
 4. Coalesce bursts of duplicate events into one refresh.
 5. Reconnect automatically after disconnects.
-6. Refresh a small current-state snapshot after reconnect so missed events do not cause stale UI.
+6. Reconcile against the `system.snapshot` event after reconnect so missed events do not cause stale UI.
 
 The overlay should stop using fast settings, theme, and asset timers once the event path is reliable. A slow fallback refresh remains for environments that cannot maintain SSE connections.
 
 ### Runtime and automatic-update interaction
 
-Application updates restart the server and terminate existing browser connections. The overlay should reconnect to `/api/events`, fetch `/api/runtime-info`, and reload once if the application version or release tag changed.
+Application updates restart the server and terminate existing browser connections. The overlay should reconnect to `/api/events`, compare the new `system.snapshot` runtime identity, and reload once if the application version or release tag changed.
 
-The existing runtime-version safety check should remain during rollout and only be relaxed after reconnect behavior is proven in Windows and production-like environments.
+The runtime-version safety check now runs only as a serialized 60-second fallback while the event connection is unavailable.
 
 ### Reliability and security requirements
 
@@ -117,12 +123,12 @@ The existing runtime-version safety check should remain during rollout and only 
 
 ### Delivery phases
 
-1. Implement the server event hub and dedicated SSE endpoint.
-2. Emit events from settings, theme, publish, and asset mutation paths.
-3. Add a shared client subscription hook with reconnect and refresh coalescing.
-4. Replace overlay fast polling while retaining a slow fallback.
-5. Integrate runtime-version detection with reconnect recovery.
-6. Measure request volume, connection stability, missed-event recovery, and browser overlay freshness.
+1. Implement the server event hub and multiplexed SSE endpoint.
+2. Emit configuration invalidations and bridge live/operator state into the hub.
+3. Add a shared client store with reconnect and refresh coalescing.
+4. Replace overlay fast polling and legacy streams while retaining serialized fallbacks.
+5. Relay events from Operator Overview to its same-origin iframe.
+6. Qualify request volume, connection stability, missed-event recovery, and browser overlay freshness.
 
 ### Testing scope
 
@@ -133,7 +139,9 @@ The existing runtime-version safety check should remain during rollout and only 
 - duplicate-event coalescing
 - runtime-change reload exactly once
 - fallback behavior when SSE is unavailable
-- no regression to live scoreboard SSE or managed update restart/rollback
+- no regression to live scoreboard delivery or managed update restart/rollback
+
+See [event-driven-ui-refresh-technical-plan.md](./event-driven-ui-refresh-technical-plan.md) for the detailed event contract, mutation coverage, client refresh coordinator, draft-safety behavior, rollout phases, and qualification matrix.
 
 ## Feature 3: automatic local and cloud backups
 
@@ -256,7 +264,7 @@ Two machine-lifecycle areas remain onsite-loopback-only rather than becoming per
 
 ### ngrok free-plan expectations
 
-The free plan is acceptable for occasional support sessions. Operators should expect one account-assigned development domain rather than a new random hostname, ngrok's **Visit Site** browser interstitial, a 20,000 HTTP-request monthly allowance, and 1 GB of outgoing transfer per month. The endpoint still exists only while enabled and its Basic Auth credential rotates for every session. With the current five-second runtime-version poll, one continuously open remote browser uses roughly 720 requests per hour before other API calls, so event-critical or frequent remote use may justify a paid plan or completion of Feature 2 first.
+The free plan is acceptable for occasional support sessions. Operators should expect one account-assigned development domain rather than a new random hostname, ngrok's **Visit Site** browser interstitial, a 20,000 HTTP-request monthly allowance, and 1 GB of outgoing transfer per month. The endpoint still exists only while enabled and its Basic Auth credential rotates for every session. The multiplexed event stream removes the former five-second runtime request load; disconnected clients still use conservative serialized REST fallbacks.
 
 See [remote-access-technical-plan.md](./remote-access-technical-plan.md) for the implementation protocol, API, secret storage, request boundary, failure handling, and qualification matrix.
 

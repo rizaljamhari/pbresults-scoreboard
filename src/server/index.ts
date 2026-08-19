@@ -53,6 +53,8 @@ import { runtimeBuild } from "./buildInfo.js";
 import { getHealthStatus, runStartupHealthProbe } from "./health.js";
 import { isLoopbackRequest } from "./updateSecurity.js";
 import { UpdateFailure, updateService } from "./updateService.js";
+import { AppEventHub } from "./appEventHub.js";
+import { registerAppEventRoutes } from "./appEventRoutes.js";
 
 const app = Fastify({
   logger: true,
@@ -61,13 +63,29 @@ const app = Fastify({
 
 const port = Number(process.env.PORT ?? 3000);
 const openStreams = new Set<import("node:http").ServerResponse>();
+const appEventHub = new AppEventHub({
+  logger: {
+    warn(message, details) {
+      app.log.warn(details ?? {}, message);
+    }
+  }
+});
+const unsubscribeLiveEventBridge = livePoller.subscribe(({ normalized }) => {
+  appEventHub.publishLiveState(normalized);
+});
+const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state) => {
+  appEventHub.publishOperatorTextState(state);
+});
 let shuttingDown = false;
 
 async function gracefulShutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   updateService.stop();
+  unsubscribeLiveEventBridge();
+  unsubscribeOperatorTextEventBridge();
   livePoller.stop();
+  appEventHub.close();
   for (const stream of openStreams) {
     if (!stream.destroyed) {
       stream.write("retry: 2000\n\n");
@@ -146,6 +164,17 @@ app.get("/api/runtime-info", async () => {
   };
 });
 
+registerAppEventRoutes(app, {
+  hub: appEventHub,
+  openStreams,
+  getRuntime: () => ({
+    appVersion: runtimeBuild.info.appVersion,
+    releaseTag: runtimeBuild.info.releaseTag
+  }),
+  getLiveState: () => livePoller.getState().normalized,
+  getOperatorTextState: () => operatorTextRuntime.getState()
+});
+
 app.get("/api/update/status", async () => updateService.getStatus());
 app.post("/api/update/check", async (request, reply) => {
   if (!requireLocalUpdateRequest(request, reply)) return;
@@ -198,29 +227,6 @@ app.post("/api/update/result/dismiss", async (request, reply) => {
 
 app.get("/api/live", async () => livePoller.getState().normalized);
 app.get("/api/live/raw", async () => livePoller.getState().raw);
-app.get("/api/live/stream", async (_request, reply) => {
-  reply.hijack();
-  openStreams.add(reply.raw);
-  reply.raw.writeHead(200, {
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache, no-transform",
-    connection: "keep-alive"
-  });
-
-  const unsubscribe = livePoller.subscribe(({ normalized }) => {
-    reply.raw.write(`data: ${JSON.stringify(normalized)}\n\n`);
-  });
-
-  const keepAlive = setInterval(() => {
-    reply.raw.write(": keep-alive\n\n");
-  }, 15000);
-
-  reply.raw.on("close", () => {
-    openStreams.delete(reply.raw);
-    clearInterval(keepAlive);
-    unsubscribe();
-  });
-});
 
 app.get("/api/settings", async () => getSettings());
 app.put("/api/settings", async (request, reply) => {
@@ -229,6 +235,7 @@ app.put("/api/settings", async (request, reply) => {
   livePoller.reconfigure();
   updateService.reconfigureAutomaticChecks();
   operatorTextRuntime.emitCurrent();
+  appEventHub.publish("settings.changed");
   return reply.send(next);
 });
 app.post("/api/live/poll/start", async () => {
@@ -237,6 +244,7 @@ app.post("/api/live/poll/start", async () => {
     pollEnabled: true
   });
   livePoller.reconfigure();
+  appEventHub.publish("settings.changed");
   return next;
 });
 app.post("/api/live/poll/stop", async () => {
@@ -245,6 +253,7 @@ app.post("/api/live/poll/stop", async () => {
     pollEnabled: false
   });
   livePoller.reconfigure();
+  appEventHub.publish("settings.changed");
   return next;
 });
 app.post("/api/live/poll/refresh", async () => {
@@ -253,27 +262,6 @@ app.post("/api/live/poll/refresh", async () => {
 });
 app.get("/api/operations", async () => getOperationsState());
 app.get("/api/operations/text-fields", async () => getOperatorTextState());
-app.get("/api/operations/text/stream", async (_request, reply) => {
-  reply.hijack();
-  openStreams.add(reply.raw);
-  reply.raw.writeHead(200, {
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache, no-transform",
-    connection: "keep-alive"
-  });
-
-  const unsubscribe = operatorTextRuntime.subscribe((state) => {
-    reply.raw.write(`data: ${JSON.stringify(state)}\n\n`);
-  });
-  const keepAlive = setInterval(() => {
-    reply.raw.write(": keep-alive\n\n");
-  }, 15000);
-  reply.raw.on("close", () => {
-    openStreams.delete(reply.raw);
-    clearInterval(keepAlive);
-    unsubscribe();
-  });
-});
 app.put("/api/operations/text/:themeId/:componentId", async (request, reply) => {
   const { themeId, componentId } = request.params as { themeId: string; componentId: string };
   const value = (request.body as { value?: unknown } | undefined)?.value;
@@ -329,6 +317,9 @@ app.post("/api/operations/resolve", async (request, reply) => {
     const remembered = body.remember ? rememberTeamLiveMatchName(body.teamId, body.rawInputName, { forceReassign: body.forceReassign }) : null;
     const override = saveTeamResolutionOverride(body.rawInputName, body.teamId);
     livePoller.reconfigure();
+    if (body.remember) {
+      appEventHub.publish("teams.changed", [body.teamId, remembered?.reassignedFromTeam?.id ?? ""]);
+    }
     return reply.code(201).send({
       override,
       rememberedTeam: remembered?.team ?? null,
@@ -371,6 +362,10 @@ app.post("/api/app/import", async (request, reply) => {
   const restored = await importAppPackage(pkg);
   livePoller.reconfigure();
   operatorTextRuntime.emitCurrent();
+  appEventHub.publish("settings.changed");
+  appEventHub.publish("themes.changed");
+  appEventHub.publish("assets.changed");
+  appEventHub.publish("teams.changed");
   return reply.code(201).send(restored);
 });
 app.get("/api/teams/export", async () => exportTeamRegistryPackage());
@@ -378,6 +373,8 @@ app.post("/api/teams/import", async (request, reply) => {
   const pkg = teamRegistryExportSchema.parse(request.body);
   const restored = await importTeamRegistryPackage(pkg);
   livePoller.reconfigure();
+  appEventHub.publish("teams.changed");
+  appEventHub.publish("assets.changed");
   return reply.code(201).send(restored);
 });
 
@@ -397,6 +394,7 @@ app.post("/api/teams", async (request, reply) => {
   ) ?? {};
   const team = createTeamRecord(body);
   livePoller.reconfigure();
+  appEventHub.publish("teams.changed", [team.id]);
   return reply.code(201).send(team);
 });
 app.get("/api/teams/:id", async (request, reply) => {
@@ -413,11 +411,14 @@ app.put("/api/teams/:id", async (request, reply) => {
   }
   const saved = saveTeamRecord(team);
   livePoller.reconfigure();
+  appEventHub.publish("teams.changed", [saved.id]);
   return saved;
 });
 app.delete("/api/teams/:id", async (request, reply) => {
-  deleteTeamRecord((request.params as { id: string }).id);
+  const teamId = (request.params as { id: string }).id;
+  deleteTeamRecord(teamId);
   livePoller.reconfigure();
+  appEventHub.publish("teams.changed", [teamId]);
   return reply.code(204).send();
 });
 app.post("/api/teams/:id/logo", async (request, reply) => {
@@ -429,6 +430,8 @@ app.post("/api/teams/:id/logo", async (request, reply) => {
   try {
     const result = await attachTeamLogo((request.params as { id: string }).id, await file.toBuffer(), file.filename, file.mimetype, slot);
     livePoller.reconfigure();
+    appEventHub.publish("teams.changed", [result.team.id]);
+    appEventHub.publish("assets.changed", [result.asset.id]);
     return reply.code(201).send(result);
   } catch (error) {
     return reply.code(404).send({ message: error instanceof Error ? error.message : "Team not found" });
@@ -439,6 +442,7 @@ app.get("/api/themes", async () => listThemes());
 app.post("/api/themes", async (request, reply) => {
   const body = (request.body as { cloneFromId?: string; name?: string } | undefined) ?? {};
   const theme = createThemeFromClone(body.cloneFromId, body.name);
+  appEventHub.publish("themes.changed", [theme.id]);
   return reply.code(201).send(theme);
 });
 
@@ -457,12 +461,19 @@ app.put("/api/themes/:id", async (request, reply) => {
   }
   const saved = saveTheme(theme);
   operatorTextRuntime.emitCurrent();
+  appEventHub.publish("themes.changed", [saved.id]);
   return saved;
 });
 
 app.delete("/api/themes/:id", async (request, reply) => {
-  deleteTheme((request.params as { id: string }).id);
+  const themeId = (request.params as { id: string }).id;
+  const wasPublished = getSettings().publishedThemeId === themeId;
+  deleteTheme(themeId);
   operatorTextRuntime.emitCurrent();
+  appEventHub.publish("themes.changed", [themeId]);
+  if (wasPublished) {
+    appEventHub.publish("settings.changed");
+  }
   return reply.code(204).send();
 });
 
@@ -470,6 +481,7 @@ app.post("/api/themes/:id/publish", async (request, reply) => {
   try {
     const theme = publishTheme((request.params as { id: string }).id);
     operatorTextRuntime.emitCurrent();
+    appEventHub.publish("theme.published", [theme.id]);
     return theme;
   } catch (error) {
     return reply.code(404).send({ message: error instanceof Error ? error.message : "Theme not found" });
@@ -490,6 +502,8 @@ app.get("/api/themes/:id/export", async (request, reply) => {
 app.post("/api/themes/import", async (request, reply) => {
   const pkg = themeExportSchema.parse(request.body);
   const imported = await importThemePackage(pkg);
+  appEventHub.publish("themes.changed", [imported.id]);
+  appEventHub.publish("assets.changed");
   return reply.code(201).send(imported);
 });
 
@@ -501,6 +515,7 @@ app.post("/api/assets", async (request, reply) => {
   }
   const buffer = await file.toBuffer();
   const result = await storeAsset(buffer, file.filename, file.mimetype);
+  appEventHub.publish("assets.changed", [result.asset.id]);
   return reply.code(201).send(result);
 });
 

@@ -159,6 +159,20 @@ If `/live` fetch fails:
 
 This is why the overlay and operations page can still show the last known scoreboard state while upstream is down.
 
+### Event-driven refresh
+
+The browser uses one multiplexed SSE transport for configuration invalidations, live scoreboard state, and operator-text state:
+
+```text
+GET /api/events
+```
+
+The server publishes typed, metadata-only invalidations after successful configuration mutations and data-bearing `live.state` and `operator-text.state` messages for latency-sensitive state. Browser clients keep one connection per top-level tab, coalesce configuration bursts, and refetch only the affected REST resource. The embedded Operator Overview overlay receives events through a same-origin parent relay instead of opening another connection.
+
+Each connection begins with a process instance ID, per-domain revision vector, runtime identity, live state, and operator-text state. Every reconnect snapshot conservatively resynchronizes active resources, including after a process restart; an application-version change reloads the page once. When SSE is unavailable, configuration resources reconcile every 60 seconds, while serialized live and operator REST fallbacks run only after the previous request settles.
+
+The overlay no longer polls assets every three seconds or settings/themes/runtime every five seconds. It keeps the last successfully loaded theme, assets, live state, and operator text during transient failures. Runtime REST checks run at 60 seconds only while the shared stream is disconnected.
+
 ### Timer normalization
 
 Timers are sanitized to:
@@ -501,6 +515,10 @@ Inactive teams:
 ### 4. Portable runtime path resolution
 
 Server path resolution is packaged-mode aware via `src/server/runtimePaths.ts`, so data, uploads, logs, and client build paths can be rooted correctly in the portable bundle.
+
+### 5. Configuration event delivery
+
+`/api/events` is best-effort notification transport. Existing GET endpoints remain authoritative, replay is not required for correctness, and a new server process is recognized by a new event instance ID.
 
 ## Good entry points for future work
 

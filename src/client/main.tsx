@@ -9,12 +9,14 @@ import "@fontsource/barlow-condensed/700.css";
 import "./tailwind.css";
 import "./styles.css";
 import { App } from "./App";
+import { AppEventProvider } from "./appEvents";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <AppEventProvider>
+        <App />
+      </AppEventProvider>
     </BrowserRouter>
   </React.StrictMode>
 );
-
