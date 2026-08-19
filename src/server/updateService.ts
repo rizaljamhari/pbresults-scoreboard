@@ -46,6 +46,7 @@ const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 60_000;
 const MANIFEST_MAX_BYTES = 1024 * 1024;
 const COORDINATOR_START_TIMEOUT_MS = 10_000;
+const COORDINATOR_STABILITY_MS = 250;
 
 type ReleaseMetadata = {
   manifestName: string;
@@ -166,39 +167,62 @@ function transactionResult(transaction: Record<string, unknown>): UpdateStatus["
   };
 }
 
-async function spawnCoordinator(
+export async function spawnCoordinator(
   mode: "Install" | "Rollback",
   transactionPath: string,
-  startedPhase: "install-coordinator-started" | "rollback-coordinator-started"
+  startedPhase: "install-coordinator-started" | "rollback-coordinator-started",
+  options: { updaterPath?: string; rootDirectory?: string; startTimeoutMs?: number; stabilityMs?: number } = {}
 ) {
+  const updaterPath = options.updaterPath ?? portableUpdaterPath;
+  const rootDirectory = options.rootDirectory ?? appRootDir;
+  const startTimeoutMs = options.startTimeoutMs ?? COORDINATOR_START_TIMEOUT_MS;
+  const stabilityMs = options.stabilityMs ?? COORDINATOR_STABILITY_MS;
   const child = spawn(
     "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", portableUpdaterPath, "-Mode", mode, "-TransactionPath", transactionPath],
-    { cwd: appRootDir, stdio: "ignore", windowsHide: false }
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updaterPath, "-Mode", mode, "-TransactionPath", transactionPath],
+    { cwd: rootDirectory, stdio: "ignore", windowsHide: false }
   );
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", resolve);
     child.once("error", reject);
   });
 
-  const deadline = Date.now() + COORDINATOR_START_TIMEOUT_MS;
+  const deadline = Date.now() + startTimeoutMs;
   while (Date.now() < deadline) {
     if (child.exitCode !== null || child.signalCode !== null) {
-      throw new UpdateFailure("UPDATE_ACTIVATION_FAILED", `The ${mode.toLowerCase()} coordinator exited before it was ready.`, true);
+      throw new UpdateFailure(
+        "UPDATE_ACTIVATION_FAILED",
+        `The ${mode.toLowerCase()} coordinator exited before it was ready (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
+        true
+      );
     }
+    let acknowledged = false;
     try {
-      if (readTransaction(transactionPath).phase === startedPhase) {
-        child.unref();
-        return;
-      }
+      acknowledged = readTransaction(transactionPath).phase === startedPhase;
     } catch {
       // The coordinator atomically replaces the journal while acknowledging startup.
+    }
+    if (acknowledged) {
+      await new Promise((resolve) => setTimeout(resolve, stabilityMs));
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new UpdateFailure(
+          "UPDATE_ACTIVATION_FAILED",
+          `The ${mode.toLowerCase()} coordinator exited during startup (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
+          true
+        );
+      }
+      child.unref();
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   child.kill();
   child.unref();
-  throw new UpdateFailure("UPDATE_ACTIVATION_FAILED", `The ${mode.toLowerCase()} coordinator did not become ready.`, true);
+  throw new UpdateFailure(
+    "UPDATE_ACTIVATION_FAILED",
+    `The ${mode.toLowerCase()} coordinator did not acknowledge startup within ${startTimeoutMs} ms. The current version is still running.`,
+    true
+  );
 }
 
 export class UpdateService {
@@ -436,8 +460,26 @@ export class UpdateService {
       ...((transaction.phaseTimestamps as Record<string, string> | undefined) ?? {}),
       "shutdown-requested": new Date().toISOString()
     };
+    transaction.errorCode = null;
+    transaction.errorMessage = null;
     atomicWriteJson(this.activeTransactionPath, transaction);
-    await spawnCoordinator("Install", this.activeTransactionPath, "install-coordinator-started");
+    try {
+      await spawnCoordinator("Install", this.activeTransactionPath, "install-coordinator-started");
+    } catch (error) {
+      const failure = this.asFailure(error, "UPDATE_ACTIVATION_FAILED", "The install coordinator could not start.", true);
+      transaction.phase = "prepared";
+      transaction.errorCode = failure.code;
+      transaction.errorMessage = failure.message;
+      transaction.phaseTimestamps = {
+        ...((transaction.phaseTimestamps as Record<string, string> | undefined) ?? {}),
+        "coordinator-start-failed": new Date().toISOString()
+      };
+      atomicWriteJson(this.activeTransactionPath, transaction);
+      this.phase = "ready-to-install";
+      this.error = { code: failure.code, message: failure.message, retryable: failure.retryable };
+      this.save();
+      throw failure;
+    }
     this.phase = "install-requested";
     this.save();
     setTimeout(() => {
@@ -488,7 +530,14 @@ export class UpdateService {
       throw new UpdateFailure("UPDATE_ROLLBACK_FAILED", "No previous healthy version is available.", false, 409);
     }
     const id = randomUUID();
-    const transaction = {
+    const transaction: Record<string, unknown> & {
+      phase: string;
+      phaseTimestamps: Record<string, string>;
+      errorCode: UpdateErrorCode | null;
+      errorMessage: string | null;
+      outcome: "failed" | null;
+      completedAt: string | null;
+    } = {
       schemaVersion: 1,
       id,
       kind: "manual-rollback",
@@ -511,7 +560,26 @@ export class UpdateService {
     };
     this.activeTransactionPath = createTransaction(transaction);
     this.persisted.transactionPath = this.activeTransactionPath;
-    await spawnCoordinator("Rollback", this.activeTransactionPath, "rollback-coordinator-started");
+    try {
+      await spawnCoordinator("Rollback", this.activeTransactionPath, "rollback-coordinator-started");
+    } catch (error) {
+      const failure = this.asFailure(error, "UPDATE_ACTIVATION_FAILED", "The rollback coordinator could not start.", true);
+      transaction.phase = "failed";
+      transaction.errorCode = failure.code;
+      transaction.errorMessage = failure.message;
+      transaction.outcome = "failed";
+      transaction.completedAt = new Date().toISOString();
+      transaction.phaseTimestamps = {
+        ...transaction.phaseTimestamps,
+        "coordinator-start-failed": transaction.completedAt,
+        failed: transaction.completedAt
+      };
+      atomicWriteJson(this.activeTransactionPath, transaction);
+      this.error = { code: failure.code, message: failure.message, retryable: failure.retryable };
+      this.phase = "failed";
+      this.save();
+      throw failure;
+    }
     this.phase = "install-requested";
     this.save();
     setTimeout(() => void this.requestShutdown?.(), 250).unref();

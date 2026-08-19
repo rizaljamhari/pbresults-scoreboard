@@ -1,4 +1,5 @@
 [CmdletBinding()]
+# PBRESULTS_COORDINATOR_VERSION: 2
 param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('Stage', 'Install', 'Rollback', 'Recover')]
@@ -38,31 +39,66 @@ function Resolve-RootChild([string]$Candidate) {
 }
 
 function Write-AtomicJson([string]$Path, [object]$Value) {
-  $Temp = "$Path.tmp"
-  $Json = $Value | ConvertTo-Json -Depth 20
-  $Encoding = [System.Text.UTF8Encoding]::new($false)
-  $Bytes = $Encoding.GetBytes($Json + [Environment]::NewLine)
-  $Stream = [System.IO.File]::Open($Temp, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-  try {
-    $Stream.Write($Bytes, 0, $Bytes.Length)
-    $Stream.Flush($true)
-  } finally {
-    $Stream.Dispose()
-  }
-  $Check = Get-Content -LiteralPath $Temp -Raw | ConvertFrom-Json
-  if ($null -eq $Check) { throw "Unable to validate temporary JSON: $Temp" }
-  if (Test-Path -LiteralPath $Path) {
-    # PowerShell 5.1 can coerce $null to an empty string when binding this
-    # .NET overload, which File.Replace rejects as an illegal backup path.
-    $Backup = "$Path.bak"
-    [System.IO.File]::Replace($Temp, $Path, $Backup)
-    try {
-      [System.IO.File]::Delete($Backup)
-    } catch {
-      Write-UpdaterLog "Deferred cleanup for ${Backup}: $($_.Exception.Message)"
+  $Parent = Split-Path -Parent $Path
+  if ($Parent) { New-Item -ItemType Directory -Path $Parent -Force | Out-Null }
+  foreach ($LegacyArtifact in @("$Path.tmp", "$Path.bak")) {
+    if (Test-Path -LiteralPath $LegacyArtifact) {
+      Remove-Item -LiteralPath $LegacyArtifact -Force
     }
-  } else {
-    [System.IO.File]::Move($Temp, $Path)
+  }
+  $Token = "$PID-$([Guid]::NewGuid().ToString('N'))"
+  $Temp = "$Path.$Token.tmp"
+  $Backup = "$Path.$Token.bak"
+  try {
+    $Json = $Value | ConvertTo-Json -Depth 20
+    $Encoding = [System.Text.UTF8Encoding]::new($false)
+    $Bytes = $Encoding.GetBytes($Json + [Environment]::NewLine)
+    $Stream = [System.IO.File]::Open($Temp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    try {
+      $Stream.Write($Bytes, 0, $Bytes.Length)
+      $Stream.Flush($true)
+    } finally {
+      $Stream.Dispose()
+    }
+    $Check = Get-Content -LiteralPath $Temp -Raw | ConvertFrom-Json
+    if ($null -eq $Check) { throw "Unable to validate temporary JSON: $Temp" }
+    if (Test-Path -LiteralPath $Path) {
+      # PowerShell 5.1 can coerce $null to an empty string when binding this
+      # .NET overload, which File.Replace rejects as an illegal backup path.
+      [System.IO.File]::Replace($Temp, $Path, $Backup)
+    } else {
+      [System.IO.File]::Move($Temp, $Path)
+    }
+  } finally {
+    foreach ($Artifact in @($Temp, $Backup)) {
+      try {
+        if (Test-Path -LiteralPath $Artifact) { [System.IO.File]::Delete($Artifact) }
+      } catch {
+        Write-UpdaterLog "Deferred cleanup for ${Artifact}: $($_.Exception.Message)"
+      }
+    }
+  }
+}
+
+function Remove-StaleSnapshotPartial([string]$Partial) {
+  if (Test-Path -LiteralPath $Partial) {
+    try {
+      Remove-Item -LiteralPath $Partial -Recurse -Force
+    } catch {
+      Write-UpdaterLog "Unable to remove incomplete snapshot ${Partial}: $($_.Exception.Message)"
+      throw 'UPDATE_SNAPSHOT_FAILED'
+    }
+  }
+}
+
+function Get-FileSha256([string]$Path) {
+  $Stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+  $Hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $Hasher.Dispose()
+    $Stream.Dispose()
   }
 }
 
@@ -131,12 +167,14 @@ function Invoke-Stage([object]$Transaction) {
   $Manifest = $Transaction.manifest
   if ($Manifest.protocol.minimumUpdaterVersion -gt $ProtocolVersion) { throw 'UPDATE_PROTOCOL_UNSUPPORTED' }
   if ((Get-Item -LiteralPath $Archive).Length -ne [int64]$Manifest.asset.size) { throw 'UPDATE_DIGEST_MISMATCH' }
-  $Digest = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+  $Digest = Get-FileSha256 $Archive
   if ($Digest -ne $Manifest.asset.sha256) { throw 'UPDATE_DIGEST_MISMATCH' }
 
   if (Test-Path -LiteralPath $Staging) { Remove-Item -LiteralPath $Staging -Recurse -Force }
   New-Item -ItemType Directory -Path $Staging -Force | Out-Null
-  $StagingPrefix = $Staging.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  $Extraction = Join-Path $Staging 'payload.partial'
+  New-Item -ItemType Directory -Path $Extraction -Force | Out-Null
+  $ExtractionPrefix = $Extraction.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
   $Total = [int64]0
   $DeclaredRoot = $Manifest.payload.rootDirectory.TrimEnd('/') + '/'
   $DeclaredAppPrefix = $DeclaredRoot + $Manifest.payload.applicationDirectory.Trim('/') + '/'
@@ -146,22 +184,25 @@ function Invoke-Stage([object]$Transaction) {
       if (-not $Entry.FullName.Replace('\', '/').StartsWith($DeclaredRoot, [System.StringComparison]::Ordinal)) {
         throw 'UPDATE_ARCHIVE_UNSAFE'
       }
-      $Name = $Entry.FullName.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+      $NormalizedName = $Entry.FullName.Replace('\', '/')
+      $Name = $NormalizedName.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
       if ([string]::IsNullOrWhiteSpace($Name) -or [System.IO.Path]::IsPathRooted($Name) -or $Name -match '^[A-Za-z]:') {
         throw 'UPDATE_ARCHIVE_UNSAFE'
       }
       $UnixMode = (($Entry.ExternalAttributes -shr 16) -band 0xF000)
       if ($UnixMode -eq 0xA000) { throw 'UPDATE_ARCHIVE_UNSAFE' }
-      if (-not $Entry.FullName.Replace('\', '/').StartsWith($DeclaredAppPrefix, [System.StringComparison]::Ordinal)) {
+      if (-not $NormalizedName.StartsWith($DeclaredAppPrefix, [System.StringComparison]::Ordinal)) {
         continue
       }
-      $Destination = [System.IO.Path]::GetFullPath((Join-Path $Staging $Name))
-      if (-not $Destination.StartsWith($StagingPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+      $AppRelativeName = $NormalizedName.Substring($DeclaredAppPrefix.Length)
+      if ([string]::IsNullOrWhiteSpace($AppRelativeName)) { continue }
+      $Destination = [System.IO.Path]::GetFullPath((Join-Path $Extraction $AppRelativeName.Replace('/', [System.IO.Path]::DirectorySeparatorChar)))
+      if (-not $Destination.StartsWith($ExtractionPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw 'UPDATE_ARCHIVE_UNSAFE'
       }
       $Total += [int64]$Entry.Length
       if ($Total -gt [int64]$Manifest.asset.unpackedSize -or $Total -gt 5368709120) { throw 'UPDATE_ARCHIVE_UNSAFE' }
-      if ($Entry.FullName.EndsWith('/')) {
+      if ($NormalizedName.EndsWith('/')) {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
         continue
       }
@@ -177,8 +218,7 @@ function Invoke-Stage([object]$Transaction) {
   }
   if ($Total -ne [int64]$Manifest.asset.unpackedSize) { throw 'UPDATE_PAYLOAD_INVALID' }
 
-  $PortableRoot = Join-Path $Staging $Manifest.payload.rootDirectory
-  $SourceApp = Join-Path $PortableRoot $Manifest.payload.applicationDirectory
+  $SourceApp = $Extraction
   if (-not (Test-App $SourceApp $Transaction.targetVersion)) { throw 'UPDATE_PAYLOAD_INVALID' }
   $Build = Get-Content -LiteralPath (Join-Path $SourceApp 'BUILD-INFO.json') -Raw | ConvertFrom-Json
   if (
@@ -204,32 +244,54 @@ function Invoke-Stage([object]$Transaction) {
 function New-DataSnapshot([object]$Transaction) {
   $Data = Join-Path $Root 'data'
   $Stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
-  $Name = "$Stamp-v$($Transaction.sourceVersion)-to-v$($Transaction.targetVersion)"
+  $SafeId = ([string]$Transaction.id) -replace '[^A-Za-z0-9-]', ''
+  $Name = "$Stamp-v$($Transaction.sourceVersion)-to-v$($Transaction.targetVersion)-$SafeId"
   $Partial = Join-Path $Root "backups\pre-update\$Name.partial"
   $Final = Join-Path $Root "backups\pre-update\$Name"
   New-Item -ItemType Directory -Path (Split-Path -Parent $Partial) -Force | Out-Null
-  New-Item -ItemType Directory -Path (Join-Path $Partial 'data') -Force | Out-Null
-  $Files = @()
-  $TotalBytes = [int64]0
-  if (Test-Path -LiteralPath $Data) {
-    foreach ($File in Get-ChildItem -LiteralPath $Data -File -Recurse) {
-      $Relative = Get-ChildRelativePath $Data $File.FullName
-      $Target = Join-Path (Join-Path $Partial 'data') $Relative
-      New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
-      Copy-Item -LiteralPath $File.FullName -Destination $Target
-      $TotalBytes += [int64]$File.Length
-      $Files += [ordered]@{ path = $Relative; size = $File.Length; sha256 = (Get-FileHash $Target -Algorithm SHA256).Hash.ToLowerInvariant() }
+  Remove-StaleSnapshotPartial $Partial
+  if (Test-Path -LiteralPath $Final) {
+    try {
+      $Existing = Get-Content -LiteralPath (Join-Path $Final 'snapshot.json') -Raw | ConvertFrom-Json
+      if ($Existing.complete -and $Existing.transactionId -eq $Transaction.id) {
+        $Transaction.snapshotPath = Get-RootRelativePath $Final
+        Save-Transaction $Transaction 'snapshot-created'
+        return
+      }
+    } catch {}
+    $Invalid = Join-Path $Updates "quarantine\invalid-snapshot-$SafeId-$([Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Invalid) -Force | Out-Null
+    Move-Item -LiteralPath $Final -Destination $Invalid
+  }
+  try {
+    New-Item -ItemType Directory -Path (Join-Path $Partial 'data') -Force | Out-Null
+    $Files = [System.Collections.Generic.List[object]]::new()
+    $TotalBytes = [int64]0
+    if (Test-Path -LiteralPath $Data) {
+      foreach ($File in Get-ChildItem -LiteralPath $Data -File -Recurse) {
+        $Relative = Get-ChildRelativePath $Data $File.FullName
+        $Target = Join-Path (Join-Path $Partial 'data') $Relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
+        Copy-Item -LiteralPath $File.FullName -Destination $Target
+        $TotalBytes += [int64]$File.Length
+        $Files.Add([ordered]@{ path = $Relative; size = [int64]$File.Length; sha256 = Get-FileSha256 $Target })
+      }
     }
+    $Snapshot = [ordered]@{
+      schemaVersion = 1; transactionId = $Transaction.id; sourceVersion = $Transaction.sourceVersion
+      targetVersion = $Transaction.targetVersion; createdAt = [DateTime]::UtcNow.ToString('o')
+      fileCount = $Files.Count; totalBytes = $TotalBytes; files = $Files; complete = $true
+    }
+    Write-AtomicJson (Join-Path $Partial 'snapshot.json') $Snapshot
+    Move-Item -LiteralPath $Partial -Destination $Final
+    $Transaction.snapshotPath = Get-RootRelativePath $Final
+    Save-Transaction $Transaction 'snapshot-created'
+  } catch {
+    $SnapshotError = $_.Exception.Message
+    Remove-StaleSnapshotPartial $Partial
+    Write-UpdaterLog "Snapshot creation failed for transaction $($Transaction.id): $SnapshotError"
+    throw "UPDATE_SNAPSHOT_FAILED: $SnapshotError"
   }
-  $Snapshot = [ordered]@{
-    schemaVersion = 1; transactionId = $Transaction.id; sourceVersion = $Transaction.sourceVersion
-    targetVersion = $Transaction.targetVersion; createdAt = [DateTime]::UtcNow.ToString('o')
-    fileCount = $Files.Count; totalBytes = $TotalBytes; files = $Files; complete = $true
-  }
-  Write-AtomicJson (Join-Path $Partial 'snapshot.json') $Snapshot
-  Move-Item -LiteralPath $Partial -Destination $Final
-  $Transaction.snapshotPath = Get-RootRelativePath $Final
-  Save-Transaction $Transaction 'snapshot-created'
 }
 
 function Start-And-WaitForHealth([object]$Transaction, [string]$Version, [string]$Tag) {
@@ -478,13 +540,38 @@ try {
   }
   else { Invoke-Recovery $Transaction }
 } catch {
-  Write-UpdaterLog "Transaction failed: $($_.Exception.Message)"
+  $FailureMessage = $_.Exception.Message
+  $FailureCode = if ($FailureMessage -match '^(UPDATE_[A-Z_]+)') { $Matches[1] } else { 'UPDATE_ACTIVATION_FAILED' }
+  Write-UpdaterLog "Transaction failed: $FailureMessage"
   if ($null -ne $Transaction) {
-    $Transaction.errorCode = if ($_.Exception.Message -match '^UPDATE_') { $_.Exception.Message } else { 'UPDATE_ACTIVATION_FAILED' }
-    $Transaction.errorMessage = $_.Exception.Message
-    $Transaction.outcome = 'failed'
-    $Transaction.completedAt = [DateTime]::UtcNow.ToString('o')
-    try { Save-Transaction $Transaction 'failed' } catch {}
+    $Transaction.errorCode = $FailureCode
+    $Transaction.errorMessage = $FailureMessage
+    $RetryPrepared = $Mode -eq 'Install' -and @('UPDATE_SHUTDOWN_TIMEOUT', 'UPDATE_SNAPSHOT_FAILED') -contains $FailureCode
+    if ($FailureCode -eq 'UPDATE_SNAPSHOT_FAILED') {
+      try {
+        $Pointer = Get-Content -LiteralPath $PointerPath -Raw | ConvertFrom-Json
+        if (Start-And-WaitForHealth $Transaction $Pointer.active.version $Pointer.active.releaseTag) {
+          Write-UpdaterLog "Restarted $($Pointer.active.releaseTag) after the snapshot failure."
+        } else {
+          Write-UpdaterLog "Unable to restart $($Pointer.active.releaseTag) after the snapshot failure."
+          $RetryPrepared = $false
+        }
+      } catch {
+        Write-UpdaterLog "Unable to restart the current version after the snapshot failure: $($_.Exception.Message)"
+        $RetryPrepared = $false
+      }
+      $Transaction.errorCode = $FailureCode
+      $Transaction.errorMessage = $FailureMessage
+    }
+    if ($RetryPrepared) {
+      $Transaction.outcome = $null
+      $Transaction.completedAt = $null
+      try { Save-Transaction $Transaction 'prepared' } catch {}
+    } else {
+      $Transaction.outcome = 'failed'
+      $Transaction.completedAt = [DateTime]::UtcNow.ToString('o')
+      try { Save-Transaction $Transaction 'failed' } catch {}
+    }
   }
   exit 1
 } finally {

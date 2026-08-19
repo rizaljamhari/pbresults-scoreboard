@@ -53,6 +53,9 @@
     "vitest": "^3.1.4"
   },
   "pnpm": {
+    "overrides": {
+      "@imgly/background-removal-node>sharp": "^0.34.5"
+    },
     "onlyBuiltDependencies": [
       "sharp",
       "onnxruntime-node"

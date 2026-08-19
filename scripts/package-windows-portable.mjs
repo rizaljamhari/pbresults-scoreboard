@@ -34,6 +34,10 @@ const zipOutput = path.join(
 const manifestOutput = path.join(releaseDir, releaseMetadata.manifestFileName);
 const builtAt = new Date().toISOString();
 const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectDir, encoding: "utf8" }).trim().toLowerCase();
+const windowsPathBudget = Number(process.env.PB_WINDOWS_PATH_BUDGET ?? 259);
+const validationPortableRoot = path.resolve(
+  process.env.PB_WINDOWS_PATH_VALIDATION_ROOT ?? path.join("C:\\Users", os.userInfo().username, "Desktop", bundleName)
+);
 let buildInfo;
 
 function fail(message) {
@@ -95,11 +99,65 @@ async function stageProductionApp() {
       fail(`Temporary production install did not create node_modules: ${installedNodeModulesDir}`);
     }
 
+    await pruneSharpBuildArtifacts(installedNodeModulesDir);
+
     await fs.copyFile(path.join(installDir, "package.json"), path.join(appDir, "package.json"));
     cpSync(installedNodeModulesDir, path.join(appDir, "node_modules"), { recursive: true });
   } finally {
     rmSync(installDir, { recursive: true, force: true });
   }
+}
+
+async function findSharpPackageDirectories(nodeModulesDir) {
+  const found = [];
+  const pending = [nodeModulesDir];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const child = path.join(current, entry.name);
+      if (entry.name === "sharp" && existsSync(path.join(child, "package.json"))) {
+        try {
+          const metadata = JSON.parse(await fs.readFile(path.join(child, "package.json"), "utf8"));
+          if (metadata.name === "sharp") found.push(child);
+        } catch {
+          // A malformed package will be rejected by the runtime smoke test.
+        }
+      }
+      pending.push(child);
+    }
+  }
+  return found;
+}
+
+async function removeNamedDirectories(root, directoryName) {
+  if (!existsSync(root)) return;
+  const pending = [root];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const child = path.join(current, entry.name);
+      if (entry.name.toLowerCase() === directoryName.toLowerCase()) {
+        rmSync(child, { recursive: true, force: true });
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+}
+
+async function pruneSharpBuildArtifacts(nodeModulesDir) {
+  const sharpDirectories = await findSharpPackageDirectories(nodeModulesDir);
+  if (sharpDirectories.length === 0) {
+    fail("No Sharp installations were found in the production dependency tree.");
+  }
+  for (const sharpDirectory of sharpDirectories) {
+    rmSync(path.join(sharpDirectory, "src"), { recursive: true, force: true });
+    rmSync(path.join(sharpDirectory, "install"), { recursive: true, force: true });
+    await removeNamedDirectories(path.join(sharpDirectory, "vendor"), "include");
+  }
+  process.stdout.write(`[package] Pruned build-only Sharp sources and headers from ${sharpDirectories.length} runtime installation(s).\n`);
 }
 
 async function materializeNodeModules() {
@@ -216,7 +274,8 @@ async function installBundledNodeRuntime() {
   run("powershell.exe", [
     "-NoProfile",
     "-Command",
-    `Expand-Archive -Path '${sourceZipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`
+    `Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+      `[System.IO.Compression.ZipFile]::ExtractToDirectory('${sourceZipPath.replace(/'/g, "''")}', '${extractDir.replace(/'/g, "''")}')`
   ]);
 
   const [runtimeFolder] = await fs.readdir(extractDir);
@@ -227,6 +286,43 @@ async function installBundledNodeRuntime() {
   rmSync(extractDir, { recursive: true, force: true });
   if (!overrideZip) {
     rmSync(downloadZipPath, { force: true });
+  }
+}
+
+async function verifyPackagedImageRuntime() {
+  const smokeTestPath = path.join(appDir, `.image-runtime-smoke-${process.pid}.mjs`);
+  const smokeTest = `
+import sharp from "sharp";
+import { applySegmentationMask } from "@imgly/background-removal-node";
+
+const pixels = Buffer.from([
+  255, 0, 0, 255,
+  0, 255, 0, 255,
+  0, 0, 255, 255,
+  255, 255, 255, 255
+]);
+const input = await sharp(pixels, { raw: { width: 2, height: 2, channels: 4 } }).png().toBuffer();
+const directMetadata = await sharp(input).metadata();
+if (directMetadata.width !== 2 || directMetadata.height !== 2 || directMetadata.format !== "png") {
+  throw new Error("Direct Sharp runtime operation failed.");
+}
+const mask = await sharp(Buffer.from([255, 128, 64, 0]), { raw: { width: 2, height: 2, channels: 1 } }).png().toBuffer();
+const masked = await applySegmentationMask(
+  new Blob([input], { type: "image/png" }),
+  new Blob([mask], { type: "image/png" }),
+  { output: { format: "image/png", quality: 1 } }
+);
+const maskedMetadata = await sharp(Buffer.from(await masked.arrayBuffer())).metadata();
+if (maskedMetadata.width !== 2 || maskedMetadata.height !== 2 || maskedMetadata.format !== "png") {
+  throw new Error("IMG.LY background-removal runtime operation failed.");
+}
+process.stdout.write("IMAGE_RUNTIME_OK\\n");
+`;
+  await fs.writeFile(smokeTestPath, smokeTest, "utf8");
+  try {
+    run(path.join(runtimeDir, "node.exe"), [smokeTestPath], { cwd: appDir });
+  } finally {
+    rmSync(smokeTestPath, { force: true });
   }
 }
 
@@ -352,11 +448,99 @@ async function hashFile(target) {
 
 async function createZipArchive() {
   rmSync(zipOutput, { force: true });
-  run("powershell.exe", [
-    "-NoProfile",
-    "-Command",
-    `Compress-Archive -Path '${bundleRoot.replace(/'/g, "''")}' -DestinationPath '${zipOutput.replace(/'/g, "''")}' -Force`
-  ]);
+  const temporaryZip = path.join(os.tmpdir(), `pbresults-scoreboard-${process.pid}-${Date.now()}.zip`);
+  rmSync(temporaryZip, { force: true });
+  try {
+    run("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      `Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+        `[System.IO.Compression.ZipFile]::CreateFromDirectory('${releaseDir.replace(/'/g, "''")}', '${temporaryZip.replace(/'/g, "''")}', ` +
+        `[System.IO.Compression.CompressionLevel]::Optimal, $false)`
+    ]);
+    await fs.rename(temporaryZip, zipOutput);
+  } finally {
+    rmSync(temporaryZip, { force: true });
+  }
+}
+
+function inspectZipPathBudget() {
+  if (!Number.isSafeInteger(windowsPathBudget) || windowsPathBudget < 200) {
+    fail(`Invalid Windows path budget: ${windowsPathBudget}`);
+  }
+  const inspectionScript = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($env:PB_ZIP_PATH)
+try {
+  $staging = Join-Path ([System.IO.Path]::GetFullPath($env:PB_VALIDATION_ROOT)) 'updates\\staging\\00000000-0000-0000-0000-000000000000'
+  $legacyLongest = $null
+  $actualLongest = $null
+  $violations = @()
+  $count = 0
+  foreach ($entry in $zip.Entries) {
+    $count++
+    $entryName = $entry.FullName.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+    $legacy = [System.IO.Path]::GetFullPath((Join-Path $staging $entryName))
+    if ($null -eq $legacyLongest -or $legacy.Length -gt $legacyLongest.length) {
+      $legacyLongest = [pscustomobject]@{ entry = $entry.FullName; path = $legacy; length = $legacy.Length }
+    }
+    if ($legacy.Length -gt [int]$env:PB_PATH_BUDGET) {
+      $violations += [pscustomobject]@{ entry = $entry.FullName; path = $legacy; length = $legacy.Length }
+    }
+    $prefix = 'PBResults-Scoreboard/app/'
+    if ($entry.FullName.Replace('\\', '/').StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+      $relative = $entry.FullName.Replace('\\', '/').Substring($prefix.Length)
+      if ($relative) {
+        $actual = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $staging 'payload.partial') $relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)))
+        if ($null -eq $actualLongest -or $actual.Length -gt $actualLongest.length) {
+          $actualLongest = [pscustomobject]@{ entry = $entry.FullName; path = $actual; length = $actual.Length }
+        }
+      }
+    }
+  }
+  [pscustomobject]@{
+    entryCount = $count
+    pathBudget = [int]$env:PB_PATH_BUDGET
+    validationRoot = $env:PB_VALIDATION_ROOT
+    legacyLongest = $legacyLongest
+    actualLongest = $actualLongest
+    violations = $violations
+  } | ConvertTo-Json -Depth 5 -Compress
+} finally {
+  $zip.Dispose()
+}
+`;
+  const output = execFileSync(
+    "powershell.exe",
+    ["-NoProfile", "-Command", inspectionScript],
+    {
+      cwd: projectDir,
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024,
+      env: {
+        ...process.env,
+        PB_ZIP_PATH: zipOutput,
+        PB_VALIDATION_ROOT: validationPortableRoot,
+        PB_PATH_BUDGET: String(windowsPathBudget)
+      }
+    }
+  ).trim();
+  const inspection = JSON.parse(output);
+  if (inspection.violations.length > 0) {
+    const longest = inspection.violations.sort((left, right) => right.length - left.length)[0];
+    fail(
+      `Windows staging path budget exceeded (${longest.length} > ${windowsPathBudget}): ${longest.path} [${longest.entry}]`
+    );
+  }
+  process.stdout.write(
+    `[package] Inspected ${inspection.entryCount} ZIP entries; longest legacy staging path is ${inspection.legacyLongest.length}/${windowsPathBudget} characters.\n`
+  );
+  process.stdout.write(`[package] Longest ZIP entry: ${inspection.legacyLongest.entry}\n`);
+  process.stdout.write(`[package] Projected legacy staging path: ${inspection.legacyLongest.path}\n`);
+  process.stdout.write(`[package] Projected short staging path: ${inspection.actualLongest.path}\n`);
+  return inspection;
 }
 
 async function writeUpdateManifest() {
@@ -380,9 +564,11 @@ async function main() {
   await copyBuiltArtifacts();
   await pruneDeployedApp();
   await installBundledNodeRuntime();
+  await verifyPackagedImageRuntime();
   await writeBootstrapData();
   await writeLauncherFiles();
   await createZipArchive();
+  inspectZipPathBudget();
   await writeUpdateManifest();
 
   process.stdout.write(`\n[package] Windows portable bundle ready:\n  ${bundleRoot}\n`);

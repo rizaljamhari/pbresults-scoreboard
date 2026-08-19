@@ -1,4 +1,5 @@
 [CmdletBinding()]
+# PBRESULTS_COORDINATOR_VERSION: 2
 param(
   [int]$Port = 3000,
   [switch]$NoBrowser

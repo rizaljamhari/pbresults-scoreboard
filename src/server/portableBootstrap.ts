@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { runtimeBuild } from "./buildInfo.js";
 import {
   activeAppDir,
@@ -15,21 +16,103 @@ import {
 } from "./runtimePaths.js";
 
 function atomicWriteJson(target: string, value: unknown) {
-  const temporary = `${target}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  JSON.parse(fs.readFileSync(temporary, "utf8"));
-  fs.renameSync(temporary, target);
+  const temporary = `${target}.${process.pid}-${randomUUID()}.tmp`;
+  const descriptor = fs.openSync(temporary, "wx");
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    JSON.parse(fs.readFileSync(temporary, "utf8"));
+    fs.renameSync(temporary, target);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
 }
 
-function copyCoordinatorIfMissing(sourceName: string, destination: string) {
-  if (fs.existsSync(destination)) {
-    return;
+const coordinatorVersionPattern = /^\s*#\s*PBRESULTS_COORDINATOR_VERSION:\s*(\d+)\s*$/m;
+
+export function readCoordinatorVersion(scriptPath: string): number {
+  if (!fs.existsSync(scriptPath)) return 0;
+  const match = coordinatorVersionPattern.exec(fs.readFileSync(scriptPath, "utf8"));
+  if (!match) return 0;
+  const version = Number(match[1]);
+  return Number.isSafeInteger(version) && version > 0 ? version : 0;
+}
+
+function updaterLockIsActive(lockPath: string): boolean {
+  if (!fs.existsSync(lockPath)) return false;
+  try {
+    const descriptor = fs.openSync(lockPath, "r+");
+    fs.closeSync(descriptor);
+    fs.rmSync(lockPath, { force: true });
+    return false;
+  } catch {
+    return true;
   }
-  const source = path.join(activeAppDir, "updater-bootstrap", sourceName);
+}
+
+export type CoordinatorRefreshResult = "installed" | "updated" | "identical" | "newer-present" | "deferred-active";
+
+export function refreshCoordinatorScript(source: string, destination: string, lockPath: string): CoordinatorRefreshResult {
   if (!fs.existsSync(source)) {
-    throw new Error(`Updater bootstrap template is missing: ${sourceName}`);
+    throw new Error(`Updater bootstrap template is missing: ${path.basename(source)}`);
   }
-  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  const sourceVersion = readCoordinatorVersion(source);
+  if (sourceVersion === 0) {
+    throw new Error(`Updater bootstrap template has no valid coordinator version: ${path.basename(source)}`);
+  }
+
+  if (fs.existsSync(destination)) {
+    const sourceBytes = fs.readFileSync(source);
+    const destinationBytes = fs.readFileSync(destination);
+    if (sourceBytes.equals(destinationBytes)) return "identical";
+    const destinationVersion = readCoordinatorVersion(destination);
+    if (destinationVersion >= sourceVersion) return "newer-present";
+    if (updaterLockIsActive(lockPath)) return "deferred-active";
+  } else if (updaterLockIsActive(lockPath)) {
+    return "deferred-active";
+  }
+
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const temporary = `${destination}.${process.pid}-${randomUUID()}.tmp`;
+  try {
+    fs.copyFileSync(source, temporary, fs.constants.COPYFILE_EXCL);
+    const descriptor = fs.openSync(temporary, "r+");
+    try {
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    if (readCoordinatorVersion(temporary) !== sourceVersion) {
+      throw new Error(`Updater bootstrap copy failed validation: ${path.basename(source)}`);
+    }
+    const existed = fs.existsSync(destination);
+    fs.renameSync(temporary, destination);
+    return existed ? "updated" : "installed";
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
+export function refreshPortableCoordinators(options: {
+  sourceDirectory: string;
+  destinationDirectory: string;
+  updatesDirectory: string;
+}): Record<string, CoordinatorRefreshResult> {
+  const lockPath = path.join(options.updatesDirectory, "update.lock");
+  return Object.fromEntries(
+    ["portable-launcher.ps1", "portable-updater.ps1"].map((sourceName) => [
+      sourceName,
+      refreshCoordinatorScript(
+        path.join(options.sourceDirectory, sourceName),
+        path.join(options.destinationDirectory, sourceName),
+        lockPath
+      )
+    ])
+  );
 }
 
 export function bootstrapPortableUpdater(): { supported: boolean; reason: string | null } {
@@ -55,8 +138,19 @@ export function bootstrapPortableUpdater(): { supported: boolean; reason: string
     ]) {
       fs.mkdirSync(directory, { recursive: true });
     }
-    copyCoordinatorIfMissing("portable-launcher.ps1", portableLauncherPath);
-    copyCoordinatorIfMissing("portable-updater.ps1", portableUpdaterPath);
+    const coordinatorResults = refreshPortableCoordinators({
+      sourceDirectory: path.join(activeAppDir, "updater-bootstrap"),
+      destinationDirectory: appRootDir,
+      updatesDirectory: updatesDir
+    });
+    const deferred = Object.entries(coordinatorResults)
+      .filter(([, result]) => result === "deferred-active")
+      .map(([name]) => name);
+    if (deferred.length > 0) {
+      // The active coordinator already has the scripts loaded. The next normal
+      // startup will safely refresh them after the transaction releases its lock.
+      console.info(`Deferred coordinator refresh while an update is active: ${deferred.join(", ")}`);
+    }
     const commandPath = path.join(appRootDir, "Run Scoreboard.cmd");
     const expectedCommand = [
       "@echo off",

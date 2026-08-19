@@ -142,6 +142,12 @@ Important:
 - downloads are verified against the release manifest and SHA-256 before staging
 - installation always requires local confirmation and creates a stopped-state data snapshot
 - failed health checks restore the previous application and data snapshot automatically
+- packaged coordinator scripts carry independent versions and atomically refresh older root copies when no update transaction is active
+
+Existing v1.9 portable installations need a one-time manual repair of the root `portable-launcher.ps1` and
+`portable-updater.ps1` files before they can acquire coordinator self-upgrades. The v1.9 running bootstrap only
+copies missing scripts, so it cannot install this replacement behavior by itself. Keep the installation's `data/`
+directory unchanged during that repair.
 
 See also:
 
@@ -159,7 +165,7 @@ pnpm release 1.7.0
 
 The command validates the version and repository, runs the local checks, creates the annotated `v1.7.0` tag, and pushes only that tag. The tag triggers GitHub Actions, which builds the Windows portable package, validates its manifest and SHA-256, creates the matching GitHub Release, attaches both the versioned ZIP and update manifest, and publishes it.
 
-The first release containing the managed updater must still be installed using the earlier manual `app/` replacement process. Starting it once bootstraps the stable root launcher; later updater-protocol-1 releases can then be installed from Settings.
+The first release containing the managed updater must still be installed using the earlier manual `app/` replacement process. Starting it once bootstraps the stable root launcher; later updater-protocol-1 releases can then be installed from Settings. Existing v1.9 installations additionally require the one-time root-script repair described above.
 
 Useful options:
 

@@ -931,7 +931,8 @@ Do not mutate data merely to answer health. Run a create, flush, and delete prob
 On startup of the first updater-enabled release:
 
 - detect packaged Windows portable mode
-- copy versioned root launcher/updater templates from the active application when root files are missing
+- atomically install missing root launcher/updater templates from the active application
+- replace an older root coordinator only when the packaged coordinator version is newer and no coordinator holds the update lock
 - never overwrite a newer root coordinator protocol with an older template
 - create and validate `current-version.json` pointing to legacy `app/` when absent
 - create update working directories
@@ -950,7 +951,14 @@ For v1:
 - a package requiring a newer protocol is downloaded only if desired but cannot be installed
 - UI explains that a manual bootstrap update is required
 
-Self-updating the coordinator is deferred until a safe two-stage coordinator replacement protocol is designed and tested.
+Coordinator self-upgrade uses an independent integer version marker in each PowerShell script. Bootstrap validates a
+same-directory temporary copy, flushes it, and atomically replaces the root script only when the packaged version is
+newer. Identical or newer root scripts are retained. An active updater lock defers replacement until the next normal
+startup so a transaction never changes the coordinator scripts it is using.
+
+Existing v1.9 installations still need a one-time manual root-script repair. Their running bootstrap only copies a
+coordinator when it is missing, so it cannot acquire this self-upgrade behavior automatically. The repair replaces
+only `portable-launcher.ps1` and `portable-updater.ps1`; persistent `data/` must remain untouched.
 
 ## 16. Release pipeline changes
 
