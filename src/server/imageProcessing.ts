@@ -1,6 +1,10 @@
 import path from "node:path";
+import type { VisibleContentAnalysis } from "../shared/theme.js";
 
 const supportedImageMimeTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+export const VISIBLE_CONTENT_ANALYZER_VERSION = 1 as const;
+export const VISIBLE_CONTENT_ALPHA_THRESHOLD = 8;
+const visibleContentInputPixelLimit = 40_000_000;
 const mimeAliases: Record<string, string> = {
   "image/jpg": "image/jpeg",
   "image/pjpeg": "image/jpeg"
@@ -159,6 +163,79 @@ async function detectMimeTypeFromBuffer(sharp: SharpFactory, buffer: Buffer): Pr
     return null;
   } catch {
     return null;
+  }
+}
+
+export async function analyzeVisibleContent(buffer: Buffer, mimeType: string): Promise<VisibleContentAnalysis> {
+  let sharp: SharpFactory;
+  try {
+    sharp = await loadSharp();
+  } catch {
+    return { analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION, status: "failed" };
+  }
+
+  let effectiveMimeType = normalizeMimeType(mimeType);
+  if (!supportedImageMimeTypes.has(effectiveMimeType)) {
+    effectiveMimeType = (await detectMimeTypeFromBuffer(sharp, buffer)) ?? effectiveMimeType;
+  }
+  if (!supportedImageMimeTypes.has(effectiveMimeType)) {
+    return { analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION, status: "unsupported" };
+  }
+
+  try {
+    const source = sharp(buffer, { limitInputPixels: visibleContentInputPixelLimit });
+    const metadata = await source.metadata();
+    if ((metadata.pages ?? 1) > 1) {
+      return { analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION, status: "unsupported" };
+    }
+
+    const { data, info } = await source.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    if (!info.width || !info.height || info.channels < 4) {
+      return { analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION, status: "failed" };
+    }
+
+    let minX = info.width;
+    let minY = info.height;
+    let maxX = -1;
+    let maxY = -1;
+    const channels = info.channels;
+
+    for (let y = 0; y < info.height; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        const alpha = data[(y * info.width + x) * channels + 3];
+        if (alpha < VISIBLE_CONTENT_ALPHA_THRESHOLD) {
+          continue;
+        }
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    if (maxX < minX || maxY < minY) {
+      return {
+        analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION,
+        status: "empty",
+        sourceWidth: info.width,
+        sourceHeight: info.height,
+        alphaThreshold: VISIBLE_CONTENT_ALPHA_THRESHOLD
+      };
+    }
+
+    return {
+      analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION,
+      status: "ready",
+      sourceWidth: info.width,
+      sourceHeight: info.height,
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1,
+      alphaThreshold: VISIBLE_CONTENT_ALPHA_THRESHOLD
+    };
+  } catch {
+    return { analyzerVersion: VISIBLE_CONTENT_ANALYZER_VERSION, status: "failed" };
   }
 }
 

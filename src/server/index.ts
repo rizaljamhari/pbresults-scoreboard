@@ -11,6 +11,7 @@ import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { clientDistDir, uploadsDir } from "./runtimePaths.js";
 import {
   attachTeamLogo,
+  backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
   clearOperatorTextOverride,
   createTeamRecord,
@@ -77,6 +78,48 @@ const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state)
   appEventHub.publishOperatorTextState(state);
 });
 let shuttingDown = false;
+let visibleContentBackfillRunning = false;
+let visibleContentBackfillRequested = false;
+
+function scheduleVisibleContentBackfill() {
+  visibleContentBackfillRequested = true;
+  if (visibleContentBackfillRunning || shuttingDown) {
+    return;
+  }
+
+  visibleContentBackfillRunning = true;
+  void (async () => {
+    try {
+      while (visibleContentBackfillRequested && !shuttingDown) {
+        visibleContentBackfillRequested = false;
+        const startedAt = Date.now();
+        const result = await backfillVisibleContentMetadata();
+        app.log.info(
+          {
+            scanned: result.scanned,
+            trimmed: result.trimmed,
+            fullFrame: result.fullFrame,
+            empty: result.empty,
+            unsupported: result.unsupported,
+            failed: result.failed,
+            durationMs: Date.now() - startedAt
+          },
+          "Asset visible-content analysis completed"
+        );
+        if (result.changedAssetIds.length > 0) {
+          appEventHub.publish("assets.changed", result.changedAssetIds);
+        }
+      }
+    } catch (error) {
+      app.log.warn({ error }, "Asset visible-content analysis failed");
+    } finally {
+      visibleContentBackfillRunning = false;
+      if (visibleContentBackfillRequested && !shuttingDown) {
+        scheduleVisibleContentBackfill();
+      }
+    }
+  })();
+}
 
 async function gracefulShutdown() {
   if (shuttingDown) return;
@@ -366,6 +409,7 @@ app.post("/api/app/import", async (request, reply) => {
   appEventHub.publish("themes.changed");
   appEventHub.publish("assets.changed");
   appEventHub.publish("teams.changed");
+  scheduleVisibleContentBackfill();
   return reply.code(201).send(restored);
 });
 app.get("/api/teams/export", async () => exportTeamRegistryPackage());
@@ -375,6 +419,7 @@ app.post("/api/teams/import", async (request, reply) => {
   livePoller.reconfigure();
   appEventHub.publish("teams.changed");
   appEventHub.publish("assets.changed");
+  scheduleVisibleContentBackfill();
   return reply.code(201).send(restored);
 });
 
@@ -504,6 +549,7 @@ app.post("/api/themes/import", async (request, reply) => {
   const imported = await importThemePackage(pkg);
   appEventHub.publish("themes.changed", [imported.id]);
   appEventHub.publish("assets.changed");
+  scheduleVisibleContentBackfill();
   return reply.code(201).send(imported);
 });
 
@@ -541,6 +587,7 @@ if (fs.existsSync(clientRoot)) {
 
 updateService.configureLifecycle({ port, shutdown: gracefulShutdown });
 await app.listen({ port, host: "0.0.0.0" });
+scheduleVisibleContentBackfill();
 updateService.startAutomaticChecks();
 
 process.on("SIGINT", () => void gracefulShutdown());

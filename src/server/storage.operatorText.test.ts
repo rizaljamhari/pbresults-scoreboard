@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { builtinThemes } from "../shared/builtinThemes";
 import type { FreeImageComponent, FreeTextComponent, ThemeDefinition } from "../shared/theme";
@@ -114,5 +115,41 @@ describe("operator text storage", () => {
 
     const exported = await storage.exportThemePackage("theme-operator-test");
     expect(exported.assets.some((item) => item.asset.id === asset.id)).toBe(true);
+  });
+
+  it("analyzes new assets and backfills legacy asset records", async () => {
+    const pixels = Buffer.alloc(6 * 4 * 4);
+    for (let y = 1; y <= 2; y += 1) {
+      for (let x = 2; x <= 4; x += 1) {
+        const offset = (y * 6 + x) * 4;
+        pixels[offset] = 255;
+        pixels[offset + 1] = 255;
+        pixels[offset + 2] = 255;
+        pixels[offset + 3] = 255;
+      }
+    }
+    const buffer = await sharp(pixels, { raw: { width: 6, height: 4, channels: 4 } }).png().toBuffer();
+    const { asset } = await storage.storeAsset(buffer, "bounded-logo.png", "image/png", {
+      attemptBackgroundRemoval: false
+    });
+
+    expect(asset.visibleContent).toMatchObject({ status: "ready", x: 2, y: 1, width: 3, height: 2 });
+
+    const assetsPath = path.join(tempRoot, "data", "assets.json");
+    const records = JSON.parse(fs.readFileSync(assetsPath, "utf8")) as Array<Record<string, unknown>>;
+    const legacyRecord = records.find((record) => record.id === asset.id);
+    expect(legacyRecord).toBeDefined();
+    delete legacyRecord?.visibleContent;
+    fs.writeFileSync(assetsPath, JSON.stringify(records, null, 2));
+
+    const backfill = await storage.backfillVisibleContentMetadata();
+    expect(backfill.changedAssetIds).toContain(asset.id);
+    expect(storage.listAssets().find((candidate) => candidate.id === asset.id)?.visibleContent).toMatchObject({
+      status: "ready",
+      x: 2,
+      y: 1,
+      width: 3,
+      height: 2
+    });
   });
 });

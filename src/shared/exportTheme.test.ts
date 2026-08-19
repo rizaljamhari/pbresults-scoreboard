@@ -16,6 +16,7 @@ describe("createThemeExportPackage", () => {
           sourceAssetId: null,
           hiddenFromPicker: false,
           contentHash: null,
+          visibleContent: null,
           createdAt: new Date().toISOString()
         },
         data: "data:image/png;base64,AAAA"
@@ -108,6 +109,8 @@ describe("createThemeExportPackage", () => {
     expect(parsed.components.homeTeamLogo.assetId).toBeNull();
     expect(parsed.components.awayTeamLogo.visible).toBe(false);
     expect(parsed.components.homeTeamLogo.teamLogoFallbackMode).toBe("slotFallback");
+    expect(parsed.components.homeTeamLogo.imageContentMode).toBe("full-canvas");
+    expect(parsed.components.homeTeamLogo.visibleContentPaddingPct).toBe(0);
     expect(parsed.components.homeName.backgroundImageAssetId).toBeNull();
     expect(parsed.components.homeName.backgroundImageFit).toBe("cover");
     expect(parsed.components.homeName.paddingX).toBe(16);

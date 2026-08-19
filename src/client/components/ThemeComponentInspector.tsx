@@ -1,8 +1,16 @@
 import React from "react";
-import { ThemeDefinition, fontFamilies, backgroundImageFitValues, backgroundImagePositionValues } from "../../shared/theme";
+import {
+  ThemeDefinition,
+  fontFamilies,
+  backgroundImageFitValues,
+  backgroundImagePositionValues,
+  imageContentModeValues,
+  type StoredAsset
+} from "../../shared/theme";
 import type { ThemeComponent } from "../../shared/themeComponents";
 import { buttonVariants } from "./ui";
 import { ColorField, NumberField, TextField } from "../pages/ThemeEditorPage";
+import { VisibleContentImage } from "./VisibleContentImage";
 
 export interface ThemeComponentInspectorProps {
   theme: ThemeDefinition;
@@ -28,7 +36,7 @@ export interface ThemeComponentInspectorProps {
   patchSelectedTextComponent: (updater: (draft: any) => void) => void;
   selectedImageComponent: any;
   selectedLogoContext: any;
-  assets: any[];
+  assets: StoredAsset[];
   onUploadAsset?: (file: File, target: "surface" | "logo") => void;
   onDuplicateFreeComponent?: () => void;
   onDeleteFreeComponent?: () => void;
@@ -54,6 +62,25 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
     selectedTextComponent, patchSelectedTextComponent, selectedImageComponent,
     selectedLogoContext, assets, onUploadAsset, onDuplicateFreeComponent, onDeleteFreeComponent
   } = props;
+  const selectedImageAsset: StoredAsset | null = selectedImageComponent
+    ? selectedLogoContext?.effectiveAsset ?? assets.find((asset) => asset.id === selectedImageComponent.assetId) ?? null
+    : null;
+  const visibleContentStatus = (() => {
+    const analysis = selectedImageAsset?.visibleContent;
+    if (!analysis) return "Waiting for visible-pixel analysis";
+    if (analysis.status === "empty") return "Image is fully transparent";
+    if (analysis.status !== "ready") {
+      return analysis.status === "unsupported"
+        ? "This image format cannot be analyzed"
+        : "Visible-pixel analysis failed; full canvas will be used";
+    }
+    const fullFrame =
+      analysis.x === 0 &&
+      analysis.y === 0 &&
+      analysis.width === analysis.sourceWidth &&
+      analysis.height === analysis.sourceHeight;
+    return fullFrame ? "Image already fills its canvas" : "Visible bounds ready";
+  })();
 
   return (
     <div className="inspector-stack inspector-stack--compact">
@@ -237,7 +264,14 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
                     </div>
                     <div style={{ display: "flex", justifyContent: "center", background: "var(--md-surface-3)", padding: "0.5rem", borderRadius: "var(--md-radius-s)", height: "40px" }}>
                       {selectedLogoContext.effectiveAsset ? (
-                        <img src={selectedLogoContext.effectiveAsset.url} alt="" style={{ height: "100%", width: "auto", objectFit: "contain" }} />
+                        <VisibleContentImage
+                          asset={selectedLogoContext.effectiveAsset}
+                          alt=""
+                          mode={selectedImageComponent.imageContentMode}
+                          paddingPct={selectedImageComponent.visibleContentPaddingPct}
+                          fit="contain"
+                          position="center"
+                        />
                       ) : (
                         <span className="hint">No resolved logo</span>
                       )}
@@ -310,6 +344,47 @@ export function ThemeComponentInspector(props: ThemeComponentInspectorProps) {
                   </select>
                 </label>
               </div>
+              <div className="compact-grid" style={{ marginTop: "0.5rem" }}>
+                <label>
+                  <span className="hint">Fit using</span>
+                  <select
+                    value={selectedImageComponent.imageContentMode}
+                    onChange={(event) =>
+                      patchSelectedComponent((component: any) => {
+                        if (component.kind === "image") component.imageContentMode = event.target.value;
+                      })
+                    }
+                  >
+                    {imageContentModeValues.map((mode) => (
+                      <option key={mode} value={mode}>
+                        {mode === "full-canvas" ? "Full image canvas" : "Visible pixels"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedImageComponent.imageContentMode === "visible-pixels" ? (
+                  <label>
+                    <span className="hint">Visible padding (%)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={25}
+                      step={1}
+                      value={selectedImageComponent.visibleContentPaddingPct}
+                      onChange={(event) =>
+                        patchSelectedComponent((component: any) => {
+                          if (component.kind === "image") {
+                            component.visibleContentPaddingPct = Math.min(25, Math.max(0, Number(event.target.value) || 0));
+                          }
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+              </div>
+              {selectedImageComponent.imageContentMode === "visible-pixels" && selectedImageAsset ? (
+                <div className="hint" style={{ marginTop: "0.4rem" }}>{visibleContentStatus}</div>
+              ) : null}
             </PropertyAccordion>
           )}
 

@@ -26,6 +26,7 @@ export const backgroundImageFitValues = ["cover", "contain", "stretch"] as const
 export const backgroundImagePositionValues = ["center", "top", "bottom", "left", "right"] as const;
 export const backgroundImageModeValues = ["asset", "homeTeamLogo", "awayTeamLogo"] as const;
 export const teamLogoFallbackModeValues = ["none", "eventLogo", "slotFallback", "slotFallbackThenEventLogo"] as const;
+export const imageContentModeValues = ["full-canvas", "visible-pixels"] as const;
 export const concedePositionValues = ["above", "overlapping-top"] as const;
 export const concedeAnimationValues = ["slide-horizontal", "slide-vertical", "none"] as const;
 export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ribbon"] as const;
@@ -98,7 +99,9 @@ export const textComponentSchema = z.preprocess(migrateLegacyFrame, textComponen
 const imageComponentBaseSchema = commonFrameBaseSchema.extend({
   kind: z.literal("image"),
   assetId: z.string().nullable(),
-  teamLogoFallbackMode: z.enum(teamLogoFallbackModeValues).default("slotFallback")
+  teamLogoFallbackMode: z.enum(teamLogoFallbackModeValues).default("slotFallback"),
+  imageContentMode: z.enum(imageContentModeValues).default("full-canvas"),
+  visibleContentPaddingPct: z.number().min(0).max(25).default(0)
 });
 
 export const imageComponentSchema = z.preprocess(migrateLegacyFrame, imageComponentBaseSchema);
@@ -145,7 +148,9 @@ const defaultImageComponentValue = {
   offsetY: 0,
   shadow: "none",
   assetId: null,
-  teamLogoFallbackMode: "slotFallback" as const
+  teamLogoFallbackMode: "slotFallback" as const,
+  imageContentMode: "full-canvas" as const,
+  visibleContentPaddingPct: 0
 };
 
 const teamEventOverlayGeneralSchema = z.object({
@@ -588,6 +593,37 @@ export const normalizedLiveStateSchema = z.object({
   teamEvent: z.enum(["towel-home", "towel-away", "base-home", "base-away", "none"])
 });
 
+const visibleContentReadySchema = z.object({
+  analyzerVersion: z.literal(1),
+  status: z.literal("ready"),
+  sourceWidth: z.number().int().positive(),
+  sourceHeight: z.number().int().positive(),
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  alphaThreshold: z.number().int().min(0).max(255)
+});
+
+const visibleContentEmptySchema = z.object({
+  analyzerVersion: z.literal(1),
+  status: z.literal("empty"),
+  sourceWidth: z.number().int().positive(),
+  sourceHeight: z.number().int().positive(),
+  alphaThreshold: z.number().int().min(0).max(255)
+});
+
+const visibleContentUnavailableSchema = z.object({
+  analyzerVersion: z.literal(1),
+  status: z.enum(["unsupported", "failed"])
+});
+
+export const visibleContentAnalysisSchema = z.discriminatedUnion("status", [
+  visibleContentReadySchema,
+  visibleContentEmptySchema,
+  visibleContentUnavailableSchema
+]);
+
 export const assetSchema = z.object({
   id: z.string(),
   originalName: z.string(),
@@ -597,7 +633,8 @@ export const assetSchema = z.object({
   role: z.enum(["original", "processed"]).default("processed"),
   sourceAssetId: z.string().nullable().default(null),
   hiddenFromPicker: z.boolean().default(false),
-  contentHash: z.string().nullable().default(null)
+  contentHash: z.string().nullable().default(null),
+  visibleContent: visibleContentAnalysisSchema.nullable().default(null)
 });
 
 export const themeExportSchema = z.object({
@@ -647,6 +684,7 @@ export type ThemeDefinition = z.infer<typeof themeSchema>;
 export type AppSettings = z.infer<typeof settingsSchema>;
 export type NormalizedLiveState = z.infer<typeof normalizedLiveStateSchema>;
 export type StoredAsset = z.infer<typeof assetSchema>;
+export type VisibleContentAnalysis = z.infer<typeof visibleContentAnalysisSchema>;
 export type TeamRecord = z.infer<typeof teamRecordSchema>;
 export type TeamMatchResult = z.infer<typeof teamMatchResultSchema>;
 export type TeamResolutionOverride = z.infer<typeof teamResolutionOverrideSchema>;

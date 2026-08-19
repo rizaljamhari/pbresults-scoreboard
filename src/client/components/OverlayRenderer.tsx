@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatClock } from "../../shared/normalize";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId } from "../../shared/theme";
+import { VisibleContentImage } from "./VisibleContentImage";
 
 type OverlayRendererProps = {
   theme: ThemeDefinition;
@@ -50,17 +51,6 @@ function resolveBackgroundSize(fit: ThemeDefinition["components"]["homeName"]["b
       return "contain";
     case "stretch":
       return "100% 100%";
-    default:
-      return "cover";
-  }
-}
-
-function resolveObjectFit(fit: ThemeDefinition["components"]["homeName"]["backgroundImageFit"]) {
-  switch (fit) {
-    case "contain":
-      return "contain";
-    case "stretch":
-      return "fill";
     default:
       return "cover";
   }
@@ -783,14 +773,13 @@ export function OverlayRenderer({
                       }}
                     >
                       {previousImageAsset ? (
-                        <img
+                        <VisibleContentImage
+                          asset={previousImageAsset}
                           alt={previousImageAsset.originalName}
-                          src={previousImageAsset.url}
-                          className="event-logo-image"
-                          style={{
-                            objectFit: resolveObjectFit(component.backgroundImageFit),
-                            objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
-                          }}
+                          mode={component.imageContentMode}
+                          paddingPct={component.visibleContentPaddingPct}
+                          fit={component.backgroundImageFit}
+                          position={component.backgroundImagePosition}
                         />
                       ) : null}
                     </span>
@@ -809,14 +798,13 @@ export function OverlayRenderer({
                       }}
                     >
                       {nextImageAsset ? (
-                        <img
+                        <VisibleContentImage
+                          asset={nextImageAsset}
                           alt={nextImageAsset.originalName}
-                          src={nextImageAsset.url}
-                          className="event-logo-image"
-                          style={{
-                            objectFit: resolveObjectFit(component.backgroundImageFit),
-                            objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
-                          }}
+                          mode={component.imageContentMode}
+                          paddingPct={component.visibleContentPaddingPct}
+                          fit={component.backgroundImageFit}
+                          position={component.backgroundImagePosition}
                         />
                       ) : null}
                     </span>
@@ -824,14 +812,13 @@ export function OverlayRenderer({
                 ) : (
                   <span className="component-content image-content" style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}>
                     {imageAsset ? (
-                      <img
+                      <VisibleContentImage
+                        asset={imageAsset}
                         alt={imageAsset.originalName}
-                        src={imageAsset.url}
-                        className="event-logo-image"
-                        style={{
-                          objectFit: resolveObjectFit(component.backgroundImageFit),
-                          objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
-                        }}
+                        mode={component.imageContentMode}
+                        paddingPct={component.visibleContentPaddingPct}
+                        fit={component.backgroundImageFit}
+                        position={component.backgroundImagePosition}
                       />
                     ) : editable ? (
                       <span>Logo</span>
@@ -1042,14 +1029,13 @@ export function OverlayRenderer({
                   style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}
                 >
                   {imageAsset ? (
-                    <img
+                    <VisibleContentImage
+                      asset={imageAsset}
                       alt={component.label}
-                      src={imageAsset.url}
-                      className="event-logo-image"
-                      style={{
-                        objectFit: resolveObjectFit(component.backgroundImageFit),
-                        objectPosition: resolveBackgroundPosition(component.backgroundImagePosition)
-                      }}
+                      mode={component.imageContentMode}
+                      paddingPct={component.visibleContentPaddingPct}
+                      fit={component.backgroundImageFit}
+                      position={component.backgroundImagePosition}
                     />
                   ) : editable ? (
                     <span>{component.label}</span>

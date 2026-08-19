@@ -77,6 +77,8 @@ function logoBox(overrides: Partial<ThemeDefinition["components"]["eventLogo"]>)
     shadow: "none",
     assetId: null,
     teamLogoFallbackMode: "slotFallback",
+    imageContentMode: "full-canvas",
+    visibleContentPaddingPct: 0,
     ...overrides
   };
   return {
@@ -227,7 +229,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": null,
-        "teamLogoFallbackMode": "eventLogo"
+        "teamLogoFallbackMode": "eventLogo",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       },
       "homeScore": {
         "x": 787,
@@ -318,7 +322,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": null,
-        "teamLogoFallbackMode": "eventLogo"
+        "teamLogoFallbackMode": "eventLogo",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       },
       "awayScore": {
         "x": 1039,
@@ -441,7 +447,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": "asset-56610d6a-81e8-4118-a4ff-740214176d01",
-        "teamLogoFallbackMode": "slotFallback"
+        "teamLogoFallbackMode": "slotFallback",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       }
     },
     "freeComponents": [],
@@ -589,7 +597,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": null,
-        "teamLogoFallbackMode": "none"
+        "teamLogoFallbackMode": "none",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       },
       "homeScore": {
         "x": 670,
@@ -680,7 +690,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": null,
-        "teamLogoFallbackMode": "none"
+        "teamLogoFallbackMode": "none",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       },
       "awayScore": {
         "x": 1090,
@@ -803,7 +815,9 @@ export const builtinThemes: ThemeDefinition[] = [
         "shadow": "none",
         "kind": "image",
         "assetId": null,
-        "teamLogoFallbackMode": "slotFallback"
+        "teamLogoFallbackMode": "slotFallback",
+        "imageContentMode": "full-canvas",
+        "visibleContentPaddingPct": 0
       }
     },
     "freeComponents": [],

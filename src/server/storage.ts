@@ -36,7 +36,7 @@ import { builtinThemes } from "../shared/builtinThemes.js";
 import { defaultSettings } from "../shared/theme.js";
 import { listExplicitTeamMatchNames, matchTeamName, normalizeTeamName } from "../shared/teamMatching.js";
 import { listOperatorTextComponents } from "../shared/themeComponents.js";
-import { removeImageBackground } from "./imageProcessing.js";
+import { analyzeVisibleContent, removeImageBackground } from "./imageProcessing.js";
 import { dataDir, uploadsDir } from "./runtimePaths.js";
 const settingsPath = path.join(dataDir, "settings.json");
 const themesPath = path.join(dataDir, "themes.json");
@@ -59,6 +59,17 @@ type StoreAssetOptions = {
   sourceAssetId?: string | null;
   hiddenFromPicker?: boolean;
   contentHash?: string | null;
+  visibleContent?: StoredAsset["visibleContent"];
+};
+
+export type VisibleContentBackfillResult = {
+  scanned: number;
+  changedAssetIds: string[];
+  trimmed: number;
+  fullFrame: number;
+  empty: number;
+  unsupported: number;
+  failed: number;
 };
 
 export type UploadProcessingInfo = {
@@ -818,6 +829,9 @@ async function persistAssetRecord(
   const storedName = `${id}.${extension}`;
   const filePath = path.join(uploadsDir, storedName);
   await fsp.writeFile(filePath, buffer);
+  const reusableAnalysis =
+    options.visibleContent && options.visibleContent.status !== "failed" ? options.visibleContent : null;
+  const visibleContent = reusableAnalysis ?? (await analyzeVisibleContent(buffer, mimeType));
   const asset: StoredAssetRecord = {
     id,
     originalName,
@@ -828,6 +842,7 @@ async function persistAssetRecord(
     sourceAssetId: options.sourceAssetId ?? null,
     hiddenFromPicker: options.hiddenFromPicker ?? false,
     contentHash: options.contentHash ?? null,
+    visibleContent,
     filePath
   };
   const assets = readJson<StoredAssetRecord[]>(assetsPath, []);
@@ -837,6 +852,84 @@ async function persistAssetRecord(
     ...assetSchema.parse(asset),
     filePath
   };
+}
+
+function visibleContentNeedsAnalysis(asset: StoredAsset): boolean {
+  return asset.visibleContent === null || asset.visibleContent.status === "failed";
+}
+
+function isFullFrameAnalysis(analysis: StoredAsset["visibleContent"]): boolean {
+  return Boolean(
+    analysis?.status === "ready" &&
+      analysis.x === 0 &&
+      analysis.y === 0 &&
+      analysis.width === analysis.sourceWidth &&
+      analysis.height === analysis.sourceHeight
+  );
+}
+
+export async function backfillVisibleContentMetadata(): Promise<VisibleContentBackfillResult> {
+  const snapshots = readJson<StoredAssetRecord[]>(assetsPath, [])
+    .map((raw) => ({ ...assetSchema.parse(raw), filePath: raw.filePath }))
+    .filter(visibleContentNeedsAnalysis);
+  const result: VisibleContentBackfillResult = {
+    scanned: snapshots.length,
+    changedAssetIds: [],
+    trimmed: 0,
+    fullFrame: 0,
+    empty: 0,
+    unsupported: 0,
+    failed: 0
+  };
+
+  for (const snapshot of snapshots) {
+    let analysis: StoredAsset["visibleContent"];
+    let analyzedContentHash: string;
+    try {
+      const buffer = await fsp.readFile(snapshot.filePath);
+      analyzedContentHash = computeContentHash(buffer);
+      analysis = await analyzeVisibleContent(buffer, snapshot.mimeType);
+    } catch {
+      result.failed += 1;
+      continue;
+    }
+
+    const currentAssets = readJson<StoredAssetRecord[]>(assetsPath, []);
+    const currentIndex = currentAssets.findIndex((asset) => asset.id === snapshot.id);
+    const current = currentIndex >= 0 ? currentAssets[currentIndex] : null;
+    if (
+      !current ||
+      current.filePath !== snapshot.filePath ||
+      (snapshot.contentHash !== null && current.contentHash !== snapshot.contentHash)
+    ) {
+      continue;
+    }
+
+    try {
+      const currentBuffer = await fsp.readFile(current.filePath);
+      if (computeContentHash(currentBuffer) !== analyzedContentHash) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    currentAssets[currentIndex] = { ...current, visibleContent: analysis };
+    writeJson(assetsPath, currentAssets);
+    result.changedAssetIds.push(snapshot.id);
+
+    if (analysis.status === "ready") {
+      if (isFullFrameAnalysis(analysis)) {
+        result.fullFrame += 1;
+      } else {
+        result.trimmed += 1;
+      }
+    } else {
+      result[analysis.status] += 1;
+    }
+  }
+
+  return result;
 }
 
 export async function storeAsset(
@@ -956,7 +1049,9 @@ export async function importThemePackage(pkg: ThemeExportPackage): Promise<Theme
       attemptBackgroundRemoval: false,
       role: exportedAsset.asset.role,
       sourceAssetId: exportedAsset.asset.sourceAssetId,
-      hiddenFromPicker: exportedAsset.asset.hiddenFromPicker
+      hiddenFromPicker: exportedAsset.asset.hiddenFromPicker,
+      contentHash: exportedAsset.asset.contentHash,
+      visibleContent: exportedAsset.asset.visibleContent
     });
     idMap.set(exportedAsset.asset.id, asset.id);
   }
@@ -1073,7 +1168,8 @@ export async function importTeamRegistryPackage(pkg: TeamRegistryExportPackage):
       role: item.asset.role,
       sourceAssetId: item.asset.sourceAssetId,
       hiddenFromPicker: item.asset.hiddenFromPicker,
-      contentHash: item.asset.contentHash
+      contentHash: item.asset.contentHash,
+      visibleContent: item.asset.visibleContent
     });
     idMap.set(item.asset.id, asset.id);
   }
