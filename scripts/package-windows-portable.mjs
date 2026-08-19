@@ -448,7 +448,10 @@ async function hashFile(target) {
 
 async function createZipArchive() {
   rmSync(zipOutput, { force: true });
-  const temporaryZip = path.join(os.tmpdir(), `pbresults-scoreboard-${process.pid}-${Date.now()}.zip`);
+  const temporaryZip = path.join(
+    path.dirname(releaseDir),
+    `.${path.basename(zipOutput)}.${process.pid}-${Date.now()}.partial`
+  );
   rmSync(temporaryZip, { force: true });
   try {
     run("powershell.exe", [
