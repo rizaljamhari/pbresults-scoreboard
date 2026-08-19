@@ -45,6 +45,7 @@ const MAX_JITTER_MS = 10 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 60_000;
 const MANIFEST_MAX_BYTES = 1024 * 1024;
+const COORDINATOR_START_TIMEOUT_MS = 10_000;
 
 type ReleaseMetadata = {
   manifestName: string;
@@ -165,17 +166,39 @@ function transactionResult(transaction: Record<string, unknown>): UpdateStatus["
   };
 }
 
-async function spawnCoordinator(mode: "Install" | "Rollback", transactionPath: string) {
+async function spawnCoordinator(
+  mode: "Install" | "Rollback",
+  transactionPath: string,
+  startedPhase: "install-coordinator-started" | "rollback-coordinator-started"
+) {
   const child = spawn(
     "powershell.exe",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", portableUpdaterPath, "-Mode", mode, "-TransactionPath", transactionPath],
-    { cwd: appRootDir, detached: true, stdio: "ignore", windowsHide: false }
+    { cwd: appRootDir, stdio: "ignore", windowsHide: false }
   );
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", resolve);
     child.once("error", reject);
   });
+
+  const deadline = Date.now() + COORDINATOR_START_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new UpdateFailure("UPDATE_ACTIVATION_FAILED", `The ${mode.toLowerCase()} coordinator exited before it was ready.`, true);
+    }
+    try {
+      if (readTransaction(transactionPath).phase === startedPhase) {
+        child.unref();
+        return;
+      }
+    } catch {
+      // The coordinator atomically replaces the journal while acknowledging startup.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  child.kill();
   child.unref();
+  throw new UpdateFailure("UPDATE_ACTIVATION_FAILED", `The ${mode.toLowerCase()} coordinator did not become ready.`, true);
 }
 
 export class UpdateService {
@@ -414,7 +437,7 @@ export class UpdateService {
       "shutdown-requested": new Date().toISOString()
     };
     atomicWriteJson(this.activeTransactionPath, transaction);
-    await spawnCoordinator("Install", this.activeTransactionPath);
+    await spawnCoordinator("Install", this.activeTransactionPath, "install-coordinator-started");
     this.phase = "install-requested";
     this.save();
     setTimeout(() => {
@@ -488,7 +511,7 @@ export class UpdateService {
     };
     this.activeTransactionPath = createTransaction(transaction);
     this.persisted.transactionPath = this.activeTransactionPath;
-    await spawnCoordinator("Rollback", this.activeTransactionPath);
+    await spawnCoordinator("Rollback", this.activeTransactionPath, "rollback-coordinator-started");
     this.phase = "install-requested";
     this.save();
     setTimeout(() => void this.requestShutdown?.(), 250).unref();

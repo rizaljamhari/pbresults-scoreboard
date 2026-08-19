@@ -52,7 +52,15 @@ function Write-AtomicJson([string]$Path, [object]$Value) {
   $Check = Get-Content -LiteralPath $Temp -Raw | ConvertFrom-Json
   if ($null -eq $Check) { throw "Unable to validate temporary JSON: $Temp" }
   if (Test-Path -LiteralPath $Path) {
-    [System.IO.File]::Replace($Temp, $Path, $null)
+    # PowerShell 5.1 can coerce $null to an empty string when binding this
+    # .NET overload, which File.Replace rejects as an illegal backup path.
+    $Backup = "$Path.bak"
+    [System.IO.File]::Replace($Temp, $Path, $Backup)
+    try {
+      [System.IO.File]::Delete($Backup)
+    } catch {
+      Write-UpdaterLog "Deferred cleanup for ${Backup}: $($_.Exception.Message)"
+    }
   } else {
     [System.IO.File]::Move($Temp, $Path)
   }
@@ -202,19 +210,21 @@ function New-DataSnapshot([object]$Transaction) {
   New-Item -ItemType Directory -Path (Split-Path -Parent $Partial) -Force | Out-Null
   New-Item -ItemType Directory -Path (Join-Path $Partial 'data') -Force | Out-Null
   $Files = @()
+  $TotalBytes = [int64]0
   if (Test-Path -LiteralPath $Data) {
     foreach ($File in Get-ChildItem -LiteralPath $Data -File -Recurse) {
       $Relative = Get-ChildRelativePath $Data $File.FullName
       $Target = Join-Path (Join-Path $Partial 'data') $Relative
       New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
       Copy-Item -LiteralPath $File.FullName -Destination $Target
+      $TotalBytes += [int64]$File.Length
       $Files += [ordered]@{ path = $Relative; size = $File.Length; sha256 = (Get-FileHash $Target -Algorithm SHA256).Hash.ToLowerInvariant() }
     }
   }
   $Snapshot = [ordered]@{
     schemaVersion = 1; transactionId = $Transaction.id; sourceVersion = $Transaction.sourceVersion
     targetVersion = $Transaction.targetVersion; createdAt = [DateTime]::UtcNow.ToString('o')
-    fileCount = $Files.Count; totalBytes = [int64](($Files | Measure-Object -Property size -Sum).Sum); files = $Files; complete = $true
+    fileCount = $Files.Count; totalBytes = $TotalBytes; files = $Files; complete = $true
   }
   Write-AtomicJson (Join-Path $Partial 'snapshot.json') $Snapshot
   Move-Item -LiteralPath $Partial -Destination $Final
@@ -391,7 +401,7 @@ function Invoke-Recovery([object]$Transaction) {
   $Transaction.recoveryAttempted = $true
   Write-AtomicJson $script:TransactionFullPath $Transaction
 
-  if (@('prepared', 'staging', 'shutdown-requested', 'old-process-stopped', 'snapshot-created', 'payload-finalized') -contains $Transaction.phase) {
+  if (@('prepared', 'staging', 'shutdown-requested', 'install-coordinator-started', 'rollback-coordinator-started', 'old-process-stopped', 'snapshot-created', 'payload-finalized') -contains $Transaction.phase) {
     $Transaction.errorCode = 'UPDATE_ACTIVATION_FAILED'
     $Transaction.errorMessage = "Update interrupted during $($Transaction.phase); the previous version remains active."
     $Transaction.outcome = 'failed'
@@ -458,8 +468,14 @@ try {
   $Transaction = Get-Content -LiteralPath $script:TransactionFullPath -Raw | ConvertFrom-Json
   Write-UpdaterLog "Starting transaction $($Transaction.id), protocol $ProtocolVersion."
   if ($Mode -eq 'Stage') { Invoke-Stage $Transaction }
-  elseif ($Mode -eq 'Install') { Invoke-Install $Transaction }
-  elseif ($Mode -eq 'Rollback') { Invoke-ManualRollback $Transaction }
+  elseif ($Mode -eq 'Install') {
+    Save-Transaction $Transaction 'install-coordinator-started'
+    Invoke-Install $Transaction
+  }
+  elseif ($Mode -eq 'Rollback') {
+    Save-Transaction $Transaction 'rollback-coordinator-started'
+    Invoke-ManualRollback $Transaction
+  }
   else { Invoke-Recovery $Transaction }
 } catch {
   Write-UpdaterLog "Transaction failed: $($_.Exception.Message)"
