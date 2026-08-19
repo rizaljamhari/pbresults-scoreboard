@@ -956,9 +956,11 @@ same-directory temporary copy, flushes it, and atomically replaces the root scri
 newer. Identical or newer root scripts are retained. An active updater lock defers replacement until the next normal
 startup so a transaction never changes the coordinator scripts it is using.
 
-Existing v1.9 installations still need a one-time manual root-script repair. Their running bootstrap only copies a
+Existing v1.9 installations still need a one-time manual bridge repair. Their running bootstrap only copies a
 coordinator when it is missing, so it cannot acquire this self-upgrade behavior automatically. The repair replaces
-only `portable-launcher.ps1` and `portable-updater.ps1`; persistent `data/` must remain untouched.
+`portable-launcher.ps1` and `portable-updater.ps1` and updates the installed v1.9
+`app/dist/server/server/updateService.js` handoff so the coordinator is detached only after its startup can be
+acknowledged safely. Persistent `data/` must remain untouched.
 
 ## 16. Release pipeline changes
 

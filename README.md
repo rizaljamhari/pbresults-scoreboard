@@ -144,10 +144,11 @@ Important:
 - failed health checks restore the previous application and data snapshot automatically
 - packaged coordinator scripts carry independent versions and atomically refresh older root copies when no update transaction is active
 
-Existing v1.9 portable installations need a one-time manual repair of the root `portable-launcher.ps1` and
-`portable-updater.ps1` files before they can acquire coordinator self-upgrades. The v1.9 running bootstrap only
-copies missing scripts, so it cannot install this replacement behavior by itself. Keep the installation's `data/`
-directory unchanged during that repair.
+Existing v1.9 portable installations need a one-time manual bridge repair before they can acquire coordinator
+self-upgrades. Replace the root `portable-launcher.ps1` and `portable-updater.ps1`, and update the installed v1.9
+`app/dist/server/server/updateService.js` handoff so it both waits for coordinator acknowledgement and starts the
+coordinator detached from the server console. The v1.9 running bootstrap cannot install this behavior by itself.
+Keep the installation's `data/` directory unchanged during that repair.
 
 See also:
 

@@ -27,7 +27,7 @@ $Tokens = $null
 $ParseErrors = $null
 $Ast = [System.Management.Automation.Language.Parser]::ParseFile($UpdaterPath, [ref]$Tokens, [ref]$ParseErrors)
 if ($ParseErrors.Count -gt 0) { throw ($ParseErrors | Out-String) }
-$Needed = @('Write-UpdaterLog','Resolve-RootChild','Write-AtomicJson','Remove-StaleSnapshotPartial','Get-FileSha256','Get-RootRelativePath','Get-ChildRelativePath','Save-Transaction','New-DataSnapshot')
+$Needed = @('Write-UpdaterLog','Open-UpdaterLock','Resolve-RootChild','Write-AtomicJson','Remove-StaleSnapshotPartial','Get-FileSha256','Get-RootRelativePath','Get-ChildRelativePath','Save-Transaction','New-DataSnapshot')
 foreach ($Name in $Needed) {
   $Definition = $Ast.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $Node.Name -eq $Name }, $true) | Select-Object -First 1
   if ($null -eq $Definition) { throw "Function not found: $Name" }
@@ -36,6 +36,7 @@ foreach ($Name in $Needed) {
 $Root = [System.IO.Path]::GetFullPath($TestRoot)
 $Mode = 'Test'
 $Updates = Join-Path $Root 'updates'
+$LockPath = Join-Path $Updates 'update.lock'
 $LogDir = Join-Path $Root 'logs'
 $LogPath = Join-Path $LogDir 'updater.log'
 New-Item -ItemType Directory -Path $Updates,$LogDir,(Join-Path $Updates 'transactions') -Force | Out-Null
@@ -49,6 +50,34 @@ if ($Action -eq 'atomic') {
   Write-AtomicJson $Target ([ordered]@{ value = 2 })
   $Artifacts = @(Get-ChildItem -LiteralPath $Updates -File | Where-Object { $_.Name -match '\.(tmp|bak)$' })
   [pscustomobject]@{ value = (Get-Content $Target -Raw | ConvertFrom-Json).value; artifactCount = $Artifacts.Count } | ConvertTo-Json -Compress
+  exit 0
+}
+
+if ($Action -eq 'stale-lock') {
+  [IO.File]::WriteAllText($LockPath, '')
+  $Acquired = Open-UpdaterLock
+  try {
+    [pscustomobject]@{ acquired = $true } | ConvertTo-Json -Compress
+  } finally {
+    $Acquired.Dispose()
+  }
+  exit 0
+}
+
+if ($Action -eq 'active-lock') {
+  $Active = Open-UpdaterLock
+  try {
+    $Busy = $false
+    try {
+      $Unexpected = Open-UpdaterLock
+      $Unexpected.Dispose()
+    } catch {
+      $Busy = $_.Exception.Message.StartsWith('UPDATE_BUSY')
+    }
+    [pscustomobject]@{ busy = $Busy } | ConvertTo-Json -Compress
+  } finally {
+    $Active.Dispose()
+  }
   exit 0
 }
 
@@ -112,6 +141,14 @@ afterEach(() => {
 describe.runIf(process.platform === "win32")("portable updater PowerShell primitives", () => {
   it("atomically replaces an existing JSON file and removes retry artifacts", () => {
     expect(invokeHarness(temporaryRoot(), "atomic")).toEqual({ value: 2, artifactCount: 0 });
+  }, powershellTestTimeoutMs);
+
+  it("acquires an unheld stale update lock", () => {
+    expect(invokeHarness(temporaryRoot(), "stale-lock")).toEqual({ acquired: true });
+  }, powershellTestTimeoutMs);
+
+  it("rejects a second coordinator while the update lock is actively held", () => {
+    expect(invokeHarness(temporaryRoot(), "active-lock")).toEqual({ busy: true });
   }, powershellTestTimeoutMs);
 
   it("creates a complete snapshot for an empty data directory", () => {

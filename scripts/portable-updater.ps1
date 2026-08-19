@@ -1,5 +1,5 @@
 [CmdletBinding()]
-# PBRESULTS_COORDINATOR_VERSION: 2
+# PBRESULTS_COORDINATOR_VERSION: 3
 param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('Stage', 'Install', 'Rollback', 'Recover')]
@@ -23,6 +23,19 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 function Write-UpdaterLog([string]$Message) {
   Add-Content -LiteralPath $LogPath -Value "$([DateTime]::UtcNow.ToString('o')) [$Mode] $Message"
+}
+
+function Open-UpdaterLock {
+  try {
+    return [System.IO.File]::Open(
+      $LockPath,
+      [System.IO.FileMode]::OpenOrCreate,
+      [System.IO.FileAccess]::ReadWrite,
+      [System.IO.FileShare]::None
+    )
+  } catch [System.IO.IOException] {
+    throw 'UPDATE_BUSY'
+  }
 }
 
 function Resolve-RootChild([string]$Candidate) {
@@ -526,7 +539,7 @@ function Invoke-Recovery([object]$Transaction) {
 
 try {
   $script:TransactionFullPath = Resolve-RootChild $TransactionPath
-  $LockStream = [System.IO.File]::Open($LockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  $LockStream = Open-UpdaterLock
   $Transaction = Get-Content -LiteralPath $script:TransactionFullPath -Raw | ConvertFrom-Json
   Write-UpdaterLog "Starting transaction $($Transaction.id), protocol $ProtocolVersion."
   if ($Mode -eq 'Stage') { Invoke-Stage $Transaction }

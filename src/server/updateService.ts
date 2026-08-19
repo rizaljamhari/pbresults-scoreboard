@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, type SpawnOptions } from "node:child_process";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import {
@@ -47,6 +47,25 @@ const DOWNLOAD_IDLE_TIMEOUT_MS = 60_000;
 const MANIFEST_MAX_BYTES = 1024 * 1024;
 const COORDINATOR_START_TIMEOUT_MS = 10_000;
 const COORDINATOR_STABILITY_MS = 250;
+const AUTOMATIC_BUSY_RETRY_MS = 60_000;
+const COORDINATOR_BOOTSTRAP = `
+$ErrorActionPreference = 'Stop'
+$Updater = $env:PB_COORDINATOR_UPDATER_PATH
+$Mode = $env:PB_COORDINATOR_MODE
+$TransactionPath = $env:PB_COORDINATOR_TRANSACTION_PATH
+$PidPath = $env:PB_COORDINATOR_PID_PATH
+$Arguments = @(
+  '-NoProfile',
+  '-ExecutionPolicy', 'Bypass',
+  '-File', ('"' + $Updater + '"'),
+  '-Mode', $Mode,
+  '-TransactionPath', ('"' + $TransactionPath + '"')
+)
+$Coordinator = Start-Process -FilePath 'powershell.exe' -ArgumentList $Arguments -PassThru
+[System.IO.File]::WriteAllText($PidPath, [string]$Coordinator.Id, [System.Text.UTF8Encoding]::new($false))
+$Coordinator.WaitForExit()
+exit $Coordinator.ExitCode
+`.trim();
 
 type ReleaseMetadata = {
   manifestName: string;
@@ -177,52 +196,96 @@ export async function spawnCoordinator(
   const rootDirectory = options.rootDirectory ?? appRootDir;
   const startTimeoutMs = options.startTimeoutMs ?? COORDINATOR_START_TIMEOUT_MS;
   const stabilityMs = options.stabilityMs ?? COORDINATOR_STABILITY_MS;
-  const child = spawn(
-    "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updaterPath, "-Mode", mode, "-TransactionPath", transactionPath],
-    { cwd: rootDirectory, stdio: "ignore", windowsHide: false }
-  );
-  await new Promise<void>((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
+  const launch = createCoordinatorLaunch(mode, updaterPath, transactionPath, rootDirectory);
+  fs.rmSync(launch.pidPath, { force: true });
+  const child = spawn("powershell.exe", launch.arguments, launch.options);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+    });
 
-  const deadline = Date.now() + startTimeoutMs;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new UpdateFailure(
-        "UPDATE_ACTIVATION_FAILED",
-        `The ${mode.toLowerCase()} coordinator exited before it was ready (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
-        true
-      );
-    }
-    let acknowledged = false;
-    try {
-      acknowledged = readTransaction(transactionPath).phase === startedPhase;
-    } catch {
-      // The coordinator atomically replaces the journal while acknowledging startup.
-    }
-    if (acknowledged) {
-      await new Promise((resolve) => setTimeout(resolve, stabilityMs));
+    const deadline = Date.now() + startTimeoutMs;
+    while (Date.now() < deadline) {
       if (child.exitCode !== null || child.signalCode !== null) {
         throw new UpdateFailure(
           "UPDATE_ACTIVATION_FAILED",
-          `The ${mode.toLowerCase()} coordinator exited during startup (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
+          `The ${mode.toLowerCase()} coordinator exited before it was ready (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
           true
         );
       }
-      child.unref();
-      return;
+      let acknowledged = false;
+      try {
+        acknowledged = readTransaction(transactionPath).phase === startedPhase;
+      } catch {
+        // The coordinator atomically replaces the journal while acknowledging startup.
+      }
+      if (acknowledged) {
+        await new Promise((resolve) => setTimeout(resolve, stabilityMs));
+        if (child.exitCode !== null || child.signalCode !== null) {
+          throw new UpdateFailure(
+            "UPDATE_ACTIVATION_FAILED",
+            `The ${mode.toLowerCase()} coordinator exited during startup (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
+            true
+          );
+        }
+        child.unref();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    stopCoordinatorStartup(child, launch.pidPath);
+    throw new UpdateFailure(
+      "UPDATE_ACTIVATION_FAILED",
+      `The ${mode.toLowerCase()} coordinator did not acknowledge startup within ${startTimeoutMs} ms. The current version is still running.`,
+      true
+    );
+  } finally {
+    fs.rmSync(launch.pidPath, { force: true });
   }
-  child.kill();
-  child.unref();
-  throw new UpdateFailure(
-    "UPDATE_ACTIVATION_FAILED",
-    `The ${mode.toLowerCase()} coordinator did not acknowledge startup within ${startTimeoutMs} ms. The current version is still running.`,
-    true
+}
+
+export function createCoordinatorLaunch(
+  mode: "Install" | "Rollback",
+  updaterPath: string,
+  transactionPath: string,
+  rootDirectory: string
+): { arguments: string[]; options: SpawnOptions; pidPath: string } {
+  const pidPath = path.join(
+    path.dirname(transactionPath),
+    `.coordinator-${mode.toLowerCase()}-${process.pid}-${randomUUID()}.pid`
   );
+  return {
+    arguments: ["-NoProfile", "-EncodedCommand", Buffer.from(COORDINATOR_BOOTSTRAP, "utf16le").toString("base64")],
+    options: {
+      cwd: rootDirectory,
+      stdio: "ignore",
+      windowsHide: false,
+      env: {
+        ...process.env,
+        PB_COORDINATOR_UPDATER_PATH: updaterPath,
+        PB_COORDINATOR_MODE: mode,
+        PB_COORDINATOR_TRANSACTION_PATH: transactionPath,
+        PB_COORDINATOR_PID_PATH: pidPath
+      }
+    },
+    pidPath
+  };
+}
+
+function stopCoordinatorStartup(child: ReturnType<typeof spawn>, pidPath: string) {
+  try {
+    const coordinatorPid = Number(fs.readFileSync(pidPath, "utf8").trim());
+    if (Number.isSafeInteger(coordinatorPid) && coordinatorPid > 0) {
+      process.kill(coordinatorPid);
+    }
+  } catch {
+    // The independent coordinator may not have started or may already have exited.
+  }
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill();
+  }
+  child.unref();
 }
 
 export class UpdateService {
@@ -244,6 +307,7 @@ export class UpdateService {
     if (this.persisted.available && compareStableVersions(this.persisted.available.version, runtimeBuild.info.appVersion) <= 0) {
       this.persisted.available = null;
       this.persisted.prepared = null;
+      this.persisted.etag = null;
       this.persisted.releaseMetadata = null;
       this.persisted.transactionPath = null;
     }
@@ -257,6 +321,7 @@ export class UpdateService {
       this.persisted.lastResult = result;
       this.persisted.prepared = null;
       this.persisted.available = null;
+      this.persisted.etag = null;
       this.persisted.releaseMetadata = null;
       this.persisted.transactionPath = null;
       this.save();
@@ -338,6 +403,10 @@ export class UpdateService {
   async check(manual = true): Promise<UpdateStatus> {
     this.assertSupported();
     if (this.busy) {
+      if (!manual) {
+        this.scheduleAutomaticCheck(AUTOMATIC_BUSY_RETRY_MS);
+        return this.getStatus();
+      }
       throw new UpdateFailure("UPDATE_BUSY", "Another update operation is already in progress.", true, 409);
     }
     this.busy = true;
@@ -354,7 +423,10 @@ export class UpdateService {
         "X-GitHub-Api-Version": "2026-03-10",
         "User-Agent": "PBResults-Scoreboard-Updater/1"
       };
-      if (this.persisted.etag) {
+      // A 304 is only useful while the parsed release it refers to is still
+      // cached. Recovery deliberately clears that release, so do an
+      // unconditional check afterward instead of turning 304 into "idle".
+      if (this.persisted.etag && this.persisted.releaseMetadata) {
         headers["If-None-Match"] = this.persisted.etag;
       }
       const response = await fetch(endpoint, { headers, signal: AbortSignal.timeout(20_000) });
@@ -384,6 +456,7 @@ export class UpdateService {
 
       if (compareStableVersions(parsed.manifest.release.version, runtimeBuild.info.appVersion) <= 0) {
         this.persisted.available = null;
+        this.persisted.etag = null;
         this.persisted.releaseMetadata = null;
         this.phase = this.persisted.prepared ? "ready-to-install" : "idle";
       } else {
@@ -395,11 +468,17 @@ export class UpdateService {
           assetSize: parsed.manifest.asset.size
         };
         this.persisted.releaseMetadata = parsed as unknown as Record<string, unknown>;
-        this.phase = "update-available";
-        if (!manual && this.persisted.skippedVersion === parsed.manifest.release.version) {
+        const releaseIsPrepared = this.persisted.prepared?.version === parsed.manifest.release.version;
+        this.phase = releaseIsPrepared ? "ready-to-install" : "update-available";
+        if (!releaseIsPrepared && !manual && this.persisted.skippedVersion === parsed.manifest.release.version) {
           this.phase = "idle";
         }
-        if (!manual && getSettings().updateAutoDownload && this.persisted.skippedVersion !== parsed.manifest.release.version) {
+        if (
+          !releaseIsPrepared &&
+          !manual &&
+          getSettings().updateAutoDownload &&
+          this.persisted.skippedVersion !== parsed.manifest.release.version
+        ) {
           queueMicrotask(() => this.download(parsed.manifest.release.version));
         }
       }
@@ -820,6 +899,7 @@ export class UpdateService {
     this.persisted.lastResult = result;
     this.persisted.prepared = null;
     this.persisted.available = null;
+    this.persisted.etag = null;
     this.persisted.releaseMetadata = null;
     this.persisted.transactionPath = null;
     this.activeTransactionPath = null;
