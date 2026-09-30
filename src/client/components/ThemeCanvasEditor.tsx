@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
-import { Rnd } from "react-rnd";
 import type { ThemeDefinition } from "../../shared/theme";
 import type { NormalizedLiveState, StoredAsset } from "../../shared/theme";
 import { getThemeComponent, listThemeComponentEntries, type ThemeComponent } from "../../shared/themeComponents";
 import { OverlayRenderer } from "./OverlayRenderer";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
+import * as Slider from "@radix-ui/react-slider";
+import { MoveableLayer, type EventCardTarget } from "./editor/MoveableLayer";
+import { Field, SwitchRow } from "./editor/fields";
 
 type ThemeCanvasEditorProps = {
   theme: ThemeDefinition;
@@ -15,40 +17,47 @@ type ThemeCanvasEditorProps = {
   selectAll?: boolean;
   zoom?: number;
   onZoomChange?: (nextZoom: number) => void;
-  toolbar?: ReactNode;
+  /** "fullscreen" drops the built-in toolbar, fits the frame between floating chrome, and hands controls to renderChrome. */
+  layout?: "embedded" | "fullscreen";
+  fitInsets?: FitInsets;
+  /** Hand tool: plain drags pan instead of selecting. */
+  panMode?: boolean;
+  /** Pieces that stay put: not draggable, still snap targets. Editor-only, not part of the theme. */
+  lockedIds?: ReadonlySet<string>;
+  /** The event card shown by the current preview state, selectable on the canvas. */
+  eventCard?: EventCardTarget | null;
+  /** Changing this remounts the overlay render, replaying entrance animations. */
+  overlayKey?: number;
+  renderChrome?: (api: CanvasChromeApi) => ReactNode;
   onSelect: (id: string, options?: { additive?: boolean }) => void;
   onMarqueeSelect?: (ids: string[], options?: { additive?: boolean }) => void;
   onSelectAll?: () => void;
   onUpdate: (theme: ThemeDefinition) => void;
 };
 
-const SAFE_AREA_TOP = 54;
-const SAFE_AREA_SIDE = 96;
-const SNAP_THRESHOLD = 14;
 const CAMERA_MIN_ZOOM = 0.25;
 const CAMERA_MAX_ZOOM = 6;
-const MEASURE_LABEL_TOP_OFFSET = 40;
-const MEASURE_LABEL_LEFT_OFFSET = 58;
-const HUD_ESTIMATED_WIDTH = 230;
-const HUD_MARGIN = 6;
 
-type GuideState = {
-  vertical: number[];
-  horizontal: number[];
+
+
+
+type FitInsets = { top: number; right: number; bottom: number; left: number };
+
+export type CanvasChromeApi = {
+  /** Real on-screen scale of the 1920×1080 frame, as a percentage. */
+  zoomPercent: number;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fit: () => void;
+  focusSelected: () => void;
+  canFocus: boolean;
+  snapSettings: SnapSettings;
+  setSnapSettings: (update: (current: SnapSettings) => SnapSettings) => void;
 };
 
-type InteractionState = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  label: string;
-  guides: GuideState;
-};
-
-type Rect = Pick<InteractionState, "x" | "y" | "width" | "height">;
-
-type SnapSettings = {
+export type SnapSettings = {
   enabled: boolean;
   threshold: number;
   canvasEdges: boolean;
@@ -61,297 +70,50 @@ type SnapSettings = {
 
 type MarqueeSelectionState = {
   pointerId: number;
+  /** Shift-drag adds to the current selection. */
+  additive: boolean;
   startViewportX: number;
   startViewportY: number;
   currentViewportX: number;
   currentViewportY: number;
 };
 
-function hasShiftModifier(event: unknown) {
-  return typeof event === "object" && event !== null && "shiftKey" in event && Boolean((event as { shiftKey?: boolean }).shiftKey);
+/** The Snap menu's options: what pieces snap to, how close counts, and the pixel grid. */
+export function SnapOptionsPanel({
+  settings,
+  onChange
+}: {
+  settings: SnapSettings;
+  onChange: (update: (current: SnapSettings) => SnapSettings) => void;
+}) {
+  const set = <K extends keyof SnapSettings>(key: K, value: SnapSettings[K]) => onChange((current) => ({ ...current, [key]: value }));
+  return (
+    <div className="te-snap-options">
+      <SwitchRow label="Frame edges and centre" checked={settings.canvasEdges} onChange={(value) => set("canvasEdges", value)} />
+      <SwitchRow label="Safe area" checked={settings.safeArea} onChange={(value) => set("safeArea", value)} />
+      <SwitchRow label="Other pieces" checked={settings.componentEdges} onChange={(value) => set("componentEdges", value)} />
+      <SwitchRow label="Show distances" checked={settings.showDistanceLabels} onChange={(value) => set("showDistanceLabels", value)} />
+      <RangeRow label="Snaps within" value={settings.threshold} min={4} max={32} step={1} onChange={(value) => set("threshold", value)} />
+      <SwitchRow label="Pixel grid" checked={settings.gridEnabled} onChange={(value) => set("gridEnabled", value)} />
+      {settings.gridEnabled ? (
+        <RangeRow label="Grid size" value={settings.gridSize} min={2} max={32} step={2} onChange={(value) => set("gridSize", value)} />
+      ) : null}
+      <p className="te-field-hint">Hold Shift while resizing to keep the aspect ratio.</p>
+    </div>
+  );
 }
 
-function roundRect(rect: Rect) {
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height)
-  };
-}
-
-function measureGroup(theme: ThemeDefinition) {
-  const components = listThemeComponentEntries(theme).map((entry) => entry.component);
-  const visibleComponents = components.filter((component) => component.visible);
-  const source = visibleComponents.length > 0 ? visibleComponents : components;
-  const minX = Math.min(...source.map((component) => component.x));
-  const minY = Math.min(...source.map((component) => component.y));
-  const maxX = Math.max(...source.map((component) => component.x + component.width));
-  const maxY = Math.max(...source.map((component) => component.y + component.height));
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY
-  };
-}
-
-function collectOthers(theme: ThemeDefinition, currentId: string | null) {
-  const components = listThemeComponentEntries(theme).map((entry) => [entry.id, entry.component] as const);
-  const visibleComponents = components.filter(([, component]) => component.visible);
-  const source = visibleComponents.length > 0 ? visibleComponents : components;
-  return source.filter(([id]) => id !== currentId).map(([, component]) => component);
-}
-
-function collectAxisGuides(
-  limit: number,
-  safeInset: number,
-  others: ThemeComponent[],
-  axis: "x" | "y",
-  options: {
-    includeCanvas: boolean;
-    includeSafeArea: boolean;
-    includeComponents: boolean;
-  }
-) {
-  const otherGuides = options.includeComponents
-    ? others.flatMap((component) => {
-    const start = axis === "x" ? component.x : component.y;
-    const length = axis === "x" ? component.width : component.height;
-    const end = start + length;
-    const center = start + length / 2;
-    return [start, center, end];
-      })
-    : [];
-
-  const baseGuides: number[] = [];
-  if (options.includeCanvas) {
-    baseGuides.push(0, limit / 2, limit);
-  }
-  if (options.includeSafeArea) {
-    baseGuides.push(safeInset, limit - safeInset);
-  }
-
-  return Array.from(new Set([...baseGuides, ...otherGuides]));
-}
-
-function findNearestGuide(value: number, guides: number[], threshold: number) {
-  const nearest = guides
-    .map((guide) => ({ guide, distance: Math.abs(guide - value) }))
-    .filter((candidate) => candidate.distance <= threshold)
-    .sort((left, right) => left.distance - right.distance)[0];
-
-  if (!nearest) {
-    return null;
-  }
-
-  return Math.round(nearest.guide);
-}
-
-function snapToGrid(value: number, gridSize: number) {
-  if (gridSize <= 1) {
-    return Math.round(value);
-  }
-  return Math.round(value / gridSize) * gridSize;
-}
-
-function snapMoveRect(
-  rect: Rect,
-  theme: ThemeDefinition,
-  currentId: string | null,
-  snapSettings: SnapSettings
-) {
-  if (!snapSettings.enabled) {
-    return {
-      ...roundRect(rect),
-      guides: { vertical: [], horizontal: [] }
-    };
-  }
-
-  const others = collectOthers(theme, currentId);
-  const horizontalGuides = collectAxisGuides(theme.canvas.width, SAFE_AREA_SIDE, others, "x", {
-    includeCanvas: snapSettings.canvasEdges,
-    includeSafeArea: snapSettings.safeArea,
-    includeComponents: snapSettings.componentEdges
-  });
-  const verticalGuides = collectAxisGuides(theme.canvas.height, SAFE_AREA_TOP, others, "y", {
-    includeCanvas: snapSettings.canvasEdges,
-    includeSafeArea: snapSettings.safeArea,
-    includeComponents: snapSettings.componentEdges
-  });
-
-  const horizontalCandidates = [
-    {
-      kind: "edge" as const,
-      value: rect.x,
-      apply: (guide: number) => ({ x: guide, vertical: [guide] })
-    },
-    {
-      kind: "center" as const,
-      value: rect.x + rect.width / 2,
-      apply: (guide: number) => ({ x: guide - rect.width / 2, vertical: [guide] })
-    },
-    {
-      kind: "edge" as const,
-      value: rect.x + rect.width,
-      apply: (guide: number) => ({ x: guide - rect.width, vertical: [guide] })
-    }
-  ];
-
-  const verticalCandidates = [
-    {
-      kind: "edge" as const,
-      value: rect.y,
-      apply: (guide: number) => ({ y: guide, horizontal: [guide] })
-    },
-    {
-      kind: "center" as const,
-      value: rect.y + rect.height / 2,
-      apply: (guide: number) => ({ y: guide - rect.height / 2, horizontal: [guide] })
-    },
-    {
-      kind: "edge" as const,
-      value: rect.y + rect.height,
-      apply: (guide: number) => ({ y: guide - rect.height, horizontal: [guide] })
-    }
-  ];
-
-  const bestHorizontal = horizontalCandidates
-    .map((candidate) => {
-      const guide = findNearestGuide(candidate.value, horizontalGuides, snapSettings.threshold);
-      return guide === null
-        ? null
-        : {
-            ...candidate.apply(guide),
-            distance: Math.abs(guide - candidate.value),
-            priority: candidate.kind === "edge" ? 0 : 1
-          };
-    })
-    .filter((candidate): candidate is { x: number; vertical: number[]; distance: number; priority: number } => candidate !== null)
-    .sort((left, right) => {
-      if (left.distance !== right.distance) {
-        return left.distance - right.distance;
-      }
-      return left.priority - right.priority;
-    })[0];
-
-  const bestVertical = verticalCandidates
-    .map((candidate) => {
-      const guide = findNearestGuide(candidate.value, verticalGuides, snapSettings.threshold);
-      return guide === null
-        ? null
-        : {
-            ...candidate.apply(guide),
-            distance: Math.abs(guide - candidate.value),
-            priority: candidate.kind === "edge" ? 0 : 1
-          };
-    })
-    .filter((candidate): candidate is { y: number; horizontal: number[]; distance: number; priority: number } => candidate !== null)
-    .sort((left, right) => {
-      if (left.distance !== right.distance) {
-        return left.distance - right.distance;
-      }
-      return left.priority - right.priority;
-    })[0];
-
-  const snappedX = snapSettings.gridEnabled
-    ? snapToGrid(bestHorizontal?.x ?? rect.x, snapSettings.gridSize)
-    : Math.round(bestHorizontal?.x ?? rect.x);
-  const snappedY = snapSettings.gridEnabled
-    ? snapToGrid(bestVertical?.y ?? rect.y, snapSettings.gridSize)
-    : Math.round(bestVertical?.y ?? rect.y);
-
-  return {
-    x: snappedX,
-    y: snappedY,
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
-    guides: {
-      vertical: bestHorizontal?.vertical ?? [],
-      horizontal: bestVertical?.horizontal ?? []
-    }
-  };
-}
-
-function snapResizeRect(
-  rect: Rect,
-  resizeDirection: string,
-  theme: ThemeDefinition,
-  currentId: string | null,
-  snapSettings: SnapSettings
-) {
-  if (!snapSettings.enabled) {
-    return {
-      ...roundRect(rect),
-      guides: { vertical: [], horizontal: [] }
-    };
-  }
-
-  const others = collectOthers(theme, currentId);
-  const horizontalGuides = collectAxisGuides(theme.canvas.width, SAFE_AREA_SIDE, others, "x", {
-    includeCanvas: snapSettings.canvasEdges,
-    includeSafeArea: snapSettings.safeArea,
-    includeComponents: snapSettings.componentEdges
-  });
-  const verticalGuides = collectAxisGuides(theme.canvas.height, SAFE_AREA_TOP, others, "y", {
-    includeCanvas: snapSettings.canvasEdges,
-    includeSafeArea: snapSettings.safeArea,
-    includeComponents: snapSettings.componentEdges
-  });
-  const direction = resizeDirection.toLowerCase();
-  let nextRect = roundRect(rect);
-  const guides: GuideState = { vertical: [], horizontal: [] };
-
-  if (direction.includes("left")) {
-    const leftGuide = findNearestGuide(rect.x, horizontalGuides, snapSettings.threshold);
-    if (leftGuide !== null) {
-      const rightEdge = rect.x + rect.width;
-      nextRect.x = leftGuide;
-      nextRect.width = Math.max(1, Math.round(rightEdge - leftGuide));
-      guides.vertical.push(leftGuide);
-    }
-  } else if (direction.includes("right")) {
-    const rightGuide = findNearestGuide(rect.x + rect.width, horizontalGuides, snapSettings.threshold);
-    if (rightGuide !== null) {
-      nextRect.width = Math.max(1, Math.round(rightGuide - rect.x));
-      guides.vertical.push(rightGuide);
-    }
-  }
-
-  if (direction.includes("top")) {
-    const topGuide = findNearestGuide(rect.y, verticalGuides, snapSettings.threshold);
-    if (topGuide !== null) {
-      const bottomEdge = rect.y + rect.height;
-      nextRect.y = topGuide;
-      nextRect.height = Math.max(1, Math.round(bottomEdge - topGuide));
-      guides.horizontal.push(topGuide);
-    }
-  } else if (direction.includes("bottom")) {
-    const bottomGuide = findNearestGuide(rect.y + rect.height, verticalGuides, snapSettings.threshold);
-    if (bottomGuide !== null) {
-      nextRect.height = Math.max(1, Math.round(bottomGuide - rect.y));
-      guides.horizontal.push(bottomGuide);
-    }
-  }
-
-  nextRect.width = Math.min(nextRect.width, theme.canvas.width - nextRect.x);
-  nextRect.height = Math.min(nextRect.height, theme.canvas.height - nextRect.y);
-
-  if (snapSettings.gridEnabled) {
-    const rightEdge = nextRect.x + nextRect.width;
-    const bottomEdge = nextRect.y + nextRect.height;
-    nextRect.x = snapToGrid(nextRect.x, snapSettings.gridSize);
-    nextRect.y = snapToGrid(nextRect.y, snapSettings.gridSize);
-    nextRect.width = Math.max(1, snapToGrid(rightEdge, snapSettings.gridSize) - nextRect.x);
-    nextRect.height = Math.max(1, snapToGrid(bottomEdge, snapSettings.gridSize) - nextRect.y);
-    nextRect.width = Math.min(nextRect.width, theme.canvas.width - nextRect.x);
-    nextRect.height = Math.min(nextRect.height, theme.canvas.height - nextRect.y);
-  }
-
-  return {
-    ...nextRect,
-    guides
-  };
+function RangeRow({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
+  return (
+    <Field label={`${label} ${value}px`}>
+      <Slider.Root className="te-slider" min={min} max={max} step={step} value={[value]} onValueChange={([next]) => onChange(next)} aria-label={label}>
+        <Slider.Track className="te-slider-track">
+          <Slider.Range className="te-slider-range" />
+        </Slider.Track>
+        <Slider.Thumb className="te-slider-thumb" aria-label={label} />
+      </Slider.Root>
+    </Field>
+  );
 }
 
 export function ThemeCanvasEditor({
@@ -363,16 +125,29 @@ export function ThemeCanvasEditor({
   selectAll = false,
   zoom = 1,
   onZoomChange,
-  toolbar,
+  layout = "embedded",
+  fitInsets,
+  panMode = false,
+  lockedIds,
+  eventCard,
+  overlayKey,
+  renderChrome,
   onSelect,
   onMarqueeSelect,
   onSelectAll,
   onUpdate
 }: ThemeCanvasEditorProps) {
-  const groupRect = measureGroup(theme);
+  const fullscreen = layout === "fullscreen";
+  const [appliedScale, setAppliedScale] = useState(1);
+  // True until the viewer pans or zooms; while true, resizes keep the frame fitted.
+  const fittedRef = useRef(false);
+  const needsInitialFitRef = useRef(false);
+  // Read through a ref so resize and timer callbacks always fit against the current chrome.
+  const fitInsetsRef = useRef(fitInsets);
+  fitInsetsRef.current = fitInsets;
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enabled: true,
-    threshold: SNAP_THRESHOLD,
+    threshold: 6,
     canvasEdges: true,
     safeArea: true,
     componentEdges: true,
@@ -380,10 +155,10 @@ export function ThemeCanvasEditor({
     gridSize: 8,
     showDistanceLabels: true
   });
-  const [interaction, setInteraction] = useState<InteractionState | null>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const [spacePressed, setSpacePressed] = useState(false);
+  const [spaceHeld, setSpacePressed] = useState(false);
+  const spacePressed = spaceHeld || panMode;
   const [shiftPressed, setShiftPressed] = useState(false);
   const [marqueeSelection, setMarqueeSelection] = useState<MarqueeSelectionState | null>(null);
   const panStateRef = useRef<{
@@ -396,10 +171,9 @@ export function ThemeCanvasEditor({
   const stageScaleRef = useRef(1);
   const panLayerRef = useRef<HTMLDivElement | null>(null);
   const themeId = (theme as { id?: string }).id ?? "default";
-  const cameraStorageKey = `pbresults.themeEditor.camera.${themeId}`;
-  const snapSummary = snapSettings.enabled
-    ? `Snap ${snapSettings.threshold}px`
-    : "Snap off";
+  // v3: v2 could hold a pre-fit {0,0} written before the restore landed.
+  const cameraStorageKey = `pbresults.themeEditor.camera.${fullscreen ? "v3." : ""}${themeId}`;
+  const skipCameraSaveRef = useRef(false);
   const selectedIdSet = new Set(selectedIds ?? (selectedId ? [selectedId] : []));
 
   function getMarqueeWorldRect(selection: MarqueeSelectionState) {
@@ -452,13 +226,28 @@ export function ThemeCanvasEditor({
   }
 
   function fitCanvas() {
-    setCamera({ x: 0, y: 0 });
+    fittedRef.current = true;
     if (onZoomChange) {
       onZoomChange(1);
     }
+    const frameRect = panLayerRef.current?.getBoundingClientRect();
+    if (!fullscreen || !frameRect) {
+      setCamera({ x: 0, y: 0 });
+      return;
+    }
+    // Centre the fitted frame in the space the floating chrome leaves free.
+    const insets = fitInsetsRef.current ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const availableWidth = Math.max(1, frameRect.width - insets.left - insets.right);
+    const availableHeight = Math.max(1, frameRect.height - insets.top - insets.bottom);
+    const fitScale = Math.min(1, availableWidth / theme.canvas.width, availableHeight / theme.canvas.height);
+    setCamera({
+      x: Math.round(insets.left + (availableWidth - theme.canvas.width * fitScale) / 2),
+      y: Math.round(insets.top + (availableHeight - theme.canvas.height * fitScale) / 2)
+    });
   }
 
   function focusSelectedComponent() {
+    fittedRef.current = false;
     if (!selectedId) {
       fitCanvas();
       return;
@@ -492,6 +281,10 @@ export function ThemeCanvasEditor({
   function isTextEditingTarget(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) {
       return false;
+    }
+    // Keys pressed inside an open menu, popover or tooltip belong to it (Esc closes it, not the selection).
+    if (target.closest("[data-radix-popper-content-wrapper]")) {
+      return true;
     }
     if (target.isContentEditable) {
       return true;
@@ -532,10 +325,13 @@ export function ThemeCanvasEditor({
       return;
     }
 
+    // The save effect below runs in this same commit with the camera from before the restore; skip that write.
+    skipCameraSaveRef.current = true;
     try {
       const raw = window.localStorage.getItem(cameraStorageKey);
       if (!raw) {
         setCamera({ x: 0, y: 0 });
+        needsInitialFitRef.current = fullscreen;
         return;
       }
 
@@ -557,6 +353,13 @@ export function ThemeCanvasEditor({
     if (typeof window === "undefined") {
       return;
     }
+    if (skipCameraSaveRef.current) {
+      skipCameraSaveRef.current = false;
+      return;
+    }
+    if (needsInitialFitRef.current) {
+      return;
+    }
 
     window.localStorage.setItem(
       cameraStorageKey,
@@ -567,7 +370,15 @@ export function ThemeCanvasEditor({
     );
   }, [cameraStorageKey, camera, zoom]);
 
+  // Re-clamp only when zoom or frame size really changes. On mount the stage has not measured its scale yet,
+  // and clamping at the fallback scale of 1 would throw away the restored or fitted camera.
+  const clampKey = `${zoom}|${theme.canvas.width}|${theme.canvas.height}`;
+  const lastClampKeyRef = useRef(clampKey);
   useEffect(() => {
+    if (lastClampKeyRef.current === clampKey) {
+      return;
+    }
+    lastClampKeyRef.current = clampKey;
     const scale = stageScaleRef.current || 1;
     setCamera((current) => {
       const clamped = clampCameraToViewport(current, scale);
@@ -576,10 +387,34 @@ export function ThemeCanvasEditor({
       }
       return clamped;
     });
-  }, [zoom, theme.canvas.width, theme.canvas.height]);
+  }, [clampKey]);
+
+  useEffect(() => {
+    if (!fullscreen || !needsInitialFitRef.current || !panLayerRef.current) {
+      return;
+    }
+    // Fit once the scale has settled after mount, so the mount-time clamp cannot undo it. A timer, not
+    // requestAnimationFrame: rAF never fires while the tab is in the background.
+    // The flag clears only when the fit really runs, so a cancelled attempt retries on the next scale change.
+    const timer = window.setTimeout(() => {
+      needsInitialFitRef.current = false;
+      fitCanvas();
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [appliedScale, fullscreen]);
+
+  useEffect(() => {
+    if (fullscreen && fittedRef.current) {
+      fitCanvas();
+    }
+  }, [fitInsets?.top, fitInsets?.right, fitInsets?.bottom, fitInsets?.left]);
 
   useEffect(() => {
     function handleResize() {
+      if (fullscreen && fittedRef.current) {
+        fitCanvas();
+        return;
+      }
       const scale = stageScaleRef.current || 1;
       setCamera((current) => {
         const clamped = clampCameraToViewport(current, scale);
@@ -617,6 +452,12 @@ export function ThemeCanvasEditor({
       if (event.key.toLowerCase() === "f") {
         event.preventDefault();
         focusSelectedComponent();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        setSnapSettings((current) => ({ ...current, enabled: !current.enabled }));
       }
     }
 
@@ -628,18 +469,19 @@ export function ThemeCanvasEditor({
     const target = event.target as HTMLElement;
     const isFormControl = target.closest("input, select, textarea, button");
     const isComponentInteractionTarget = target.closest(
-      ".editor-hitbox, .react-resizable-handle, .editor-outline, .react-rnd, .react-draggable"
+      ".editor-hitbox, .mv-piece, .moveable-control-box"
     );
     const canPanWithLeft = event.button === 0 && spacePressed;
     const canPanWithMiddle = event.button === 1;
-    const canPanWithPlainLeft = event.button === 0 && !spacePressed && !isFormControl && !isComponentInteractionTarget;
-    const canMarqueeSelect = event.button === 0 && event.shiftKey && !spacePressed && !isFormControl && !isComponentInteractionTarget;
+    const canPanWithPlainLeft = false;
+    const canMarqueeSelect = event.button === 0 && !spacePressed && !isFormControl && !isComponentInteractionTarget;
 
     if (canMarqueeSelect) {
       event.preventDefault();
       const frameRect = event.currentTarget.getBoundingClientRect();
       setMarqueeSelection({
         pointerId: event.pointerId,
+        additive: event.shiftKey,
         startViewportX: event.clientX - frameRect.left,
         startViewportY: event.clientY - frameRect.top,
         currentViewportX: event.clientX - frameRect.left,
@@ -691,6 +533,7 @@ export function ThemeCanvasEditor({
 
     const deltaX = event.clientX - panState.startX;
     const deltaY = event.clientY - panState.startY;
+    fittedRef.current = false;
     const nextCamera = clampCameraToViewport(
       {
         x: Math.round(panState.cameraX + deltaX),
@@ -704,7 +547,10 @@ export function ThemeCanvasEditor({
   function handleStagePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     if (marqueeSelection && marqueeSelection.pointerId === event.pointerId) {
       const worldRect = getMarqueeWorldRect(marqueeSelection);
-      if (worldRect.width >= 3 || worldRect.height >= 3) {
+      if (worldRect.width < 3 && worldRect.height < 3 && !marqueeSelection.additive) {
+        // A plain click on empty canvas clears the selection.
+        onMarqueeSelect?.([], { additive: false });
+      } else if (worldRect.width >= 3 || worldRect.height >= 3) {
         const intersectingIds = listThemeComponentEntries(theme)
           .filter(({ component }) => component.visible)
           .filter(({ component }) => {
@@ -721,7 +567,7 @@ export function ThemeCanvasEditor({
           })
           .map(({ id }) => id);
 
-        onMarqueeSelect?.(intersectingIds, { additive: true });
+        onMarqueeSelect?.(intersectingIds, { additive: marqueeSelection.additive });
       }
 
       setMarqueeSelection(null);
@@ -749,6 +595,7 @@ export function ThemeCanvasEditor({
     }
 
     event.preventDefault();
+    fittedRef.current = false;
     const currentScale = stageScaleRef.current || 1;
     const factor = Math.exp(-event.deltaY * 0.0015);
     const nextZoom = clampZoom(zoom * factor);
@@ -776,155 +623,13 @@ export function ThemeCanvasEditor({
       return;
     }
 
+    fittedRef.current = false;
     const nextZoom = clampZoom(Math.round((zoom + delta) * 1000) / 1000);
     onZoomChange(nextZoom);
   }
 
   return (
-    <div className="canvas-editor-shell">
-      <div className="canvas-editor-toolbar">
-        {toolbar}
-        <div className="canvas-editor-toolbar-actions">
-            <button type="button" className="secondary-button" onClick={fitCanvas}>
-              Fit
-            </button>
-            <button type="button" className="secondary-button" onClick={focusSelectedComponent} disabled={!selectedId}>
-              Focus
-            </button>
-            <div className="canvas-zoom-controls" aria-label="Canvas zoom controls">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => stepZoom(-0.1)}
-                disabled={zoom <= CAMERA_MIN_ZOOM}
-                aria-label="Zoom out"
-              >
-                -
-              </button>
-              <span className="canvas-zoom-readout">{Math.round(zoom * 100)}%</span>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => stepZoom(0.1)}
-                disabled={zoom >= CAMERA_MAX_ZOOM}
-                aria-label="Zoom in"
-              >
-                +
-              </button>
-            </div>
-            <button
-              type="button"
-              className={snapSettings.enabled ? "secondary-button active-utility" : "secondary-button"}
-              onClick={() => setSnapSettings((current) => ({ ...current, enabled: !current.enabled }))}
-            >
-              {snapSummary}
-            </button>
-            <div style={{ "--anchor-snap": "anchor-snap", anchorName: "--anchor-snap" } as any}>
-              <button type="button" popoverTarget="canvas-snap-popover" className="secondary-button">Snap options</button>
-              <div id="canvas-snap-popover" popover="auto" className="canvas-snap-controls-panel" style={{ positionAnchor: "--anchor-snap", positionArea: "bottom span-left", margin: 0 } as any}>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={snapSettings.canvasEdges}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        canvasEdges: event.target.checked
-                      }))
-                    }
-                  />
-                  Canvas edges + center
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={snapSettings.safeArea}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        safeArea: event.target.checked
-                      }))
-                    }
-                  />
-                  Safe area guides
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={snapSettings.componentEdges}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        componentEdges: event.target.checked
-                      }))
-                    }
-                  />
-                  Other components
-                </label>
-                <label>
-                  Snap tolerance ({snapSettings.threshold}px)
-                  <input
-                    type="range"
-                    min={4}
-                    max={32}
-                    step={1}
-                    value={snapSettings.threshold}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        threshold: Number(event.target.value)
-                      }))
-                    }
-                  />
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={snapSettings.gridEnabled}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        gridEnabled: event.target.checked
-                      }))
-                    }
-                  />
-                  Pixel grid snapping
-                </label>
-                <label>
-                  Grid size ({snapSettings.gridSize}px)
-                  <input
-                    type="range"
-                    min={2}
-                    max={32}
-                    step={2}
-                    value={snapSettings.gridSize}
-                    disabled={!snapSettings.gridEnabled}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        gridSize: Number(event.target.value)
-                      }))
-                    }
-                  />
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={snapSettings.showDistanceLabels}
-                    onChange={(event) =>
-                      setSnapSettings((current) => ({
-                        ...current,
-                        showDistanceLabels: event.target.checked
-                      }))
-                    }
-                  />
-                  Show line distance labels
-                </label>
-                <p className="hint">Hold Shift while resizing to keep aspect ratio.</p>
-              </div>
-            </div>
-        </div>
-      </div>
+    <div className={fullscreen ? "canvas-editor-shell canvas-editor-shell--fullscreen" : "canvas-editor-shell"}>
       <div
         className={`canvas-pan-layer ${isPanning ? "is-panning" : spacePressed ? "can-pan" : ""}`}
         ref={panLayerRef}
@@ -939,7 +644,10 @@ export function ThemeCanvasEditor({
           height={theme.canvas.height}
           className="canvas-stage-frame"
           innerClassName="canvas-stage"
-          mode="width"
+          mode={fullscreen ? "contain" : "width"}
+          fill={fullscreen}
+          insets={fullscreen ? fitInsets : undefined}
+          onScaleChange={setAppliedScale}
           zoom={zoom}
           camera={camera}
         >
@@ -947,21 +655,22 @@ export function ThemeCanvasEditor({
             stageScaleRef.current = stageScale;
             return (
               <>
+            {fullscreen ? (
+              <div className="te-frame-label" style={{ transform: `scale(${stageScale > 0 ? 1 / stageScale : 1})` }}>
+                <strong>Broadcast frame</strong> · {theme.canvas.width} × {theme.canvas.height} ·{" "}
+                {theme.canvas.transparentPreview ? "transparent preview" : "theme background"}
+              </div>
+            ) : null}
             <OverlayRenderer
+              key={overlayKey}
               theme={theme}
+              transparentBackground={fullscreen && theme.canvas.transparentPreview}
               live={live}
               assets={assets}
               editable
               selectedComponentId={selectAll ? null : selectedId}
               onSelectComponent={onSelect}
             />
-
-            {interaction?.guides.vertical.map((guide) => (
-              <span key={`v-${guide}`} className="canvas-guide canvas-guide--vertical" style={{ left: guide }} />
-            ))}
-            {interaction?.guides.horizontal.map((guide) => (
-              <span key={`h-${guide}`} className="canvas-guide canvas-guide--horizontal" style={{ top: guide }} />
-            ))}
 
             {marqueeSelection ? (
               <span
@@ -970,289 +679,37 @@ export function ThemeCanvasEditor({
               />
             ) : null}
 
-            {interaction ? (
-              <div
-                className="canvas-hud"
-                style={{
-                  left: Math.max(
-                    HUD_MARGIN,
-                    Math.min(
-                      theme.canvas.width - HUD_ESTIMATED_WIDTH - HUD_MARGIN,
-                      interaction.x + interaction.width / 2 - HUD_ESTIMATED_WIDTH / 2
-                    )
-                  ),
-                  top:
-                    interaction.y - 44 >= HUD_MARGIN
-                      ? interaction.y - 44
-                      : Math.min(theme.canvas.height - 54, interaction.y + interaction.height + 8)
-                }}
-              >
-                <strong>{interaction.label}</strong>
-                <span>
-                  X {interaction.x} · Y {interaction.y} · W {interaction.width} · H {interaction.height}
-                </span>
-                <span>
-                  L {Math.max(0, interaction.x)} · T {Math.max(0, interaction.y)} · R {Math.max(0, theme.canvas.width - (interaction.x + interaction.width))} · B {Math.max(0, theme.canvas.height - (interaction.y + interaction.height))}
-                </span>
-              </div>
-            ) : null}
+            <MoveableLayer
+              theme={theme}
+              selectedIds={selectAll ? listThemeComponentEntries(theme).map((entry) => entry.id) : Array.from(selectedIdSet)}
+              scale={stageScale}
+              snapSettings={snapSettings}
+              lockedIds={lockedIds}
+              eventCard={eventCard}
+              viewKey={`${camera.x},${camera.y},${stageScale}`}
+              onSelect={onSelect}
+              onCommit={onUpdate}
+            />
 
-            {interaction ? (
-              <>
-                {snapSettings.showDistanceLabels ? (
-                  <>
-                    <span
-                      className="canvas-measure-label"
-                      style={{
-                        left: Math.max(4, interaction.x / 2 - 16),
-                        top: Math.max(4, interaction.y - MEASURE_LABEL_TOP_OFFSET)
-                      }}
-                    >
-                      {Math.max(0, interaction.x)}
-                    </span>
-                    <span
-                      className="canvas-measure-label"
-                      style={{
-                        left: Math.min(theme.canvas.width - 40, interaction.x + interaction.width + (theme.canvas.width - (interaction.x + interaction.width)) / 2 - 16),
-                        top: Math.max(4, interaction.y - MEASURE_LABEL_TOP_OFFSET)
-                      }}
-                    >
-                      {Math.max(0, theme.canvas.width - (interaction.x + interaction.width))}
-                    </span>
-                    <span
-                      className="canvas-measure-label"
-                      style={{
-                        left: Math.max(4, interaction.x - MEASURE_LABEL_LEFT_OFFSET),
-                        top: Math.max(4, interaction.y / 2 - 10)
-                      }}
-                    >
-                      {Math.max(0, interaction.y)}
-                    </span>
-                    <span
-                      className="canvas-measure-label"
-                      style={{
-                        left: Math.max(4, interaction.x - MEASURE_LABEL_LEFT_OFFSET),
-                        top: Math.min(theme.canvas.height - 24, interaction.y + interaction.height + (theme.canvas.height - (interaction.y + interaction.height)) / 2 - 10)
-                      }}
-                    >
-                      {Math.max(0, theme.canvas.height - (interaction.y + interaction.height))}
-                    </span>
-                  </>
-                ) : null}
-                <span
-                  className="canvas-measure-line canvas-measure-line--horizontal"
-                  style={{
-                    left: 0,
-                    top: interaction.y,
-                    width: Math.max(0, interaction.x)
-                  }}
-                />
-                <span
-                  className="canvas-measure-line canvas-measure-line--horizontal"
-                  style={{
-                    left: interaction.x + interaction.width,
-                    top: interaction.y,
-                    width: Math.max(0, theme.canvas.width - (interaction.x + interaction.width))
-                  }}
-                />
-                <span
-                  className="canvas-measure-line canvas-measure-line--vertical"
-                  style={{
-                    left: interaction.x,
-                    top: 0,
-                    height: Math.max(0, interaction.y)
-                  }}
-                />
-                <span
-                  className="canvas-measure-line canvas-measure-line--vertical"
-                  style={{
-                    left: interaction.x + interaction.width,
-                    top: 0,
-                    height: Math.max(0, interaction.y)
-                  }}
-                />
-                <span
-                  className="canvas-measure-line canvas-measure-line--vertical"
-                  style={{
-                    left: interaction.x,
-                    top: interaction.y + interaction.height,
-                    height: Math.max(0, theme.canvas.height - (interaction.y + interaction.height))
-                  }}
-                />
-                <span
-                  className="canvas-measure-line canvas-measure-line--vertical"
-                  style={{
-                    left: interaction.x + interaction.width,
-                    top: interaction.y + interaction.height,
-                    height: Math.max(0, theme.canvas.height - (interaction.y + interaction.height))
-                  }}
-                />
-              </>
-            ) : null}
-
-            {selectAll ? (
-              <Rnd
-                bounds="parent"
-                size={{ width: groupRect.width, height: groupRect.height }}
-                position={{ x: groupRect.x, y: groupRect.y }}
-                enableResizing={false}
-                onDragStart={() => {
-                  onSelectAll?.();
-                  setInteraction({
-                    ...roundRect(groupRect),
-                    label: "All components",
-                    guides: { vertical: [], horizontal: [] }
-                  });
-                }}
-                onDrag={(_, data) => {
-                  const nextRect = snapMoveRect(
-                    { x: data.x, y: data.y, width: groupRect.width, height: groupRect.height },
-                    theme,
-                    null,
-                    snapSettings
-                  );
-                  setInteraction({
-                    ...nextRect,
-                    label: "All components"
-                  });
-                }}
-                onDragStop={(_, data) => {
-                  const nextRect = snapMoveRect(
-                    { x: data.x, y: data.y, width: groupRect.width, height: groupRect.height },
-                    theme,
-                    null,
-                    snapSettings
-                  );
-                  const deltaX = data.x - groupRect.x;
-                  const deltaY = data.y - groupRect.y;
-                  const snappedDeltaX = nextRect.x - groupRect.x;
-                  const snappedDeltaY = nextRect.y - groupRect.y;
-                  const next = structuredClone(theme);
-                  for (const { component } of listThemeComponentEntries(next)) {
-                    component.x += snapSettings.enabled ? snappedDeltaX : deltaX;
-                    component.y += snapSettings.enabled ? snappedDeltaY : deltaY;
-                  }
-                  setInteraction(null);
-                  onUpdate(next);
-                }}
-                scale={stageScale}
-                className="editor-outline group-selected"
-              >
-                <button type="button" className="editor-hitbox" onClick={() => onSelectAll?.()}>
-                  all
-                </button>
-              </Rnd>
-            ) : null}
-
-            {listThemeComponentEntries(theme).map(({ id, label, component }) => (
-              <Rnd
-                key={id}
-                bounds="parent"
-                size={{ width: component.width, height: component.height }}
-                position={{ x: component.x, y: component.y }}
-                onDragStart={(event) => {
-                  // Keep Shift+click additive selection from being immediately replaced by drag-start selection.
-                  if (hasShiftModifier(event)) {
-                    return;
-                  }
-                  onSelect(id, { additive: false });
-                  setInteraction({
-                    x: component.x,
-                    y: component.y,
-                    width: component.width,
-                    height: component.height,
-                    label,
-                    guides: { vertical: [], horizontal: [] }
-                  });
-                }}
-                onDrag={(_, data) => {
-                  const nextRect = snapMoveRect(
-                    { x: data.x, y: data.y, width: component.width, height: component.height },
-                    theme,
-                    id,
-                    snapSettings
-                  );
-                  setInteraction({
-                    ...nextRect,
-                    label
-                  });
-                }}
-                onResizeStart={() => {
-                  onSelect(id, { additive: false });
-                  setInteraction({
-                    x: component.x,
-                    y: component.y,
-                    width: component.width,
-                    height: component.height,
-                    label,
-                    guides: { vertical: [], horizontal: [] }
-                  });
-                }}
-                onDragStop={(_, data) => {
-                  const nextRect = snapMoveRect(
-                    { x: data.x, y: data.y, width: component.width, height: component.height },
-                    theme,
-                    id,
-                    snapSettings
-                  );
-                  const next = structuredClone(theme);
-                  const nextComponent = getThemeComponent(next, id);
-                  if (nextComponent) {
-                    nextComponent.x = nextRect.x;
-                    nextComponent.y = nextRect.y;
-                  }
-                  setInteraction(null);
-                  onUpdate(next);
-                }}
-                onResize={(_, direction, ref, ___, position) => {
-                  const nextRect = snapResizeRect(
-                    { x: position.x, y: position.y, width: ref.offsetWidth, height: ref.offsetHeight },
-                    String(direction),
-                    theme,
-                    id,
-                    snapSettings
-                  );
-                  setInteraction({
-                    ...nextRect,
-                    label
-                  });
-                }}
-                onResizeStop={(_, direction, ref, ___, position) => {
-                  const nextRect = snapResizeRect(
-                    { x: position.x, y: position.y, width: ref.offsetWidth, height: ref.offsetHeight },
-                    String(direction),
-                    theme,
-                    id,
-                    snapSettings
-                  );
-                  const next = structuredClone(theme);
-                  const nextComponent = getThemeComponent(next, id);
-                  if (nextComponent) {
-                    nextComponent.x = nextRect.x;
-                    nextComponent.y = nextRect.y;
-                    nextComponent.width = nextRect.width;
-                    nextComponent.height = nextRect.height;
-                  }
-                  setInteraction(null);
-                  onUpdate(next);
-                }}
-                scale={stageScale}
-                className={!selectAll && selectedIdSet.has(id) ? "editor-outline selected" : "editor-outline"}
-              >
-                <button
-                  type="button"
-                  className="editor-hitbox"
-                  onClick={(event) => onSelect(id, { additive: event.shiftKey })}
-                >
-                  {label}
-                </button>
-              </Rnd>
-            ))}
               </>
             );
           }}
         </ScaledCanvasFrame>
       </div>
+      {renderChrome
+        ? renderChrome({
+            zoomPercent: Math.round(appliedScale * 100),
+            canZoomIn: zoom < CAMERA_MAX_ZOOM,
+            canZoomOut: zoom > CAMERA_MIN_ZOOM,
+            zoomIn: () => stepZoom(0.1),
+            zoomOut: () => stepZoom(-0.1),
+            fit: fitCanvas,
+            focusSelected: focusSelectedComponent,
+            canFocus: Boolean(selectedId),
+            snapSettings,
+            setSnapSettings
+          })
+        : null}
     </div>
   );
 }

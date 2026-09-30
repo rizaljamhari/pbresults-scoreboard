@@ -3,12 +3,22 @@ import type { TeamRecord } from "../../shared/theme";
 export type TeamStatusFilter = "all" | "active" | "inactive";
 export type TeamSort = "nameAsc" | "nameDesc" | "updatedDesc" | "updatedAsc";
 
-export function formatUpdatedAt(value: string): string {
+export function formatUpdatedAt(value: string, now = new Date()): string {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) {
     return "Unknown";
   }
-  return date.toLocaleString();
+  // A short date is enough in a table; the full time is in the row's tooltip.
+  if (date.toDateString() === now.toDateString()) {
+    return "Today";
+  }
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return new Intl.DateTimeFormat(undefined, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+export function formatUpdatedAtFull(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "Unknown" : date.toLocaleString();
 }
 
 export function filterAndSortTeams(
