@@ -1,414 +1,467 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import * as Popover from "@radix-ui/react-popover";
+import { ArrowDown, ArrowUp, CheckCheck, CircleSlash, Download, Ellipsis, FlaskConical, Plus, Trash2, Upload, X } from "lucide-react";
 import { api } from "../api";
-import { useAutoCloseRowActionMenus, useLiveState, useSettings, useTeams } from "../hooks";
+import { useAssets, useLiveState, useTeams } from "../hooks";
 import { showToast } from "../toast";
-import {
-  AdminFilterBar,
-  AdminPageFrame,
-  AdminPageHeader,
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  FieldHint,
-  Input,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableEmpty,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableShell,
-  buttonVariants
-} from "../components/ui";
-import { filterAndSortTeams, formatUpdatedAt, type TeamSort, type TeamStatusFilter } from "./teamAdminUtils";
+import type { TeamRecord } from "../../shared/theme";
+import { Button, Chip, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus } from "../components/admin/kit";
+import { TeamPanel } from "./TeamPanel";
+import { filterAndSortTeams, formatUpdatedAt, formatUpdatedAtFull, type TeamSort, type TeamStatusFilter } from "./teamAdminUtils";
+
+type MatchResult = Awaited<ReturnType<typeof api.matchTeam>>;
+
+function MatchTester() {
+  const [input, setInput] = useState("");
+  const [result, setResult] = useState<MatchResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    if (!input.trim()) return;
+    setBusy(true);
+    try {
+      setResult(await api.matchTeam(input));
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to test the name." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const tone = result?.status === "matched" ? "ok" : result?.status === "uncertain" ? "warning" : "critical";
+  const statusLabel = result?.status === "matched" ? "Matched" : result?.status === "uncertain" ? "Not sure" : "No match";
+
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <Button variant="ghost">
+          <FlaskConical aria-hidden />
+          Test a name
+        </Button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="ad-scope ad-pop ad-tester" align="end" sideOffset={6}>
+          <form
+            className="ad-tester-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run();
+            }}
+          >
+            <input
+              className="ad-input"
+              autoFocus
+              placeholder="A name the feed might send, e.g. SBJ"
+              aria-label="Name to test"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+            />
+            <Button type="submit" disabled={!input.trim() || busy}>
+              Test
+            </Button>
+          </form>
+          {result ? (
+            <div className="ad-tester-result">
+              <div className="ad-tester-line">
+                <Chip tone={tone}>{statusLabel}</Chip>
+                <b>{result.team?.canonicalName ?? "No team"}</b>
+                <span className="ad-hint" style={{ marginLeft: "auto" }}>
+                  {(result.confidence * 100).toFixed(0)}% sure
+                </span>
+              </div>
+              <p className="ad-hint">
+                Read as “{result.normalizedInput || "—"}”{result.matchedAlias ? ` · matched “${result.matchedAlias}”` : ""}
+              </p>
+              {result.candidates.length ? (
+                <ul className="ad-tester-candidates">
+                  {result.candidates.map((candidate) => (
+                    <li key={`${candidate.teamId}:${candidate.matchedAlias ?? "candidate"}`}>
+                      <span>{candidate.teamName}</span>
+                      <span className="ad-hint">
+                        {(candidate.confidence * 100).toFixed(0)}%{candidate.matchedAlias ? ` · ${candidate.matchedAlias}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <p className="ad-hint" style={{ marginTop: 8 }}>
+              Shows which team the feed name would pick, and how sure the matcher is.
+            </p>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function SortHeader({
+  label,
+  asc,
+  desc,
+  sortBy,
+  onSort,
+  className
+}: {
+  label: string;
+  asc: TeamSort;
+  desc: TeamSort;
+  sortBy: TeamSort;
+  onSort: (sort: TeamSort) => void;
+  className?: string;
+}) {
+  const active = sortBy === asc || sortBy === desc;
+  return (
+    <th className={className} aria-sort={sortBy === asc ? "ascending" : sortBy === desc ? "descending" : "none"}>
+      <button type="button" className="ad-th-sort" onClick={() => onSort(sortBy === asc ? desc : asc)}>
+        {label}
+        {active ? sortBy === asc ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden /> : null}
+      </button>
+    </th>
+  );
+}
 
 export function TeamsPage() {
-  useAutoCloseRowActionMenus();
   const navigate = useNavigate();
+  const { id: openTeamId } = useParams<{ id: string }>();
   const teams = useTeams();
-  const settings = useSettings();
-  const live = useLiveState(true, settings.data?.pollIntervalMs);
+  const assets = useAssets();
+  const live = useLiveState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TeamStatusFilter>("all");
   const [sortBy, setSortBy] = useState<TeamSort>("nameAsc");
-  const [compactRows, setCompactRows] = useState(false);
-  const [testerInput, setTesterInput] = useState("");
-  const [testerResult, setTesterResult] = useState<Awaited<ReturnType<typeof api.matchTeam>> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [panelDirty, setPanelDirty] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  useSlashFocus(searchRef);
+
+  const allTeams = teams.data ?? [];
+  const filteredTeams = useMemo(() => filterAndSortTeams(allTeams, search, statusFilter, sortBy), [allTeams, search, statusFilter, sortBy]);
+  const activeCount = allTeams.filter((team) => team.active).length;
+  const assetUrl = useMemo(() => new Map((assets.data ?? []).map((asset) => [asset.id, asset.url])), [assets.data]);
+
+  const leftTeamId = live.data?.displayLeftTeamMatch.teamId ?? null;
+  const rightTeamId = live.data?.displayRightTeamMatch.teamId ?? null;
+  const onAirSide = openTeamId === leftTeamId ? "left" : openTeamId === rightTeamId ? "right" : null;
+
+  useEffect(() => {
+    const validIds = new Set(allTeams.map((team) => team.id));
+    setSelectedIds((current) => current.filter((id) => validIds.has(id)));
+  }, [teams.data]);
+
+  // A deep link or a new team opens the panel; bring its row into view so the list still shows where you are.
+  useEffect(() => {
+    if (!openTeamId || !teams.data) return;
+    document.querySelector(`tr[data-team-id="${CSS.escape(openTeamId)}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [openTeamId, Boolean(teams.data)]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!panelDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [panelDirty]);
+
+  function openTeam(id: string | null) {
+    if (id === (openTeamId ?? null)) return;
+    if (panelDirty && !window.confirm("You have unsaved changes to this team. Discard them?")) return;
+    navigate(id ? `/admin/teams/${id}` : "/admin/teams");
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !openTeamId) return;
+      if ((event.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper], input, textarea")) return;
+      openTeam(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openTeamId, panelDirty]);
 
   async function handleCreate() {
+    if (panelDirty && !window.confirm("You have unsaved changes to this team. Discard them?")) return;
     try {
       const created = await api.createTeam();
-      teams.setData([...(teams.data ?? []), created].sort((left, right) => left.canonicalName.localeCompare(right.canonicalName)));
+      teams.setData([...allTeams, created].sort((left, right) => left.canonicalName.localeCompare(right.canonicalName)));
       showToast({ kind: "success", message: "Team created." });
+      setPanelDirty(false);
       navigate(`/admin/teams/${created.id}`);
     } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to create team." });
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to create the team." });
     }
   }
 
-  async function handleDelete(id: string, canonicalName: string) {
-    const confirmed = window.confirm(`Delete ${canonicalName}? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
+  async function handleExport() {
     try {
-      await api.deleteTeam(id);
-      teams.setData((teams.data ?? []).filter((team) => team.id !== id));
-      showToast({ kind: "success", message: `Deleted ${canonicalName}.` });
-    } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to delete team." });
-    }
-  }
-
-  async function handleMatchTest() {
-    try {
-      const result = await api.matchTeam(testerInput);
-      setTesterResult(result);
-      showToast({ kind: "info", message: `Match status: ${result.status}.`, durationMs: 1800 });
-    } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to run match test." });
-    }
-  }
-
-  async function handleExportTeams() {
-    try {
-      const payload = await api.exportTeams();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `pbresults-teams-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      showToast({ kind: "success", message: "Team registry exported." });
+      downloadJson(await api.exportTeams(), `pbresults-teams-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
+      showToast({ kind: "success", message: "Teams exported." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to export teams." });
     }
   }
 
-  async function handleImportTeams(file: File) {
+  async function handleImport(file: File) {
+    if (!window.confirm(`Import teams from “${file.name}”? New teams are added; teams with the same reference are replaced by the file.`)) return;
     try {
-      const text = await file.text();
-      const restored = await api.importTeams(JSON.parse(text));
-      teams.setData(restored);
-      showToast({ kind: "success", message: "Team registry imported." });
+      teams.setData(await api.importTeams(JSON.parse(await file.text())));
+      showToast({ kind: "success", message: "Teams imported." });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to import teams." });
     }
   }
 
-  const filteredTeams = useMemo(() => {
-    return filterAndSortTeams(teams.data ?? [], search, statusFilter, sortBy);
-  }, [search, sortBy, statusFilter, teams.data]);
-
-  useEffect(() => {
-    const validIds = new Set((teams.data ?? []).map((team) => team.id));
-    setSelectedIds((current) => current.filter((id) => validIds.has(id)));
-  }, [teams.data]);
-
-  const selectedCount = selectedIds.length;
   const filteredIds = filteredTeams.map((team) => team.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
   const someFilteredSelected = filteredIds.some((id) => selectedIds.includes(id));
 
-  function toggleTeamSelection(teamId: string, checked: boolean) {
-    setSelectedIds((current) => {
-      if (checked) {
-        return current.includes(teamId) ? current : [...current, teamId];
-      }
-      return current.filter((id) => id !== teamId);
-    });
+  function toggleOne(teamId: string, checked: boolean) {
+    setSelectedIds((current) => (checked ? (current.includes(teamId) ? current : [...current, teamId]) : current.filter((id) => id !== teamId)));
   }
 
-  function toggleSelectAllFiltered(checked: boolean) {
+  function toggleAllFiltered(checked: boolean) {
     setSelectedIds((current) => {
-      if (checked) {
-        return Array.from(new Set([...current, ...filteredIds]));
-      }
+      if (checked) return Array.from(new Set([...current, ...filteredIds]));
       const filteredSet = new Set(filteredIds);
       return current.filter((id) => !filteredSet.has(id));
     });
   }
 
-  async function handleBulkSetActive(active: boolean) {
-    const selectedTeams = (teams.data ?? []).filter((team) => selectedIds.includes(team.id));
-    if (!selectedTeams.length) {
-      return;
-    }
+  async function bulkSetActive(active: boolean) {
+    const selected = allTeams.filter((team) => selectedIds.includes(team.id));
+    if (!selected.length) return;
     setBulkBusy(true);
     try {
-      const updated = await Promise.all(
-        selectedTeams.map((team) =>
-          api.saveTeam({
-            ...team,
-            active,
-            updatedAt: team.updatedAt
-          })
-        )
-      );
+      const updated = await Promise.all(selected.map((team) => api.saveTeam({ ...team, active, updatedAt: team.updatedAt })));
       const updatedMap = new Map(updated.map((team) => [team.id, team]));
-      teams.setData((teams.data ?? []).map((team) => updatedMap.get(team.id) ?? team));
-      showToast({
-        kind: "success",
-        message: `${selectedTeams.length} team${selectedTeams.length === 1 ? "" : "s"} ${active ? "activated" : "deactivated"}.`
-      });
+      teams.setData(allTeams.map((team) => updatedMap.get(team.id) ?? team));
+      showToast({ kind: "success", message: `${selected.length} team${selected.length === 1 ? "" : "s"} ${active ? "turned on" : "turned off"} for live matching.` });
     } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update selected teams." });
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update the selected teams." });
     } finally {
       setBulkBusy(false);
     }
   }
 
-  async function handleBulkDelete() {
-    const selectedTeams = (teams.data ?? []).filter((team) => selectedIds.includes(team.id));
-    if (!selectedTeams.length) {
-      return;
-    }
-    const confirmed = window.confirm(`Delete ${selectedTeams.length} selected team${selectedTeams.length === 1 ? "" : "s"}? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
+  async function bulkDelete() {
+    const selected = allTeams.filter((team) => selectedIds.includes(team.id));
+    if (!selected.length || !window.confirm(`Delete ${selected.length} selected team${selected.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     setBulkBusy(true);
     try {
-      await Promise.all(selectedTeams.map((team) => api.deleteTeam(team.id)));
+      await Promise.all(selected.map((team) => api.deleteTeam(team.id)));
       const selectedSet = new Set(selectedIds);
-      teams.setData((teams.data ?? []).filter((team) => !selectedSet.has(team.id)));
+      teams.setData(allTeams.filter((team) => !selectedSet.has(team.id)));
+      if (openTeamId && selectedSet.has(openTeamId)) {
+        setPanelDirty(false);
+        navigate("/admin/teams");
+      }
       setSelectedIds([]);
-      showToast({ kind: "success", message: `${selectedTeams.length} team${selectedTeams.length === 1 ? "" : "s"} deleted.` });
+      showToast({ kind: "success", message: `${selected.length} team${selected.length === 1 ? "" : "s"} deleted.` });
     } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to delete selected teams." });
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to delete the selected teams." });
     } finally {
       setBulkBusy(false);
     }
   }
 
-  if (teams.loading && !teams.data) {
-    return (
-      <Card>
-        <FieldHint>Loading teams…</FieldHint>
-      </Card>
-    );
+  function logoFor(team: TeamRecord) {
+    return team.logoAssetId ? assetUrl.get(team.logoAssetId) : undefined;
   }
 
   return (
-    <AdminPageFrame className="panel-stack">
-      <AdminPageHeader
-        eyebrow="Team Registry"
-        title="Overview"
-        description="Review all teams in one table. Open a team to edit profile, aliases, and logos."
-        actions={(
-          <div className="action-row compact">
-            <Button variant="secondary" onClick={() => void handleExportTeams()}>
-              Export Teams
-            </Button>
-            <label className={buttonVariants({ variant: "secondary" })}>
-              Import Teams
-              <input
-                hidden
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    void handleImportTeams(file);
-                  }
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-            <Button onClick={() => void handleCreate()}>Create Team</Button>
-          </div>
-        )}
-      />
-
-      <Card>
-        <AdminFilterBar className="mb-3.5">
-          <label>
-            Search teams
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by canonical name, short name, or alias"
+    <div className="ad-page ad-scope">
+      <Toolbar title="Teams" count={teams.data ? allTeams.length : undefined}>
+        <SearchField
+          ref={searchRef}
+          label="Search teams"
+          placeholder="Search teams and match names"
+          shortcut="/"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <Segmented
+          label="Live matching"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "all", label: "All" },
+            { value: "active", label: "Active", count: activeCount, title: "Used in live matching" },
+            { value: "inactive", label: "Inactive", count: allTeams.length - activeCount, title: "Skipped by live matching" }
+          ]}
+        />
+        {selectedIds.length ? (
+          <>
+            <span className="ad-tb-sep" />
+            <Chip tone="blue">{selectedIds.length} selected</Chip>
+            <Menu
+              align="start"
+              trigger={
+                <Button size="sm" disabled={bulkBusy}>
+                  {bulkBusy ? "Working…" : "Actions"}
+                </Button>
+              }
+              items={[
+                { label: "Use in live matching", icon: <CheckCheck />, onSelect: () => void bulkSetActive(true) },
+                { label: "Skip in live matching", icon: <CircleSlash />, onSelect: () => void bulkSetActive(false) },
+                { kind: "separator" },
+                { label: "Delete…", icon: <Trash2 />, danger: true, onSelect: () => void bulkDelete() }
+              ]}
             />
-          </label>
-          <label>
-            Status
-            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TeamStatusFilter)}>
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </Select>
-          </label>
-          <label>
-            Sort
-            <Select value={sortBy} onChange={(event) => setSortBy(event.target.value as TeamSort)}>
-              <option value="nameAsc">Name (A-Z)</option>
-              <option value="nameDesc">Name (Z-A)</option>
-              <option value="updatedDesc">Updated (Newest)</option>
-              <option value="updatedAsc">Updated (Oldest)</option>
-            </Select>
-          </label>
-          <label className="checkbox justify-self-end whitespace-nowrap pb-1 max-[1200px]:justify-self-start">
-            <Checkbox checked={compactRows} onChange={(event) => setCompactRows(event.target.checked)} />
-            Compact rows
-          </label>
-        </AdminFilterBar>
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-3">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <strong className="text-base text-md3-onBackground">{selectedCount}</strong>
-            <span className="text-md3-onSurfaceVariant">{selectedCount === 1 ? "team selected" : "teams selected"}</span>
-          </div>
-          <div className="action-row compact">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setSelectedIds([])}
-              disabled={!selectedCount || bulkBusy}
-            >
-              Clear selection
-            </Button>
-            <details className="row-action-menu">
-              <summary className={buttonVariants({ variant: "secondary" })}>{bulkBusy ? "Working…" : "Bulk actions"}</summary>
-              <div className="row-action-menu-list">
-                <Button variant="secondary" type="button" onClick={() => void handleBulkSetActive(true)} disabled={!selectedCount || bulkBusy}>
-                  Activate selected
+            <IconButton label="Clear selection" onClick={() => setSelectedIds([])}>
+              <X />
+            </IconButton>
+          </>
+        ) : null}
+        <Grow />
+        <MatchTester />
+        <Menu
+          trigger={
+            <IconButton label="Import or export teams">
+              <Ellipsis />
+            </IconButton>
+          }
+          items={[
+            { label: "Export teams", icon: <Download />, onSelect: () => void handleExport() },
+            { label: "Import teams…", icon: <Upload />, onSelect: () => importRef.current?.click() }
+          ]}
+        />
+        <input
+          ref={importRef}
+          hidden
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleImport(file);
+            event.currentTarget.value = "";
+          }}
+        />
+        <Button variant="primary" onClick={() => void handleCreate()}>
+          <Plus aria-hidden />
+          New team
+        </Button>
+      </Toolbar>
+
+      <div className={openTeamId ? "ad-split has-panel" : "ad-split"}>
+        <div className="ad-table-wrap">
+          {!teams.data ? (
+            <p className="ad-hint" style={{ padding: 20 }}>
+              Loading teams…
+            </p>
+          ) : filteredTeams.length === 0 ? (
+            <div className="ad-empty">
+              <b>{allTeams.length ? "No teams match" : "No teams yet"}</b>
+              <p className="ad-hint">
+                {allTeams.length ? "Try another name, or show all teams." : "Add every team the feed may send, with its logo and the names it goes by."}
+              </p>
+              {allTeams.length ? (
+                <Button
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  Clear filters
                 </Button>
-                <Button variant="secondary" type="button" onClick={() => void handleBulkSetActive(false)} disabled={!selectedCount || bulkBusy}>
-                  Deactivate selected
+              ) : (
+                <Button variant="primary" onClick={() => void handleCreate()}>
+                  <Plus aria-hidden />
+                  New team
                 </Button>
-                <Button variant="danger" type="button" onClick={() => void handleBulkDelete()} disabled={!selectedCount || bulkBusy}>
-                  Delete selected
-                </Button>
-              </div>
-            </details>
-          </div>
-        </div>
-        <TableShell>
-          <Table
-            className={
-              compactRows
-                ? "max-[1200px]:min-w-[780px] [&_td]:px-2.5 [&_td]:py-2 [&_th]:px-2.5 [&_th]:py-2"
-                : "max-[1200px]:min-w-[780px]"
-            }
-          >
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-14 text-center">
-                  <label className="checkbox m-0 inline-flex w-full justify-center">
-                    <Checkbox
+              )}
+            </div>
+          ) : (
+            <table className="ad-table">
+              <thead>
+                <tr>
+                  <th className="ad-col-check">
+                    <input
+                      className="ad-check"
+                      type="checkbox"
+                      aria-label="Select all shown teams"
                       checked={allFilteredSelected}
                       ref={(node) => {
-                        if (node) {
-                          node.indeterminate = !allFilteredSelected && someFilteredSelected;
-                        }
+                        if (node) node.indeterminate = !allFilteredSelected && someFilteredSelected;
                       }}
-                      onChange={(event) => toggleSelectAllFiltered(event.target.checked)}
+                      onChange={(event) => toggleAllFiltered(event.target.checked)}
                     />
-                  </label>
-                </TableHead>
-                <TableHead>Team Name</TableHead>
-                <TableHead>Display Name</TableHead>
-                <TableHead>Short Name</TableHead>
-                <TableHead>Aliases</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTeams.length ? (
-                filteredTeams.map((team) => (
-                  <TableRow key={team.id}>
-                    <TableCell className="w-14 text-center">
-                      <label className="checkbox m-0 inline-flex w-full justify-center">
-                        <Checkbox
+                  </th>
+                  <SortHeader label="Team" asc="nameAsc" desc="nameDesc" sortBy={sortBy} onSort={setSortBy} />
+                  <th className="ad-col-2nd">Scoreboard name</th>
+                  <th>Short</th>
+                  <th className="ad-num" title="Names you added plus names learned from live">
+                    Match names
+                  </th>
+                  <th>Status</th>
+                  <SortHeader label="Updated" asc="updatedAsc" desc="updatedDesc" sortBy={sortBy} onSort={setSortBy} className="ad-col-2nd" />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTeams.map((team) => {
+                  const logo = logoFor(team);
+                  const open = team.id === openTeamId;
+                  return (
+                    <tr key={team.id} data-team-id={team.id} aria-selected={open} onClick={() => openTeam(team.id)}>
+                      <td className="ad-col-check" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          className="ad-check"
+                          type="checkbox"
+                          aria-label={`Select ${team.canonicalName}`}
                           checked={selectedIds.includes(team.id)}
-                          onChange={(event) => toggleTeamSelection(team.id, event.target.checked)}
+                          onChange={(event) => toggleOne(team.id, event.target.checked)}
                         />
-                      </label>
-                    </TableCell>
-                    <TableCell>
-                      <strong>{team.canonicalName}</strong>
-                    </TableCell>
-                    <TableCell>{team.scoreboardDisplayName || "—"}</TableCell>
-                    <TableCell>{team.shortName || "—"}</TableCell>
-                    <TableCell>{team.aliases.length}</TableCell>
-                    <TableCell>
-                      <Badge variant={team.active ? "success" : "default"}>{team.active ? "Active" : "Inactive"}</Badge>
-                    </TableCell>
-                    <TableCell>{formatUpdatedAt(team.updatedAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button variant="secondary" onClick={() => navigate(`/admin/teams/${team.id}`)}>
-                          Edit
-                        </Button>
-                        <Button variant="danger" onClick={() => void handleDelete(team.id, team.canonicalName)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableEmpty colSpan={8}>
-                    {(teams.data ?? []).length
-                      ? "No teams match the current filters."
-                      : "No teams yet. Create one to start building your team registry."}
-                  </TableEmpty>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableShell>
-      </Card>
+                      </td>
+                      <td className="ad-cell-name">
+                        <button
+                          type="button"
+                          className="ad-row-open"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openTeam(team.id);
+                          }}
+                        >
+                          <span className="ad-row-logo">{logo ? <img src={logo} alt="" loading="lazy" /> : null}</span>
+                          {team.canonicalName || "Untitled team"}
+                        </button>
+                      </td>
+                      <td className="ad-col-2nd">{team.scoreboardDisplayName || <span className="ad-faint">—</span>}</td>
+                      <td>{team.shortName || <span className="ad-faint">—</span>}</td>
+                      <td className="ad-num">{team.aliases.length + team.liveMatchNames.length}</td>
+                      <td>
+                        <span className={team.active ? "ad-status is-on" : "ad-status"}>
+                          <span className="ad-dot" aria-hidden />
+                          {team.active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="ad-col-2nd ad-faint" title={formatUpdatedAtFull(team.updatedAt)}>
+                        {formatUpdatedAt(team.updatedAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-      <div className="grid grid-cols-2 items-start gap-4 max-[1200px]:grid-cols-1">
-        <Card>
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Match Tester</p>
-              <h3>Resolve incoming name</h3>
-            </div>
-          </div>
-          <div className="form-grid">
-            <label>
-              Input name
-              <Input value={testerInput} onChange={(event) => setTesterInput(event.target.value)} placeholder="e.g. SBJ or Seattle Uprising" />
-            </label>
-            <div className="action-row compact">
-              <Button variant="secondary" onClick={() => void handleMatchTest()} disabled={!testerInput.trim()}>
-                Test match
-              </Button>
-            </div>
-          </div>
-          {testerResult ? (
-            <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-              <strong>
-                {testerResult.status} {testerResult.team ? `· ${testerResult.team.canonicalName}` : ""}
-              </strong>
-              <span className="text-md3-onSurfaceVariant">Normalized: {testerResult.normalizedInput || "n/a"}</span>
-              <span className="text-md3-onSurfaceVariant">Matched words: {testerResult.matchedAlias ?? (testerResult.normalizedInput || "n/a")}</span>
-              <span className="text-md3-onSurfaceVariant">Confidence: {(testerResult.confidence * 100).toFixed(1)}%</span>
-              {testerResult.matchedAlias ? <span className="text-md3-onSurfaceVariant">Matched alias: {testerResult.matchedAlias}</span> : null}
-              {testerResult.candidates.length ? (
-                <div className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
-                  {testerResult.candidates.map((candidate) => (
-                    <span key={`${candidate.teamId}:${candidate.matchedAlias ?? "candidate"}`} className="text-md3-onSurfaceVariant">
-                      {candidate.teamName} · {(candidate.confidence * 100).toFixed(1)}%{candidate.matchedAlias ? ` · ${candidate.matchedAlias}` : ""}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </Card>
+        {openTeamId ? (
+          <TeamPanel
+            key={openTeamId}
+            teamId={openTeamId}
+            teams={teams}
+            assets={assets}
+            onAirSide={onAirSide}
+            onClose={() => openTeam(null)}
+            onDirtyChange={setPanelDirty}
+          />
+        ) : null}
       </div>
-    </AdminPageFrame>
+    </div>
   );
 }

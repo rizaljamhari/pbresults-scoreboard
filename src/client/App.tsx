@@ -4,7 +4,6 @@ import { OverlayPage } from "./pages/OverlayPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TeamsPage } from "./pages/TeamsPage";
-import { TeamDetailPage } from "./pages/TeamDetailPage";
 import { ThemeEditorPage } from "./pages/ThemeEditorPage";
 import { ThemesPage } from "./pages/ThemesPage";
 
@@ -18,7 +17,7 @@ export function App() {
         <Route path="admin/operations" element={<OperationsPage />} />
         <Route path="admin/settings" element={<SettingsPage />} />
         <Route path="admin/teams" element={<TeamsPage />} />
-        <Route path="admin/teams/:id" element={<TeamDetailPage />} />
+        <Route path="admin/teams/:id" element={<TeamsPage />} />
         <Route path="admin/themes" element={<ThemesPage />} />
         <Route path="admin/themes/:id" element={<ThemeEditorPage />} />
       </Route>

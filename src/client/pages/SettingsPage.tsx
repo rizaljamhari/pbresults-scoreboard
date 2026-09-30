@@ -1,29 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Download, TriangleAlert, Upload } from "lucide-react";
 import { api } from "../api";
-import { useSettings, useThemes } from "../hooks";
+import { useSettings, useThemes, useUpdateStatus } from "../hooks";
 import { showToast } from "../toast";
-import {
-  AdminPageFrame,
-  AdminPageHeader,
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  FieldHint,
-  Input,
-  Select,
-  buttonVariants
-} from "../components/ui";
+import type { AppSettings } from "../../shared/theme";
+import { Button, Chip, Grow, SettingRow, Switch, Toolbar } from "../components/admin/kit";
+import { SoftwareUpdateRows } from "../components/SoftwareUpdateRows";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
-import { SoftwareUpdateCard } from "../components/SoftwareUpdateCard";
+
+const SECTIONS = [
+  { id: "set-feed", label: "Live feed" },
+  { id: "set-air", label: "On air" },
+  { id: "set-uploads", label: "Uploads" },
+  { id: "set-updates", label: "Software updates" },
+  { id: "set-backup", label: "Backup and restore" }
+] as const;
 
 export function SettingsPage() {
   const settings = useSettings();
   const themes = useThemes();
+  const update = useUpdateStatus();
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(settings.data ? createSettingsDraft(settings.data) : null);
   const [externallyChanged, setExternallyChanged] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
   const lastServerSettingsRef = useRef(settings.data);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!settings.data || !draft) {
@@ -63,7 +66,6 @@ export function SettingsPage() {
       event.preventDefault();
       event.returnValue = "";
     };
-
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [hasUnsavedChanges]);
@@ -98,30 +100,46 @@ export function SettingsPage() {
       event.preventDefault();
       void onSubmit();
     };
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hasUnsavedChanges, saving, draft]);
+
+  // The section list follows the scroll position.
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) {
+          setActiveSection(visible[0].target.id);
+        }
+      },
+      { root, rootMargin: "0px 0px -60% 0px" }
+    );
+    SECTIONS.forEach((section) => {
+      const element = document.getElementById(section.id);
+      if (element) observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [Boolean(settings.data)]);
+
+  function patch(next: Partial<AppSettings>) {
+    setDraft((current) => (current ? { ...current, ...next } : current));
+  }
 
   function handleDiscardChanges() {
     if (!settings.data || !hasUnsavedChanges || !draft) {
       return;
     }
-    const confirmed = window.confirm("Discard unsaved settings changes?");
-    if (!confirmed) {
+    if (!window.confirm("Discard your unsaved settings changes?")) {
       return;
     }
     setDraft(createSettingsDraft(settings.data));
     setExternallyChanged(false);
-    showToast({ kind: "info", message: "Draft changes discarded.", durationMs: 1800 });
-  }
-
-  if (!settings.data) {
-    return (
-      <Card>
-        <FieldHint>Loading settings…</FieldHint>
-      </Card>
-    );
+    showToast({ kind: "info", message: "Changes discarded.", durationMs: 1800 });
   }
 
   async function handleExportApp() {
@@ -133,13 +151,16 @@ export function SettingsPage() {
       link.download = `pbresults-scoreboard-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
       link.click();
       URL.revokeObjectURL(link.href);
-      showToast({ kind: "success", message: "App backup exported." });
+      showToast({ kind: "success", message: "Backup exported." });
     } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to export app backup." });
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to export the backup." });
     }
   }
 
   async function handleImportApp(file: File) {
+    if (!window.confirm(`Restore "${file.name}"? It replaces the current settings, themes, teams and logos.`)) {
+      return;
+    }
     try {
       const text = await file.text();
       const imported = await api.importApp(JSON.parse(text));
@@ -148,219 +169,216 @@ export function SettingsPage() {
       themes.setData(imported.themes);
       setDraft(createSettingsDraft(imported.settings));
       setExternallyChanged(false);
-      showToast({ kind: "success", message: "App backup restored." });
+      showToast({ kind: "success", message: "Backup restored." });
     } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to restore app backup." });
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to restore the backup." });
     }
   }
 
+  const updatesSupported = update.data?.managedUpdatesSupported ?? true;
+
   return (
-    <AdminPageFrame className="panel-stack">
-      <AdminPageHeader
-        eyebrow="Runtime"
-        title="Source and publishing settings"
-        description="Control live polling, publish target theme, and source configuration."
-        actions={(
-          <div className="action-row compact">
-            {externallyChanged ? <Badge variant="warning">Changed elsewhere</Badge> : null}
-            {hasUnsavedChanges ? <Badge variant="default">Unsaved changes</Badge> : <Badge variant="success">Saved</Badge>}
-            {externallyChanged ? (
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => {
-                  if (!settings.data) return;
-                  setDraft(createSettingsDraft(settings.data));
-                  setExternallyChanged(false);
-                }}
-              >
-                Reload server version
-              </Button>
-            ) : null}
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => handleDiscardChanges()}
-              disabled={!hasUnsavedChanges || saving}
+    <div className="ad-page ad-scope">
+      <Toolbar title="Settings">
+        {!draft ? null : hasUnsavedChanges ? (
+          <Chip tone="warning">Unsaved changes</Chip>
+        ) : (
+          <Chip tone="quiet">
+            <Check aria-hidden />
+            All changes saved
+          </Chip>
+        )}
+        <Grow />
+        <Button variant="ghost" onClick={handleDiscardChanges} disabled={!hasUnsavedChanges || saving}>
+          Discard
+        </Button>
+        <Button variant="primary" onClick={() => void onSubmit()} disabled={!hasUnsavedChanges || saving} title="Save (Ctrl/Cmd+S)">
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </Toolbar>
+
+      <div className="ad-body" ref={bodyRef}>
+        {!draft ? (
+          <p className="ad-hint" style={{ padding: 20 }}>
+            Loading settings…
+          </p>
+        ) : (
+          <div className="ad-settings">
+            <nav className="ad-toc" aria-label="Settings sections">
+              {SECTIONS.map((section) => (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  aria-current={activeSection === section.id ? "true" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    setActiveSection(section.id);
+                  }}
+                >
+                  {section.label}
+                </a>
+              ))}
+            </nav>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onSubmit();
+              }}
             >
-              Discard changes
-            </Button>
+              {externallyChanged ? (
+                <div className="ad-surface" style={{ marginBottom: 20, overflow: "hidden" }}>
+                  <div className="ad-callout ad-callout--warning">
+                    <TriangleAlert aria-hidden />
+                    <span style={{ flex: 1 }}>Settings were changed somewhere else while you were editing.</span>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!settings.data) return;
+                        setDraft(createSettingsDraft(settings.data));
+                        setExternallyChanged(false);
+                      }}
+                    >
+                      Load their version
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              <section className="ad-set-group" id="set-feed">
+                <h2>Live feed</h2>
+                <div className="ad-surface">
+                  <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from.">
+                    <input
+                      className="ad-input"
+                      aria-label="PBResults address"
+                      value={draft.upstreamBaseUrl}
+                      onChange={(event) => patch({ upstreamBaseUrl: event.target.value })}
+                    />
+                  </SettingRow>
+                  <SettingRow title="Check the feed every" hint="Lower is faster; 500 ms suits most events.">
+                    <label className="ad-unit">
+                      <input
+                        className="ad-input"
+                        type="number"
+                        min={100}
+                        step={50}
+                        aria-label="Check the feed every, in milliseconds"
+                        value={draft.pollIntervalMs}
+                        onChange={(event) => patch({ pollIntervalMs: Number(event.target.value || 0) })}
+                      />
+                      <span>ms</span>
+                    </label>
+                  </SettingRow>
+                  <SettingRow title="Live polling" hint="Turn off to freeze the scoreboard on its last data.">
+                    <Switch label="Live polling" checked={draft.pollEnabled} onChange={(pollEnabled) => patch({ pollEnabled })} />
+                  </SettingRow>
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-air">
+                <h2>On air</h2>
+                <div className="ad-surface">
+                  <SettingRow title="Theme on air" hint="What vMix shows. You can also put a theme on air from Themes.">
+                    <select
+                      className="ad-select"
+                      aria-label="Theme on air"
+                      value={draft.publishedThemeId ?? ""}
+                      onChange={(event) => patch({ publishedThemeId: event.target.value || null })}
+                    >
+                      <option value="">None</option>
+                      {themes.data?.map((theme) => (
+                        <option key={theme.id} value={theme.id}>
+                          {theme.name}
+                        </option>
+                      ))}
+                    </select>
+                  </SettingRow>
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-uploads">
+                <h2>Uploads</h2>
+                <div className="ad-surface">
+                  <SettingRow title="Remove image backgrounds" hint="Cut out logo backgrounds automatically when you upload.">
+                    <Switch
+                      label="Remove image backgrounds"
+                      checked={draft.autoRemoveBackgroundUploads}
+                      onChange={(autoRemoveBackgroundUploads) => patch({ autoRemoveBackgroundUploads })}
+                    />
+                  </SettingRow>
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-updates">
+                <h2>Software updates</h2>
+                <div className="ad-surface" style={{ overflow: "hidden" }}>
+                  <SoftwareUpdateRows update={update} hasUnsavedChanges={hasUnsavedChanges} />
+                  <SettingRow title="Check for updates automatically" hint="Stable releases from the official GitHub repository." dim={!updatesSupported}>
+                    <label className="ad-unit" title="How often to check">
+                      <input
+                        className="ad-input"
+                        type="number"
+                        min={1}
+                        max={168}
+                        aria-label="Check every, in hours"
+                        value={draft.updateCheckIntervalHours}
+                        disabled={!updatesSupported || !draft.updateCheckEnabled}
+                        onChange={(event) => patch({ updateCheckIntervalHours: Number(event.target.value || 6) })}
+                      />
+                      <span>hours</span>
+                    </label>
+                    <Switch
+                      label="Check for updates automatically"
+                      checked={draft.updateCheckEnabled}
+                      disabled={!updatesSupported}
+                      onChange={(updateCheckEnabled) => patch({ updateCheckEnabled })}
+                    />
+                  </SettingRow>
+                  <SettingRow title="Download updates automatically" hint="Installing always asks first." dim={!updatesSupported}>
+                    <Switch
+                      label="Download updates automatically"
+                      checked={draft.updateAutoDownload}
+                      disabled={!updatesSupported}
+                      onChange={(updateAutoDownload) => patch({ updateAutoDownload })}
+                    />
+                  </SettingRow>
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-backup">
+                <h2>Backup and restore</h2>
+                <div className="ad-surface">
+                  <SettingRow title="Full backup" hint="Settings, themes, teams and uploaded logos in one file.">
+                    <Button onClick={() => void handleExportApp()}>
+                      <Download aria-hidden />
+                      Export
+                    </Button>
+                    <Button variant="ghost" onClick={() => importInputRef.current?.click()}>
+                      <Upload aria-hidden />
+                      Restore…
+                    </Button>
+                    <input
+                      ref={importInputRef}
+                      hidden
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void handleImportApp(file);
+                        }
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </SettingRow>
+                </div>
+              </section>
+            </form>
           </div>
         )}
-      />
-
-      <Card>
-        <form
-          className="form-grid"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onSubmit();
-          }}
-        >
-          <label>
-            Upstream base URL
-            <Input
-              name="upstreamBaseUrl"
-              value={draft?.upstreamBaseUrl ?? ""}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        upstreamBaseUrl: event.target.value
-                      }
-                    : current
-                )
-              }
-            />
-          </label>
-          <label>
-            Published theme
-            <Select
-              name="publishedThemeId"
-              value={draft?.publishedThemeId ?? ""}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        publishedThemeId: event.target.value || null
-                      }
-                    : current
-                )
-              }
-            >
-              <option value="">None</option>
-              {themes.data?.map((theme) => (
-                <option key={theme.id} value={theme.id}>
-                  {theme.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label>
-            Poll interval (ms)
-            <Input
-              name="pollIntervalMs"
-              type="number"
-              min={100}
-              step={50}
-              value={draft?.pollIntervalMs ?? settings.data.pollIntervalMs}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        pollIntervalMs: Number(event.target.value || 0)
-                      }
-                    : current
-                )
-              }
-            />
-          </label>
-          <label className="checkbox">
-            <Checkbox
-              name="pollEnabled"
-              checked={draft?.pollEnabled ?? settings.data.pollEnabled}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        pollEnabled: event.target.checked
-                      }
-                    : current
-                )
-              }
-            />
-            Enable live polling
-          </label>
-          <label className="checkbox">
-            <Checkbox
-              name="autoRemoveBackgroundUploads"
-              checked={draft?.autoRemoveBackgroundUploads ?? settings.data.autoRemoveBackgroundUploads}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        autoRemoveBackgroundUploads: event.target.checked
-                      }
-                    : current
-                )
-              }
-            />
-            Automatically remove image backgrounds on upload
-          </label>
-          <label className="checkbox">
-            <Checkbox
-              name="updateCheckEnabled"
-              checked={draft?.updateCheckEnabled ?? settings.data.updateCheckEnabled}
-              onChange={(event) =>
-                setDraft((current) => (current ? { ...current, updateCheckEnabled: event.target.checked } : current))
-              }
-            />
-            Check automatically for software updates
-          </label>
-          <label>
-            Update check interval (hours)
-            <Input
-              name="updateCheckIntervalHours"
-              type="number"
-              min={1}
-              max={168}
-              value={draft?.updateCheckIntervalHours ?? settings.data.updateCheckIntervalHours}
-              onChange={(event) =>
-                setDraft((current) => (current ? { ...current, updateCheckIntervalHours: Number(event.target.value || 6) } : current))
-              }
-            />
-          </label>
-          <label className="checkbox">
-            <Checkbox
-              name="updateAutoDownload"
-              checked={draft?.updateAutoDownload ?? settings.data.updateAutoDownload}
-              onChange={(event) =>
-                setDraft((current) => (current ? { ...current, updateAutoDownload: event.target.checked } : current))
-              }
-            />
-            Download verified updates automatically (installation still requires confirmation)
-          </label>
-          <div className="action-row compact">
-            <Button disabled={saving || !hasUnsavedChanges} type="submit">
-              {saving ? "Saving…" : "Save settings"}
-            </Button>
-            <FieldHint>Tip: press Ctrl/Cmd+S to save.</FieldHint>
-          </div>
-        </form>
-      </Card>
-
-      <SoftwareUpdateCard hasUnsavedChanges={hasUnsavedChanges} />
-
-      <Card>
-        <p className="admin-page-eyebrow">Portability</p>
-        <h3 className="m-0 text-[var(--admin-section-size)] font-semibold text-md3-onBackground">Full app backup and restore</h3>
-        <FieldHint>Export settings, themes, and uploaded logo assets as one JSON bundle.</FieldHint>
-        <div className="action-row compact">
-          <Button variant="secondary" type="button" onClick={() => void handleExportApp()}>
-            Export full app backup
-          </Button>
-          <label className={buttonVariants({ variant: "secondary" })}>
-            Import full app backup
-            <input
-              hidden
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleImportApp(file);
-                }
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-        </div>
-      </Card>
-    </AdminPageFrame>
+      </div>
+    </div>
   );
 }

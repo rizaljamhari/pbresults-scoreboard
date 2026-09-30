@@ -15,60 +15,77 @@ import {
   listThemeComponentEntries,
   type ThemeComponent
 } from "../../shared/themeComponents";
-import { ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
-import { AdminPageFrame, AdminPageHeader, Badge, Button, FieldHint, buttonVariants } from "../components/ui";
-import { ThemeComponentInspector } from "../components/ThemeComponentInspector";
+import * as ContextMenu from "@radix-ui/react-context-menu";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Popover from "@radix-ui/react-popover";
+import * as Tooltip from "@radix-ui/react-tooltip";
+import {
+  AlignHorizontalJustifyCenter,
+  ArrowLeft,
+  ChevronDown,
+  Copy,
+  Crosshair,
+  ExternalLink,
+  Hand,
+  Image as ImageIcon,
+  Lock,
+  Magnet,
+  Maximize,
+  Menu,
+  Minus,
+  Monitor,
+  Moon,
+  MousePointer2,
+  Play,
+  SlidersHorizontal,
+  PanelRightOpen,
+  Plus,
+  Redo2,
+  RefreshCw,
+  SquareDashedMousePointer,
+  Sun,
+  Type,
+  Undo2
+} from "lucide-react";
+import { SnapOptionsPanel, ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
+import { IconButton, Island, ShortcutsHelp } from "../components/editor/EditorChrome";
+import { ArrangeMenuItems, ArrangePanel, type ArrangeActions } from "../components/editor/ArrangeControls";
+import { LayersPanel } from "../components/editor/LayersPanel";
+import { PieceProperties, themeSwatches } from "../components/editor/PieceProperties";
+import { ThemeProperties } from "../components/editor/ThemeProperties";
+import { EventOverlayProperties, type EventKind } from "../components/editor/EventOverlayProperties";
+import { EVENT_CARD_ID, type EventCardTarget } from "../components/editor/MoveableLayer";
+import { resolveEventLabelRect } from "../components/OverlayRenderer";
+import { PanelSection } from "../components/editor/fields";
+import {
+  alignPieces,
+  distributePieces,
+  matchSize as matchPieceSize,
+  mirroredComponentPairs,
+  setGapBetween,
+  type ArrangeReference
+} from "../../shared/themeArrange";
+import { CentreLineProperties } from "../components/editor/CentreLineProperties";
+import { PreviewDataProperties, type PreviewEventMode, type PreviewLogoMode, type PreviewNameMode, type PreviewPeriodMode, type PreviewSwitchMode } from "../components/editor/PreviewDataProperties";
 import { showToast } from "../toast";
 import { useAppEvents } from "../appEvents";
+import { useAppearance } from "../appearance";
 import { ResourceRefreshCoordinator } from "../resourceRefresh";
 
 
 type EditorMode = "basic" | "advanced";
 type InspectorView = "theme" | "component" | "concede" | "preview";
 type SlotId = "left" | "center" | "right";
-type PreviewNameMode = "live" | "short" | "long";
-type PreviewLogoMode = "live" | "matched" | "missing" | "unmatched";
-type PreviewPeriodMode = "live" | "GAME" | "BREAK";
-type PreviewEventMode = "live" | NormalizedLiveState["teamEvent"];
-type PreviewSwitchMode = "live" | "0" | "1";
 type PreviewPresetId = "live" | "game" | "break" | "towelHome" | "towelAway" | "baseHome" | "baseAway";
 const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const safeAreaTopInset = 54;
 const defaultTopInset = 24;
-const previewDrawerStorageKey = "pbresults.themeEditor.previewDrawerOpen";
 
 const componentLabels = fixedComponentLabels;
-
-const componentShortLabels: Record<ComponentId, string> = {
-  homeName: "Name",
-  homeTeamLogo: "Logo",
-  homeScore: "Score",
-  awayName: "Name",
-  awayTeamLogo: "Logo",
-  awayScore: "Score",
-  gameTime: "Primary",
-  breakTime: "Secondary",
-  eventLogo: "Event Logo"
-};
-
-const teamLogoFallbackModeLabels: Record<
-  ThemeDefinition["components"]["homeTeamLogo"]["teamLogoFallbackMode"],
-  string
-> = {
-  none: "Registry only",
-  eventLogo: "Event logo",
-  slotFallback: "Slot fallback asset",
-  slotFallbackThenEventLogo: "Slot fallback, then event logo"
-};
 
 const homeBlockIds: ComponentId[] = ["homeTeamLogo", "homeName", "homeScore"];
 const awayBlockIds: ComponentId[] = ["awayScore", "awayName", "awayTeamLogo"];
 const centerBlockIds: ComponentId[] = ["gameTime", "breakTime", "eventLogo"];
-const mirroredComponentPairs: Array<[ComponentId, ComponentId]> = [
-  ["homeTeamLogo", "awayTeamLogo"],
-  ["homeName", "awayName"],
-  ["homeScore", "awayScore"]
-];
 const previewEventStateMap: Record<Exclude<NormalizedLiveState["teamEvent"], "none">, string> = {
   "towel-home": "TOWEL1",
   "towel-away": "TOWEL2",
@@ -178,156 +195,6 @@ const concedePresets = {
   }
 } as const;
 
-export function NumberField(props: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-  step?: number;
-  unit?: string;
-  min?: number;
-  max?: number;
-}) {
-  return (
-    <label>
-      {props.label}
-      <div className="field-with-unit">
-        <input
-          type="number"
-          step={props.step ?? 1}
-          min={props.min}
-          max={props.max}
-          value={props.value}
-          onChange={(event) => props.onChange(Number(event.target.value))}
-        />
-        {props.unit ? (
-          <span className="inline-flex min-h-12 items-center whitespace-nowrap rounded-md3s border border-md3-outline bg-md3-surfaceContainer px-3.5 text-md3-onSurfaceVariant">
-            {props.unit}
-          </span>
-        ) : null}
-      </div>
-    </label>
-  );
-}
-
-export function normalizePickerColor(value: string) {
-  const normalized = value.trim();
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4})$/.test(normalized)) {
-    const chars = normalized.slice(1).split("");
-    return `#${chars[0]}${chars[0]}${chars[1]}${chars[1]}${chars[2]}${chars[2]}`;
-  }
-  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(normalized)) {
-    return normalized.slice(0, 7);
-  }
-  return "#000000";
-}
-
-export function mergePickerColor(current: string, next: string) {
-  const normalized = current.trim();
-  if (/^#[0-9a-fA-F]{8}$/.test(normalized)) {
-    return `${next}${normalized.slice(7)}`;
-  }
-  if (/^#[0-9a-fA-F]{4}$/.test(normalized)) {
-    return `${next}${normalized.slice(4)}`;
-  }
-  return next;
-}
-
-export function ColorField(props: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label>
-      {props.label}
-      <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-        <input
-          type="color"
-          className="mt-0"
-          value={normalizePickerColor(props.value)}
-          onChange={(event) => props.onChange(mergePickerColor(props.value, event.target.value))}
-        />
-        <input className="mt-0" value={props.value} onChange={(event) => props.onChange(event.target.value)} />
-      </div>
-    </label>
-  );
-}
-
-function PercentField(props: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <NumberField
-      label={props.label}
-      value={Math.round(props.value * 100)}
-      min={0}
-      max={100}
-      unit="%"
-      onChange={(value) => props.onChange(value / 100)}
-    />
-  );
-}
-
-export function TextField(props: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label>
-      {props.label}
-      <input value={props.value} onChange={(event) => props.onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function SectionCard(props: {
-  title: string;
-  description?: string;
-  defaultOpen?: boolean;
-  open?: boolean;
-  onToggle?: (open: boolean) => void;
-  children: React.ReactNode;
-}) {
-  const openProps = props.open === undefined ? { open: props.defaultOpen ?? true } : { open: props.open };
-
-  return (
-    <details
-      className="editor-section-card"
-      {...openProps}
-      onToggle={
-        props.onToggle
-          ? (event) => {
-              props.onToggle?.(event.currentTarget.open);
-            }
-          : undefined
-      }
-    >
-      <summary className="editor-section-header">
-        <div>
-          <h3>{props.title}</h3>
-        </div>
-      </summary>
-      <div className="editor-section-body">{props.children}</div>
-    </details>
-  );
-}
-
-function ComponentPillRow(props: {
-  ids: ComponentId[];
-  selected: ComponentId | null;
-  onSelect: (id: ComponentId) => void;
-  labels?: Record<ComponentId, string>;
-}) {
-  return (
-    <div className="component-pill-row">
-      {props.ids.map((id) => (
-        <button
-          key={id}
-          type="button"
-          className={
-            props.selected === id
-              ? "inline-flex min-h-10 items-center justify-center rounded-full border border-[#005fa32e] bg-md3-secondaryContainer px-3.5 py-2.5 text-md3-onPrimaryContainer shadow-none"
-              : "inline-flex min-h-10 items-center justify-center rounded-full border border-md3-outlineVariant bg-md3-surface px-3.5 py-2.5 text-md3-onPrimaryContainer shadow-none hover:bg-md3-surfaceContainerLow"
-          }
-          onClick={() => props.onSelect(id)}
-        >
-          {props.labels?.[id] ?? componentLabels[id]}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function slotForComponent(id: string | null): SlotId | null {
   if (!id || !isFixedComponentId(id)) {
@@ -346,9 +213,21 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+// Tab cycles canvas pieces only while focus is on the canvas (or nowhere); elsewhere it keeps moving focus.
+function isCanvasFocusTarget(target: EventTarget | null) {
+  if (target === document.body || target === document.documentElement) {
+    return true;
+  }
+  return target instanceof HTMLElement && Boolean(target.closest(".canvas-pan-layer"));
+}
+
 function isTextEditingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false;
+  }
+  // Keys pressed inside an open menu, popover or tooltip belong to it (Esc closes it, not the selection).
+  if (target.closest("[data-radix-popper-content-wrapper]")) {
+    return true;
   }
 
   if (target.isContentEditable) {
@@ -467,17 +346,6 @@ type LayoutScopeEntry = {
   component: ThemeComponent;
 };
 
-function resolveLayoutScopeEntries(
-  draft: ThemeDefinition,
-  ids: string[]
-): LayoutScopeEntry[] {
-  const all = ids
-    .map((id) => ({ id, component: getThemeComponent(draft, id) }))
-    .filter((entry): entry is LayoutScopeEntry => Boolean(entry.component));
-  const visible = all.filter((entry) => entry.component.visible);
-  return visible.length > 0 ? visible : all;
-}
-
 function getOrderedComponentIds(theme: ThemeDefinition) {
   return listThemeComponentEntries(theme).sort((left, right) => {
     const zIndexDifference = left.component.zIndex - right.component.zIndex;
@@ -525,6 +393,26 @@ function reorderComponentStack(
   return true;
 }
 
+// Space the floating islands cover; the frame fits into what is left. Layers hides at 1100px and below.
+const EDITOR_FIT_INSETS = { top: 100, right: 260, bottom: 72, left: 288 };
+const EDITOR_FIT_INSETS_NO_LAYERS = { ...EDITOR_FIT_INSETS, right: 14 };
+const LAYERS_HIDDEN_QUERY = "(max-width: 1100px)";
+
+// Locks are an editing aid, not theme data: kept per theme in this browser only.
+function lockStorageKey(themeId: string | undefined) {
+  return `pbresults.themeEditor.locks.${themeId ?? "none"}`;
+}
+
+function readLocks(themeId: string | undefined): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(lockStorageKey(themeId));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
 export function ThemeEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -538,22 +426,41 @@ export function ThemeEditorPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>(["homeName"]);
   const [selectedSlot, setSelectedSlot] = useState<SlotId>("left");
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [tool, setTool] = useState<"select" | "hand">("select");
+  const appearance = useAppearance();
+  const [arrangeReference, setArrangeReference] = useState<ArrangeReference>("selection");
+  // Properties shows the selection (or the theme); the two older settings views are reached from the theme panel.
+  const [propsView, setPropsView] = useState<"auto" | "preview">("auto");
+  const [layersCollapsed, setLayersCollapsed] = useState(false);
+  const selectionKey = selectedIds.join("|") + (selected ?? "");
+  useEffect(() => {
+    if (selectionKey) {
+      setPropsView("auto");
+    }
+  }, [selectionKey]);
+  const [lockedIds, setLockedIds] = useState<Set<string>>(() => readLocks(id));
+  useEffect(() => {
+    setLockedIds(readLocks(id));
+  }, [id]);
+  const [layersHidden, setLayersHidden] = useState(() => window.matchMedia(LAYERS_HIDDEN_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(LAYERS_HIDDEN_QUERY);
+    const update = () => setLayersHidden(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  // Saving the on-air theme changes the broadcast; ask once per editing session, then trust the header's On air badge.
+  const liveSaveConfirmedRef = useRef(false);
   const [history, setHistory] = useState<ThemeDefinition[]>([]);
   const [future, setFuture] = useState<ThemeDefinition[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<ThemeDefinition | null>(null);
   const [externalTheme, setExternalTheme] = useState<ThemeDefinition | null>(null);
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>("basic");
   const [inspectorView, setInspectorView] = useState<InspectorView>("component");
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [previewEnabled, setPreviewEnabled] = useState(false);
-  const [previewDrawerOpen, setPreviewDrawerOpen] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.localStorage.getItem(previewDrawerStorageKey) === "1";
-  });
   const [previewPeriod, setPreviewPeriod] = useState<PreviewPeriodMode>("live");
   const [previewEvent, setPreviewEvent] = useState<PreviewEventMode>("live");
   const [previewSidesSwitched, setPreviewSidesSwitched] = useState<PreviewSwitchMode>("live");
@@ -564,6 +471,12 @@ export function ThemeEditorPage() {
   const [previewRightScore, setPreviewRightScore] = useState(1);
   const [previewGameTimerValue, setPreviewGameTimerValue] = useState(371);
   const [previewBreakTimerValue, setPreviewBreakTimerValue] = useState(3);
+  // "Preview as": which broadcast state the canvas shows, and for event states, which team it is for.
+  const [previewMode, setPreviewMode] = useState<"live" | "game" | "break" | "towel" | "base" | "winner">("live");
+  const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
+  const [previewFinished, setPreviewFinished] = useState(false);
+  const [overlayKey, setOverlayKey] = useState(0);
+  const [eventCardSelected, setEventCardSelected] = useState(false);
   const theme = themeResource.data;
   const themeRef = useRef(theme);
   const savedSnapshotRef = useRef(savedSnapshot);
@@ -573,15 +486,9 @@ export function ThemeEditorPage() {
   const selectedEntry = theme && selected ? getThemeComponentEntry(theme, selected) : null;
   const selectedEditableComponent = selectedEntry?.component ?? null;
 
-  const selectedTextComponent = selectedEditableComponent?.kind === "text" ? selectedEditableComponent : null;
   const selectedImageComponent = selectedEditableComponent?.kind === "image" ? selectedEditableComponent : null;
   const selectedIsTeamLogo = selected === "homeTeamLogo" || selected === "awayTeamLogo";
   const selectedSlotConfig = slotConfig[selectedSlot];
-  const selectedShortLabel = selectedEntry
-    ? selectedEntry.source === "free"
-      ? selectedEntry.label
-      : componentShortLabels[selectedEntry.id as ComponentId]
-    : "No piece";
   const sampleTeams = (teams.data ?? []).filter((team) => team.active);
   const defaultLeftPreviewTeam =
     live.data?.displayLeftTeamMatch.team ??
@@ -708,6 +615,12 @@ export function ThemeEditorPage() {
       next.sidesSwitched = Number(previewSidesSwitched);
     }
 
+    // A finished match: the overlay reveals the winner during the break after the final whistle.
+    if (previewFinished) {
+      next.state = "END";
+      next.period = "BREAK";
+    }
+
     if (previewEvent !== "live") {
       next.teamEvent = previewEvent;
       next.state = previewEvent === "none" ? next.state : previewEventStateMap[previewEvent];
@@ -766,6 +679,38 @@ export function ThemeEditorPage() {
     );
   }
 
+  function applyPreviewMode(mode: typeof previewMode, side: "left" | "right" = previewSide) {
+    setPreviewMode(mode);
+    setPreviewSide(side);
+    setPreviewFinished(false);
+    if (mode === "live") {
+      resetPreviewState();
+      setEventCardSelected(false);
+      return;
+    }
+    if (mode === "game" || mode === "break") {
+      applyPreviewPreset(mode);
+      setEventCardSelected(false);
+      return;
+    }
+    // Events are recorded against home/away; which of those is on the left depends on the side switch.
+    const leftIsHome = (live.data?.sidesSwitched ?? 0) !== 1;
+    const home = side === "left" ? leftIsHome : !leftIsHome;
+    if (mode === "towel" || mode === "base") {
+      applyPreviewPreset(mode === "towel" ? (home ? "towelHome" : "towelAway") : home ? "baseHome" : "baseAway");
+    } else {
+      applyPreviewPreset("break");
+      setPreviewFinished(true);
+      setPreviewLeftScore(side === "left" ? 3 : 1);
+      setPreviewRightScore(side === "left" ? 1 : 3);
+    }
+    // Entering an event state selects its card, so Properties shows what can be changed.
+    setSelectedIds([]);
+    setSelected(null);
+    setSelectAllMode(false);
+    setEventCardSelected(true);
+  }
+
   const selectedLogoContext =
     selectedIsTeamLogo && selectedImageComponent
       ? (() => {
@@ -800,11 +745,19 @@ export function ThemeEditorPage() {
       : null;
   const selectedMirroredPair = selected && isFixedComponentId(selected) ? mirroredPairForComponent(selected) : null;
   const hasUnsavedChanges = savedSnapshot && theme ? !sameTheme(savedSnapshot, theme) : false;
-  const orderedComponentIds = theme ? getOrderedComponentIds(theme) : [];
-  const selectedStackIndex = selected ? orderedComponentIds.indexOf(selected) : -1;
-  const canBringBackward = selectedStackIndex > 0;
-  const canBringForward = selectedStackIndex >= 0 && selectedStackIndex < orderedComponentIds.length - 1;
+  const isOnAir = Boolean(theme && settings.data?.publishedThemeId === theme.id);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasUnsavedChanges]);
   function sameTheme(left: ThemeDefinition, right: ThemeDefinition) {
     return JSON.stringify(left) === JSON.stringify(right);
   }
@@ -882,18 +835,6 @@ export function ThemeEditorPage() {
     });
   }
 
-  function patchSelectedTextComponent(mutator: (component: TextThemeComponent | FreeTextComponent) => void) {
-    if (!selected) {
-      return;
-    }
-    patchTheme((draft) => {
-      const component = getThemeComponent(draft, selected);
-      if (component?.kind === "text") {
-        mutator(component);
-      }
-    });
-  }
-
   function patchTeamEventOverlay(mutator: (overlay: ThemeDefinition["teamEventOverlay"]) => void) {
     patchTheme((draft) => {
       mutator(draft.teamEventOverlay);
@@ -925,7 +866,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponent(id: string, options?: { additive?: boolean }) {
-    setActiveMenu(null);
+    setEventCardSelected(false);
     setSelectAllMode(false);
     const additive = options?.additive === true;
 
@@ -953,7 +894,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponents(ids: string[], options?: { additive?: boolean }) {
-    setActiveMenu(null);
+    setEventCardSelected(false);
     setSelectAllMode(false);
 
     const unique = Array.from(new Set(ids));
@@ -983,22 +924,7 @@ export function ThemeEditorPage() {
     setInspectorView("component");
   }
 
-  function selectSlot(slot: SlotId) {
-    setActiveMenu(null);
-    setSelectAllMode(false);
-    setSelectedSlot(slot);
-    if (!selected || !isFixedComponentId(selected) || !slotConfig[slot].ids.includes(selected)) {
-      const nextId = slotConfig[slot].ids[0];
-      setSelected(nextId);
-      setSelectedIds(nextId ? [nextId] : []);
-    } else {
-      setSelectedIds([selected]);
-    }
-    setInspectorView("component");
-  }
-
   function selectAllComponents() {
-    setActiveMenu(null);
     setSelectAllMode(true);
     if (themeResource.data) {
       const ids = listThemeComponentEntries(themeResource.data).map((entry) => entry.id);
@@ -1007,13 +933,6 @@ export function ThemeEditorPage() {
     setInspectorView("component");
   }
 
-  function toggleMenu(id: string) {
-    setActiveMenu((current) => (current === id ? null : id));
-  }
-
-  function closeMenus() {
-    setActiveMenu(null);
-  }
 
   function applyConcedePreset(presetId: keyof typeof concedePresets) {
     const preset = concedePresets[presetId].values;
@@ -1095,137 +1014,6 @@ export function ThemeEditorPage() {
         component.y += deltaY;
       }
     });
-  }
-
-  function getLayoutScopeIds(currentTheme: ThemeDefinition): string[] {
-    if (selectAllMode) {
-      return listThemeComponentEntries(currentTheme).map((entry) => entry.id);
-    }
-    if (selected && !isFixedComponentId(selected)) {
-      return selectedIds.length > 0 ? selectedIds : [selected];
-    }
-    return selectedSlotConfig.ids;
-  }
-
-  function alignLayoutScope(mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") {
-    if (!themeResource.data) {
-      return;
-    }
-
-    patchTheme((draft) => {
-      const ids = getLayoutScopeIds(draft);
-      const entries = resolveLayoutScopeEntries(draft, ids);
-      if (entries.length <= 1) {
-        return;
-      }
-
-      const minX = Math.min(...entries.map((entry) => entry.component.x));
-      const minY = Math.min(...entries.map((entry) => entry.component.y));
-      const maxX = Math.max(...entries.map((entry) => entry.component.x + entry.component.width));
-      const maxY = Math.max(...entries.map((entry) => entry.component.y + entry.component.height));
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
-
-      for (const entry of entries) {
-        if (mode === "left") {
-          entry.component.x = minX;
-        } else if (mode === "centerX") {
-          entry.component.x = Math.round(centerX - entry.component.width / 2);
-        } else if (mode === "right") {
-          entry.component.x = Math.round(maxX - entry.component.width);
-        } else if (mode === "top") {
-          entry.component.y = minY;
-        } else if (mode === "centerY") {
-          entry.component.y = Math.round(centerY - entry.component.height / 2);
-        } else if (mode === "bottom") {
-          entry.component.y = Math.round(maxY - entry.component.height);
-        }
-      }
-    });
-    closeMenus();
-  }
-
-  function distributeLayoutScope(axis: "horizontal" | "vertical") {
-    if (!themeResource.data) {
-      return;
-    }
-
-    patchTheme((draft) => {
-      const ids = getLayoutScopeIds(draft);
-      const entries = resolveLayoutScopeEntries(draft, ids);
-      if (entries.length < 3) {
-        return;
-      }
-
-      const sorted = [...entries].sort((left, right) =>
-        axis === "horizontal"
-          ? left.component.x - right.component.x
-          : left.component.y - right.component.y
-      );
-
-      const first = sorted[0].component;
-      const last = sorted[sorted.length - 1].component;
-      const start = axis === "horizontal" ? first.x : first.y;
-      const end =
-        axis === "horizontal"
-          ? last.x + last.width
-          : last.y + last.height;
-      const totalSize = sorted.reduce(
-        (sum, entry) => sum + (axis === "horizontal" ? entry.component.width : entry.component.height),
-        0
-      );
-      const span = end - start;
-      if (span <= totalSize) {
-        return;
-      }
-
-      const gap = (span - totalSize) / (sorted.length - 1);
-      let cursor = start;
-
-      for (const entry of sorted) {
-        if (axis === "horizontal") {
-          entry.component.x = Math.round(cursor);
-          cursor += entry.component.width + gap;
-        } else {
-          entry.component.y = Math.round(cursor);
-          cursor += entry.component.height + gap;
-        }
-      }
-    });
-    closeMenus();
-  }
-
-  function matchLayoutScopeSize(mode: "width" | "height" | "both") {
-    if (!themeResource.data) {
-      return;
-    }
-
-    patchTheme((draft) => {
-      const ids = getLayoutScopeIds(draft);
-      const entries = resolveLayoutScopeEntries(draft, ids);
-      if (entries.length < 2) {
-        return;
-      }
-
-      const referenceId = selected && ids.includes(selected) ? selected : entries[0].id;
-      const reference = getThemeComponent(draft, referenceId);
-      if (!reference) {
-        return;
-      }
-
-      for (const entry of entries) {
-        if (entry.id === referenceId) {
-          continue;
-        }
-        if (mode === "width" || mode === "both") {
-          entry.component.width = reference.width;
-        }
-        if (mode === "height" || mode === "both") {
-          entry.component.height = reference.height;
-        }
-      }
-    });
-    closeMenus();
   }
 
   function syncTeamSlot(direction: "leftToRight" | "rightToLeft") {
@@ -1323,7 +1111,10 @@ export function ThemeEditorPage() {
 
     if (selectAllMode) {
       patchTheme((draft) => {
-        for (const { component } of listThemeComponentEntries(draft)) {
+        for (const { id: pieceId, component } of listThemeComponentEntries(draft)) {
+          if (lockedIds.has(pieceId)) {
+            continue;
+          }
           component.x += dx;
           component.y += dy;
         }
@@ -1331,9 +1122,13 @@ export function ThemeEditorPage() {
       return;
     }
 
+    if (selected && selectedIds.length <= 1 && lockedIds.has(selected)) {
+      return;
+    }
+
     if (selectedIds.length > 1) {
       patchTheme((draft) => {
-        for (const id of selectedIds) {
+        for (const id of selectedIds.filter((pieceId) => !lockedIds.has(pieceId))) {
           const component = getThemeComponent(draft, id);
           if (!component) {
             continue;
@@ -1349,7 +1144,7 @@ export function ThemeEditorPage() {
   }
 
   function clearSelectionState() {
-    setActiveMenu(null);
+    setEventCardSelected(false);
     setSelectAllMode(false);
     setSelectedIds([]);
     setSelected(null);
@@ -1372,20 +1167,6 @@ export function ThemeEditorPage() {
         draft.freeComponents[index] = structuredClone(savedComponent);
       }
     });
-    closeMenus();
-  }
-
-  function resetSelectedSlotToSaved() {
-    if (!savedSnapshot) {
-      return;
-    }
-
-    patchTheme((draft) => {
-      for (const id of selectedSlotConfig.ids) {
-        Object.assign(draft.components[id], structuredClone(savedSnapshot.components[id]));
-      }
-    });
-    closeMenus();
   }
 
   function nextFreeComponentLabel(prefix: string) {
@@ -1504,7 +1285,6 @@ export function ThemeEditorPage() {
       }
       draft.canvas.safeArea = preset.canvas.safeArea;
     });
-    closeMenus();
   }
 
   function cycleSelectedPiece(direction: 1 | -1) {
@@ -1539,17 +1319,26 @@ export function ThemeEditorPage() {
     });
   }
 
-  async function save(options?: { skipBuiltinConfirm?: boolean }) {
-    if (!themeResource.data) {
-      return;
+  async function save(options?: { skipBuiltinConfirm?: boolean; skipOnAirConfirm?: boolean; silent?: boolean }) {
+    if (!themeResource.data || saving) {
+      return false;
     }
     if (themeResource.data.builtin && !options?.skipBuiltinConfirm) {
       const confirmed = window.confirm(
         "You are about to update a built-in theme. This will affect all users of this built-in. Continue?"
       );
       if (!confirmed) {
-        return;
+        return false;
       }
+    }
+    if (isOnAir && !options?.skipOnAirConfirm && !liveSaveConfirmedRef.current) {
+      const confirmed = window.confirm(
+        `“${themeResource.data.name}” is on air. Saving updates the live broadcast immediately.\n\nYou won't be asked again while this editor stays open.`
+      );
+      if (!confirmed) {
+        return false;
+      }
+      liveSaveConfirmedRef.current = true;
     }
     setSaving(true);
     try {
@@ -1559,13 +1348,23 @@ export function ThemeEditorPage() {
       setHistory([structuredClone(saved)]);
       setFuture([]);
       setExternalTheme(null);
+      if (!options?.silent) {
+        showToast({ kind: "success", message: isOnAir ? "Saved. The live overlay is updated." : "Theme saved." });
+      }
+      return true;
+    } catch (error) {
+      showToast({
+        kind: "error",
+        message: `Save failed: ${error instanceof Error ? error.message : "unknown error"}. Your changes are still here.`
+      });
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
   async function saveAsCopy() {
-    if (!themeResource.data) {
+    if (!themeResource.data || saving) {
       return;
     }
     setSaving(true);
@@ -1581,26 +1380,123 @@ export function ThemeEditorPage() {
       setHistory([structuredClone(saved)]);
       setFuture([]);
       setExternalTheme(null);
+      showToast({ kind: "success", message: `Saved as “${saved.name}”. The original theme is unchanged.` });
       navigate(`/admin/themes/${saved.id}`);
+    } catch (error) {
+      showToast({
+        kind: "error",
+        message: `Save as copy failed: ${error instanceof Error ? error.message : "unknown error"}. Your changes are still here.`
+      });
     } finally {
       setSaving(false);
     }
   }
 
   async function publish() {
-    if (!themeResource.data) {
+    const current = themeResource.data;
+    if (!current || publishing || saving) {
       return;
     }
-    if (themeResource.data.builtin) {
-      const confirmed = window.confirm(
-        "Publish updates to this built-in theme? This may immediately change the live overlay for published built-ins."
-      );
-      if (!confirmed) {
-        return;
-      }
+    if (isOnAir) {
+      await save();
+      return;
     }
-    await save({ skipBuiltinConfirm: true });
-    await api.publishTheme(themeResource.data.id);
+    const notes = [
+      hasUnsavedChanges ? "Your unsaved changes are saved first." : null,
+      current.builtin ? "This is a built-in theme; saving also updates it for every user of it." : null
+    ].filter(Boolean);
+    const confirmed = window.confirm(
+      [`Put “${current.name}” on air?`, "The live overlay switches to this theme immediately, replacing the one on air now.", ...notes].join("\n\n")
+    );
+    if (!confirmed) {
+      return;
+    }
+    setPublishing(true);
+    try {
+      if (hasUnsavedChanges || current.builtin) {
+        const saved = await save({ skipBuiltinConfirm: true, skipOnAirConfirm: true, silent: true });
+        if (!saved) {
+          return;
+        }
+      }
+      await api.publishTheme(current.id);
+      settings.setData((previous) => (previous ? { ...previous, publishedThemeId: current.id } : previous));
+      liveSaveConfirmedRef.current = true;
+      showToast({ kind: "success", message: `“${current.name}” is now on air.` });
+    } catch (error) {
+      showToast({
+        kind: "error",
+        message: `Publish failed: ${error instanceof Error ? error.message : "unknown error"}. The previous theme is still on air.`
+      });
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  function activePieceIds() {
+    if (!themeResource.data) {
+      return [];
+    }
+    if (selectAllMode) {
+      return listThemeComponentEntries(themeResource.data).map((entry) => entry.id);
+    }
+    if (selectedIds.length > 0) {
+      return selectedIds;
+    }
+    return selected ? [selected] : [];
+  }
+
+  // Arrange commands leave locked pieces where they are.
+  function arrangeSelection(run: (draft: ThemeDefinition, ids: string[]) => void) {
+    const ids = activePieceIds().filter((pieceId) => !lockedIds.has(pieceId));
+    if (ids.length === 0) {
+      return;
+    }
+    patchTheme((draft) => run(draft, ids));
+  }
+
+  function toggleLockForSelection() {
+    toggleLock(activePieceIds());
+  }
+
+  function toggleLock(ids: string[]) {
+    if (ids.length === 0) {
+      return;
+    }
+    setLockedIds((current) => {
+      const next = new Set(current);
+      const lockAll = ids.some((pieceId) => !current.has(pieceId));
+      for (const pieceId of ids) {
+        if (lockAll) {
+          next.add(pieceId);
+        } else {
+          next.delete(pieceId);
+        }
+      }
+      try {
+        window.localStorage.setItem(lockStorageKey(id), JSON.stringify(Array.from(next)));
+      } catch {
+        // Locks still work for this session when storage is unavailable.
+      }
+      return next;
+    });
+  }
+
+  function reloadServerTheme() {
+    if (!externalTheme) {
+      return;
+    }
+    if (hasUnsavedChanges && !window.confirm("Discard your draft and load the server version?")) {
+      return;
+    }
+    applyServerTheme(externalTheme);
+  }
+
+  function leaveEditor() {
+    if (hasUnsavedChanges && !window.confirm("Leave without saving? Your unsaved changes will be lost.")) {
+      return;
+    }
+    navigate("/admin/themes");
   }
 
   async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base" | "winner") {
@@ -1675,24 +1571,6 @@ export function ThemeEditorPage() {
   }, [theme?.id]);
 
   useEffect(() => {
-    function onPointerDown(event: PointerEvent) {
-      if (!activeMenu) {
-        return;
-      }
-      if (!(event.target instanceof Node)) {
-        return;
-      }
-      const menuRoot = (event.target as HTMLElement).closest(".row-action-menu");
-      if (!menuRoot) {
-        setActiveMenu(null);
-      }
-    }
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [activeMenu]);
-
-  useEffect(() => {
     if (previewEnabled || !live.data) {
       return;
     }
@@ -1701,13 +1579,6 @@ export function ThemeEditorPage() {
     setPreviewGameTimerValue(live.data.gameTimer.value);
     setPreviewBreakTimerValue(live.data.breakTimer.value);
   }, [previewEnabled, live.data?.displayLeftTeam.score, live.data?.displayRightTeam.score, live.data?.gameTimer.value, live.data?.breakTimer.value]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(previewDrawerStorageKey, previewDrawerOpen ? "1" : "0");
-  }, [previewDrawerOpen]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1728,16 +1599,56 @@ export function ThemeEditorPage() {
       }
 
       if (event.key === "Escape") {
-        event.preventDefault();
-        if (activeMenu) {
-          setActiveMenu(null);
+        if (document.querySelector("[data-radix-popper-content-wrapper]")) {
           return;
         }
+        event.preventDefault();
         clearSelectionState();
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        duplicateSelectedFreeComponent();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && (event.code === "BracketRight" || event.code === "BracketLeft")) {
+        event.preventDefault();
+        const forward = event.code === "BracketRight";
+        reorderSelectedComponent(forward ? (event.shiftKey ? "sendToFront" : "bringForward") : event.shiftKey ? "sendToBack" : "bringBackward");
+        return;
+      }
+
+      if (event.altKey && event.shiftKey && !event.metaKey && !event.ctrlKey && (event.code === "KeyH" || event.code === "KeyV")) {
+        event.preventDefault();
+        arrangeSelection((draft, ids) => distributePieces(draft, ids, event.code === "KeyH" ? "x" : "y"));
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        const key = event.key.toLowerCase();
+        if (key === "v" || key === "h") {
+          event.preventDefault();
+          setTool(key === "v" ? "select" : "hand");
+          return;
+        }
+        if (key === "t") {
+          event.preventDefault();
+          addFreeTextComponent();
+          return;
+        }
+        if (key === "i") {
+          event.preventDefault();
+          addFreeImageComponent();
+          return;
+        }
+      }
+
       if (event.key === "Tab") {
+        if (!isCanvasFocusTarget(event.target)) {
+          return;
+        }
         event.preventDefault();
         cycleSelectedPiece(event.shiftKey ? -1 : 1);
         return;
@@ -1777,1161 +1688,512 @@ export function ThemeEditorPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMenu, future, history, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
+  }, [future, history, lockedIds, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
 
   if (!theme) {
-    return <section className="panel"><FieldHint>Loading theme...</FieldHint></section>;
+    return (
+      <div className="te-shell te-loading" role="status">
+        Loading theme…
+      </div>
+    );
   }
 
-  const selectedSummaryLabel =
-    selectAllMode
-      ? "Editing all components"
-      : selectedIds.length > 1
-        ? `Editing ${selectedIds.length} pieces`
-        : selected
-          ? selectedEntry?.source === "free"
-            ? `Editing Custom > ${selectedShortLabel}`
-            : `Editing ${selectedSlotConfig.title} > ${selectedShortLabel}`
-          : "No piece selected";
-  const selectedIdSet = new Set(selectedIds);
-  const selectionModeDetail = selectAllMode
-    ? "Global layout scope"
-    : selectedIds.length > 1
-      ? "Multi-selection active"
-      : selected
-        ? "Single-piece mode"
-        : "Choose a piece from the structure rail or canvas.";
+  const eventKind: EventKind | null =
+    previewMode === "towel" ? "concede" : previewMode === "base" ? "base" : previewMode === "winner" ? "winner" : null;
+  const eventCard: EventCardTarget | null = (() => {
+    if (!eventKind) {
+      return null;
+    }
+    const general = theme.teamEventOverlay.general;
+    const followed =
+      general.followTarget === "logo"
+        ? { id: previewSide === "left" ? "homeTeamLogo" : "awayTeamLogo", component: previewSide === "left" ? theme.components.homeTeamLogo : theme.components.awayTeamLogo, word: "logo" }
+        : general.followTarget === "name"
+          ? { id: previewSide === "left" ? "homeName" : "awayName", component: previewSide === "left" ? theme.components.homeName : theme.components.awayName, word: "name" }
+          : null;
+    const following = Boolean(followed && followed.component.visible);
+    const rect = resolveEventLabelRect(previewSide, theme, general);
+    return {
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      movable: !following,
+      label: `${eventKind === "concede" ? "Towel" : eventKind === "base" ? "Base" : "Winner"} card`,
+      badge: followed
+        ? following
+          ? `Follows ${previewSide} ${followed.word}`
+          : `${followed.word === "logo" ? "Logo" : "Name"} hidden, using own placement`
+        : null,
+      onBadgeClick: followed && following ? () => selectComponent(followed.id) : undefined
+    };
+  })();
+  const patchEventSettings = (update: (settings: ThemeDefinition["teamEventOverlay"]["concede"]) => void) => {
+    if (eventKind) {
+      patchTheme((draft) => update(draft.teamEventOverlay[eventKind]));
+    }
+  };
+
+  const arrangeIds = eventCardSelected ? [] : activePieceIds();
+  const singleSelectedId = arrangeIds.length === 1 ? arrangeIds[0] : null;
+  const mirrorPair = singleSelectedId && isFixedComponentId(singleSelectedId) ? mirroredPairForComponent(singleSelectedId) : null;
+  const arrangeActions: ArrangeActions | null =
+    arrangeIds.length > 0
+      ? {
+          count: arrangeIds.length,
+          reference: arrangeReference,
+          setReference: setArrangeReference,
+          align: (edge) => arrangeSelection((draft, ids) => alignPieces(draft, ids, edge, arrangeReference)),
+          distribute: (axis) => arrangeSelection((draft, ids) => distributePieces(draft, ids, axis)),
+          setGap: (axis, gap) => arrangeSelection((draft, ids) => setGapBetween(draft, ids, axis, gap)),
+          matchSize: (dimension) => arrangeSelection((draft, ids) => matchPieceSize(draft, ids, dimension)),
+          mirror: mirrorPair
+            ? {
+                label: singleSelectedId === mirrorPair[0] ? "Mirror to right team" : "Mirror to left team",
+                run: mirrorSelectedPieceLayout
+              }
+            : undefined,
+          locked: arrangeIds.every((pieceId) => lockedIds.has(pieceId)),
+          toggleLock: toggleLockForSelection,
+          canReorder: Boolean(singleSelectedId),
+          reorder: reorderSelectedComponent,
+          duplicate: selectedEntry?.source === "free" && singleSelectedId ? duplicateSelectedFreeComponent : undefined,
+          remove: selectedEntry?.source === "free" && singleSelectedId ? deleteSelectedFreeComponent : undefined
+        }
+      : null;
 
   return (
-    <AdminPageFrame className="panel-stack editor-layout">
-      <div className="panel">
-        <AdminPageHeader
-          eyebrow="Theme Editor"
-          title={theme.name}
-          description={
-            <div className="editor-header-status">
-              {hasUnsavedChanges ? <Badge variant="warning">Unsaved changes</Badge> : <span>Ready to publish</span>}
-              {externalTheme ? <Badge variant="critical">Changed elsewhere</Badge> : null}
-              <span>{theme.builtin ? "Built-in theme" : "Custom theme"}</span>
-            </div>
+    <Tooltip.Provider delayDuration={350} skipDelayDuration={150}>
+    <div className="te-shell">
+      <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>
+      <div className="te-canvas-host">
+      <ThemeCanvasEditor
+        layout="fullscreen"
+        lockedIds={lockedIds}
+        fitInsets={layersHidden || layersCollapsed ? EDITOR_FIT_INSETS_NO_LAYERS : EDITOR_FIT_INSETS}
+        panMode={tool === "hand"}
+        theme={theme}
+        live={previewLive}
+        assets={assets.data ?? []}
+        selectedId={eventCardSelected ? null : selected}
+        selectedIds={eventCardSelected ? [EVENT_CARD_ID] : selectedIds}
+        eventCard={eventCard}
+        overlayKey={overlayKey}
+        selectAll={selectAllMode}
+        zoom={canvasZoom}
+        onZoomChange={setCanvasZoom}
+        onSelect={(pieceId, options) => {
+          if (pieceId === EVENT_CARD_ID) {
+            setSelectedIds([]);
+            setSelected(null);
+            setSelectAllMode(false);
+            setEventCardSelected(true);
+            return;
           }
-          actions={(
-            <div className="editor-header-actions editor-header-actions--compact">
-              <Button variant="secondary" onClick={() => navigate("/admin/themes")}>
-                Back
-              </Button>
-              <Button variant="secondary" onClick={undo} disabled={history.length <= 1} title="Undo">
-                ↶ Undo
-              </Button>
-              <Button variant="secondary" onClick={redo} disabled={future.length === 0} title="Redo">
-                ↷ Redo
-              </Button>
-              {externalTheme ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      if (hasUnsavedChanges && !window.confirm("Discard your draft and load the server version?")) return;
-                      applyServerTheme(externalTheme);
-                    }}
-                  >
-                    Reload server version
-                  </Button>
-                  <Button variant="secondary" onClick={() => setExternalTheme(null)}>
-                    Keep editing
-                  </Button>
-                </>
-              ) : null}
-              <a
-                className={buttonVariants({ variant: "secondary" })}
-                href={`/overlay/preview/${theme.id}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open preview
-              </a>
-              <Button variant="secondary" onClick={() => void save()}>
-                {saving ? "Saving…" : "Save"}
-              </Button>
-              <Button onClick={() => void publish()}>Publish</Button>
-            </div>
-          )}
-        />
-
-        <div className="editor-workspace">
-          <aside className="editor-utility-rail">
-            <section className="editor-sidebar-card">
-              <div className="editor-sidebar-card-header">
-                <div>
-                  <p className="editor-sidebar-kicker">Structure</p>
-                  <h3>Components</h3>
-                </div>
-                <Badge variant={hasUnsavedChanges ? "warning" : "default"}>
-                  {hasUnsavedChanges ? "Draft" : "Saved"}
-                </Badge>
-              </div>
-              <div className="editor-sidebar-card-body">
-                <div className="editor-sidebar-actions editor-sidebar-actions--tight">
-                  <button type="button" className="secondary-button" onClick={addFreeTextComponent}>
-                    + Text
+          selectComponent(pieceId, options);
+        }}
+        onMarqueeSelect={selectComponents}
+        onSelectAll={selectAllComponents}
+        onUpdate={updateTheme}
+        renderChrome={(canvas) => (
+          <>
+            <Island className="te-ident">
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button type="button" className="te-icon-btn" aria-label="Theme menu">
+                    <Menu />
                   </button>
-                  <button type="button" className="secondary-button" onClick={addFreeImageComponent}>
-                    + Image
-                  </button>
-                  <button
-                    type="button"
-                    className={selectAllMode ? "secondary-button active-utility" : "secondary-button"}
-                    onClick={selectAllComponents}
-                  >
-                    Select all
-                  </button>
-                  <button type="button" className="secondary-button" onClick={centerAllComponents}>
-                    Center all
-                  </button>
-                </div>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={theme.components.homeTeamLogo.visible}
-                    onChange={(event) =>
-                      patchTheme((draft) => {
-                        draft.components.homeTeamLogo.visible = event.target.checked;
-                        draft.components.awayTeamLogo.visible = event.target.checked;
-                      })
-                    }
-                  />
-                  Show team logos on both sides
-                </label>
-                <div className="component-rail">
-                  {editorRailGroups.map((group) => (
-                    <section key={group.id} className="component-rail-group">
-                      <header className="component-rail-group-header">
-                        <strong>{group.title}</strong>
-                      </header>
-                      <div className="component-rail-list">
-                        {group.ids.map((id) => {
-                          const component = theme.components[id];
-                          const isActive = selectedIdSet.has(id) || (selected === id && selectedIds.length === 0);
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              className={
-                                isActive
-                                  ? "component-rail-item component-rail-item--active"
-                                  : "component-rail-item"
-                              }
-                              onClick={() => selectComponent(id)}
-                            >
-                              <span className="component-rail-item-main">
-                                <strong>{componentLabels[id]}</strong>
-                              </span>
-                              <span className={component.visible ? "component-rail-visibility" : "component-rail-visibility component-rail-visibility--muted"}>
-                                {component.visible ? "Visible" : "Hidden"}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
-                  <section className="component-rail-group">
-                    <header className="component-rail-group-header">
-                      <strong>Custom</strong>
-                    </header>
-                    <div className="component-rail-list">
-                      {theme.freeComponents.length ? (
-                        theme.freeComponents.map((component) => {
-                          const isActive = selectedIdSet.has(component.id) || (selected === component.id && selectedIds.length === 0);
-                          return (
-                            <button
-                              key={component.id}
-                              type="button"
-                              className={isActive ? "component-rail-item component-rail-item--active" : "component-rail-item"}
-                              onClick={() => selectComponent(component.id)}
-                            >
-                              <span className="component-rail-item-main">
-                                <strong>{component.label}</strong>
-                                <small>{component.kind === "text" && component.contentMode === "operator" ? "Operator text" : component.kind}</small>
-                              </span>
-                              <span className={component.visible ? "component-rail-visibility" : "component-rail-visibility component-rail-visibility--muted"}>
-                                {component.visible ? "Visible" : "Hidden"}
-                              </span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <p className="hint">Add text or an image to create a custom layer.</p>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              </div>
-            </section>
-          </aside>
-
-          <div className="editor-canvas-column">
-            <div className="canvas-preview-column">
-              <div className="canvas-preview-wrapper">
-                <ThemeCanvasEditor
-                  theme={theme}
-                  live={previewLive}
-                  assets={assets.data ?? []}
-                  selectedId={selected}
-                  selectedIds={selectedIds}
-                  selectAll={selectAllMode}
-                  zoom={canvasZoom}
-                  onZoomChange={setCanvasZoom}
-                  onSelect={selectComponent}
-                  onMarqueeSelect={selectComponents}
-                  onSelectAll={selectAllComponents}
-                  onUpdate={updateTheme}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="inspector-column">
-            <div className="inspector v2-inspector">
-            <div className="inspector-toolbar">
-              <div className="segmented-control">
-                <button className={inspectorView === "theme" ? "segmented-button active" : "segmented-button"} onClick={() => setInspectorView("theme")} type="button">
-                  Canvas
-                </button>
-                <button
-                  className={inspectorView === "component" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setInspectorView("component")}
-                  type="button"
-                >
-                  Component
-                </button>
-                <button
-                  className={inspectorView === "concede" ? "segmented-button active" : "segmented-button"}
-                  onClick={() => setInspectorView("concede")}
-                  type="button"
-                >
-                  Event Overlay
-                </button>
-              </div>
-            </div>
-
-            {inspectorView === "theme" ? (
-              <div className="inspector-stack">
-                <SectionCard title="Canvas Basics" description="Core identity and canvas options." defaultOpen>
-                  <div className="form-grid">
-                    <TextField label="Theme name" value={theme.name} onChange={(value) => patchTheme((draft) => (draft.name = value))} />
-                    <TextField
-                      label="Description"
-                      value={theme.description}
-                      onChange={(value) => patchTheme((draft) => (draft.description = value))}
-                    />
-                    <ColorField
-                      label="Canvas background"
-                      value={theme.canvas.backgroundColor}
-                      onChange={(value) => patchTheme((draft) => (draft.canvas.backgroundColor = value))}
-                    />
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.canvas.safeArea}
-                        onChange={(event) => patchTheme((draft) => (draft.canvas.safeArea = event.target.checked))}
-                      />
-                      Show safe area
-                    </label>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.canvas.transparentPreview}
-                        onChange={(event) => patchTheme((draft) => (draft.canvas.transparentPreview = event.target.checked))}
-                      />
-                      Transparent admin preview
-                    </label>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Arrange & Align" description="Align, distribute, and match sizes for multiple selected items." defaultOpen={true}>
-                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor arrange tools">
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("left")}>
-                      Align left
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerX")}>
-                      Center X
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("right")}>
-                      Align right
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("top")}>
-                      Align top
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("centerY")}>
-                      Center Y
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => alignLayoutScope("bottom")}>
-                      Align bottom
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("horizontal")}>
-                      Distribute horizontal
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => distributeLayoutScope("vertical")}>
-                      Distribute vertical
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("width")}>
-                      Match width
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("height")}>
-                      Match height
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => matchLayoutScopeSize("both")}>
-                      Match both
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("leftToRight")}>
-                      Mirror left layout
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => mirrorTeamSlotLayout("rightToLeft")}>
-                      Mirror right layout
-                    </button>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Working Model" description="Use the canvas for positioning. Use advanced controls only when you need exact geometry." defaultOpen={false}>
-                  <div className="editor-notes">
-                    <p>`Canvas` covers the page-level frame and preview behavior.</p>
-                    <p>`Component` focuses on the selected piece only.</p>
-                    <p>`Event Overlay` controls concede, base, and winner treatments.</p>
-                  </div>
-                </SectionCard>
-
-                <SectionCard title="Theme Actions" description="Global layout sync and template controls." defaultOpen={false}>
-                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Theme action tools">
-                    <a
-                      className={buttonVariants({ variant: "secondary" })}
-                      href={`/overlay/preview/${theme.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open preview
-                    </a>
-                    {theme.builtin ? (
-                      <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => void saveAsCopy()}>
-                        {saving ? "Saving…" : "Save as Copy"}
-                      </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content className="te-menu" align="start" sideOffset={8}>
+                    <DropdownMenu.Item className="te-menu-item" onSelect={leaveEditor}>
+                      <ArrowLeft /> Back to themes
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item className="te-menu-item" onSelect={() => window.open(`/overlay/preview/${theme.id}`, "_blank", "noreferrer")}>
+                      <ExternalLink /> Open preview in a new tab
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="te-menu-sep" />
+                    <DropdownMenu.Item className="te-menu-item" onSelect={selectAllComponents}>
+                      <SquareDashedMousePointer /> Select all pieces
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item className="te-menu-item" onSelect={centerAllComponents}>
+                      <AlignHorizontalJustifyCenter /> Center everything in the frame
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="te-menu-sep" />
+                    <DropdownMenu.Item className="te-menu-item" disabled={saving} onSelect={() => void saveAsCopy()}>
+                      <Copy /> Save as a copy
+                    </DropdownMenu.Item>
+                    {externalTheme ? (
+                      <DropdownMenu.Item className="te-menu-item" onSelect={reloadServerTheme}>
+                        <RefreshCw /> Reload server version
+                      </DropdownMenu.Item>
                     ) : null}
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("leftToRight")}>
-                      Sync left to right
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => syncTeamSlot("rightToLeft")}>
-                      Sync right to left
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={resetSelectedSlotToSaved} disabled={!savedSnapshot}>
-                      Reset slot
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => applyLayoutPreset(builtinThemes[0].id)}>
-                      Apply {builtinThemes[0].name}
-                    </button>
-                    <button type="button" className={buttonVariants({ variant: "secondary" })} onClick={() => applyLayoutPreset(builtinThemes[1].id)}>
-                      Apply {builtinThemes[1].name}
-                    </button>
-                    <div className="row-action-menu-note">
-                      <strong>Guide</strong>
-                      <p>Sync copies layout, style, visibility, and assets. Mirror copies frame layout and flips left/right spacing.</p>
-                    </div>
-                  </div>
-                </SectionCard>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+              <span className="te-theme-name" title={theme.name}>
+                {theme.name}
+              </span>
+              {isOnAir ? (
+                <span className="te-chip te-chip--air">
+                  <span className="te-tally" aria-hidden />
+                  On air
+                </span>
+              ) : null}
+              {theme.builtin ? <span className="te-chip">Built-in</span> : null}
+              <span className={hasUnsavedChanges ? "te-chip te-chip--draft" : "te-chip te-chip--quiet"} role="status">
+                {saving ? "Saving…" : hasUnsavedChanges ? (isOnAir ? "Unsaved, not on air yet" : "Unsaved changes") : "Saved"}
+              </span>
+            </Island>
 
-                <SectionCard title="Canvas Shortcuts" description="Keyboard shortcuts for the editor." defaultOpen={false}>
-                  <div className="canvas-shortcut-bar" aria-label="Editor canvas shortcuts">
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + click add/remove selection</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + drag marquee select</span>
-                    <span className="canvas-shortcut-pill">Drag blank area to pan</span>
-                    <span className="canvas-shortcut-pill"><kbd>Space</kbd> + drag pan</span>
-                    <span className="canvas-shortcut-pill">Middle-drag pan</span>
-                    <span className="canvas-shortcut-pill"><kbd>Ctrl/Cmd</kbd> + wheel zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>Tab</kbd> next piece</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Tab</kbd> previous</span>
-                    <span className="canvas-shortcut-pill"><kbd>↑↓←→</kbd> move</span>
-                    <span className="canvas-shortcut-pill"><kbd>Shift</kbd> + <kbd>Arrow</kbd> jump</span>
-                    <span className="canvas-shortcut-pill"><kbd>Alt</kbd> + <kbd>Arrow</kbd> fine</span>
-                    <span className="canvas-shortcut-pill"><kbd>+</kbd> <kbd>-</kbd> zoom</span>
-                    <span className="canvas-shortcut-pill"><kbd>0</kbd> fit canvas</span>
-                    <span className="canvas-shortcut-pill"><kbd>1</kbd> zoom 100%</span>
-                    <span className="canvas-shortcut-pill"><kbd>F</kbd> focus selection</span>
-                    <span className="canvas-shortcut-pill"><kbd>Esc</kbd> clear</span>
-                  </div>
-                </SectionCard>
-              </div>
+            <Island className="te-tools" role="toolbar" aria-label="Tools">
+              <IconButton label="Select" shortcut="V" pressed={tool === "select"} onClick={() => setTool("select")}>
+                <MousePointer2 />
+              </IconButton>
+              <IconButton label="Hand" shortcut="H" pressed={tool === "hand"} onClick={() => setTool("hand")}>
+                <Hand />
+              </IconButton>
+              <span className="te-sep" aria-hidden />
+              <IconButton label="Add text" shortcut="T" onClick={addFreeTextComponent}>
+                <Type />
+              </IconButton>
+              <IconButton label="Add image" shortcut="I" onClick={addFreeImageComponent}>
+                <ImageIcon />
+              </IconButton>
+              <span className="te-sep" aria-hidden />
+              <IconButton
+                label={canvas.snapSettings.enabled ? "Snapping on" : "Snapping off"}
+                shortcut="S"
+                pressed={canvas.snapSettings.enabled}
+                onClick={() => canvas.setSnapSettings((current) => ({ ...current, enabled: !current.enabled }))}
+              >
+                <Magnet />
+              </IconButton>
+              <Popover.Root>
+                <Tooltip.Root>
+                  <Tooltip.Trigger asChild>
+                    <Popover.Trigger asChild>
+                      <button type="button" className="te-icon-btn te-icon-btn--narrow" aria-label="Snap options">
+                        <ChevronDown />
+                      </button>
+                    </Popover.Trigger>
+                  </Tooltip.Trigger>
+                  <Tooltip.Portal>
+                    <Tooltip.Content className="te-tooltip" side="bottom" sideOffset={6}>
+                      Snap options
+                    </Tooltip.Content>
+                  </Tooltip.Portal>
+                </Tooltip.Root>
+                <Popover.Portal>
+                  <Popover.Content className="te-popover" side="bottom" align="end" sideOffset={10}>
+                    <h3>Snap to</h3>
+                    <SnapOptionsPanel settings={canvas.snapSettings} onChange={canvas.setSnapSettings} />
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            </Island>
+            <p className="te-hint">
+              {tool === "hand"
+                ? "Drag to pan · press V to go back to Select"
+                : "Click to select · drag empty canvas to select many · Space-drag pans · right-click for more"}
+            </p>
+
+            {externalTheme ? (
+              <Island className="te-banner" role="alert">
+                <span>This theme was changed somewhere else.</span>
+                <button type="button" className="te-text-btn" onClick={reloadServerTheme}>
+                  Reload server version
+                </button>
+                <button type="button" className="te-text-btn" onClick={() => setExternalTheme(null)}>
+                  Keep editing
+                </button>
+              </Island>
             ) : null}
 
-            {inspectorView === "preview" ? (
-              <div className="inspector-stack">
-                <SectionCard title="State Preview" description="Simulate game states and scoreboard data." defaultOpen>
-                  <div className="canvas-preview-bar canvas-preview-bar--drawer" aria-label="Editor preview states">
-                    <div className="row-action-menu row-action-menu--up" style={{ "--preset-anchor": "preset-anchor", anchorName: "--preset-anchor" } as any}>
-                      <button type="button" popoverTarget="preview-preset-popover" className={buttonVariants({ variant: "secondary" })}>Preview preset</button>
-                      <div id="preview-preset-popover" popover="auto" className="row-action-menu-list" style={{ positionAnchor: "--preset-anchor", positionArea: "top span-left", margin: 0 } as any}>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("live"); }}>
-                          Live
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("game"); }}>
-                          Game
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("break"); }}>
-                          Break
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelHome"); }}>
-                          Towel Left
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("towelAway"); }}>
-                          Towel Right
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseHome"); }}>
-                          Base Left
-                        </button>
-                        <button type="button" popoverTarget="preview-preset-popover" popoverTargetAction="hide" className={buttonVariants({ variant: "secondary" })} onClick={() => { applyPreviewPreset("baseAway"); }}>
-                          Base Right
-                        </button>
-                      </div>
-                    </div>
-                    <label className="checkbox canvas-preview-toggle">
-                      <input type="checkbox" checked={previewEnabled} onChange={(event) => setPreviewEnabled(event.target.checked)} />
-                      Preview states
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Period</span>
-                      <select value={previewPeriod} onChange={(event) => setPreviewPeriod(event.target.value as PreviewPeriodMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="GAME">GAME</option>
-                        <option value="BREAK">BREAK</option>
-                      </select>
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Event</span>
-                      <select value={previewEvent} onChange={(event) => setPreviewEvent(event.target.value as PreviewEventMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="none">none</option>
-                        <option value="towel-home">TOWEL1</option>
-                        <option value="towel-away">TOWEL2</option>
-                        <option value="base-home">BASE2</option>
-                        <option value="base-away">BASE1</option>
-                      </select>
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Switch</span>
-                      <select value={previewSidesSwitched} onChange={(event) => setPreviewSidesSwitched(event.target.value as PreviewSwitchMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="0">Off</option>
-                        <option value="1">On</option>
-                      </select>
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Names</span>
-                      <select value={previewNameMode} onChange={(event) => setPreviewNameMode(event.target.value as PreviewNameMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="short">Short</option>
-                        <option value="long">Long</option>
-                      </select>
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Left logo</span>
-                      <select value={previewLeftLogoMode} onChange={(event) => setPreviewLeftLogoMode(event.target.value as PreviewLogoMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="matched">Matched</option>
-                        <option value="missing">Missing</option>
-                        <option value="unmatched">Unmatched</option>
-                      </select>
-                    </label>
-                    <label className="inline-select">
-                      <span className="hint">Right logo</span>
-                      <select value={previewRightLogoMode} onChange={(event) => setPreviewRightLogoMode(event.target.value as PreviewLogoMode)} disabled={!previewEnabled}>
-                        <option value="live">Live</option>
-                        <option value="matched">Matched</option>
-                        <option value="missing">Missing</option>
-                        <option value="unmatched">Unmatched</option>
-                      </select>
-                    </label>
-                    <label className="inline-select inline-number">
-                      <span className="hint">Left score</span>
-                      <input type="number" min="0" value={previewLeftScore} onChange={(event) => setPreviewLeftScore(Number(event.target.value || 0))} disabled={!previewEnabled} />
-                    </label>
-                    <label className="inline-select inline-number">
-                      <span className="hint">Right score</span>
-                      <input type="number" min="0" value={previewRightScore} onChange={(event) => setPreviewRightScore(Number(event.target.value || 0))} disabled={!previewEnabled} />
-                    </label>
-                    <label className="inline-select inline-number">
-                      <span className="hint">Game clock</span>
-                      <input type="number" min="0" value={previewGameTimerValue} onChange={(event) => setPreviewGameTimerValue(Number(event.target.value || 0))} disabled={!previewEnabled} />
-                    </label>
-                    <label className="inline-select inline-number">
-                      <span className="hint">Break clock</span>
-                      <input type="number" min="0" value={previewBreakTimerValue} onChange={(event) => setPreviewBreakTimerValue(Number(event.target.value || 0))} disabled={!previewEnabled} />
-                    </label>
-                    <button
-                      type="button"
-                      className={buttonVariants({ variant: "secondary" })}
-                      onClick={resetPreviewState}
-                    >
-                      Reset preview
-                    </button>
-                  </div>
-                </SectionCard>
-              </div>
-            ) : null}
+            <div className="te-actions" onContextMenu={(event) => event.stopPropagation()}>
+              <a className="te-btn" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer">
+                <ExternalLink /> Preview
+              </a>
+              <button
+                type="button"
+                className={isOnAir ? "te-btn te-btn--primary" : "te-btn"}
+                onClick={() => void save()}
+                disabled={saving || publishing}
+                title={isOnAir ? "This theme is on air. Saving updates the live broadcast." : undefined}
+              >
+                {isOnAir ? <span className="te-tally te-tally--on-primary" aria-hidden /> : null}
+                {saving && !publishing ? "Saving…" : isOnAir ? "Save to air" : "Save"}
+              </button>
+              {isOnAir ? null : (
+                <button type="button" className="te-btn te-btn--primary" onClick={() => void publish()} disabled={saving || publishing}>
+                  {publishing ? "Publishing…" : "Publish"}
+                </button>
+              )}
+            </div>
 
-            {inspectorView === "component" ? (
-              <div className="inspector-stack inspector-stack--compact">
-                <SectionCard title="Component Overview" description="Selection happens in the structure rail or directly on the canvas." defaultOpen>
-                  <div className="editor-selection-summary">
-                    <div className="editor-selection-copy">
-                      <strong>{selectedSummaryLabel}</strong>
-                      <span className="hint">{selectionModeDetail}</span>
-                    </div>
-                    <div className="segmented-control">
+            <Island className="te-zoom">
+              <IconButton label="Zoom out" shortcut="−" onClick={canvas.zoomOut} disabled={!canvas.canZoomOut}>
+                <Minus />
+              </IconButton>
+              <output className="te-zoom-readout" aria-live="polite" aria-label="Zoom level">
+                {canvas.zoomPercent}%
+              </output>
+              <IconButton label="Zoom in" shortcut="+" onClick={canvas.zoomIn} disabled={!canvas.canZoomIn}>
+                <Plus />
+              </IconButton>
+              <IconButton label="Fit frame" shortcut="0" onClick={canvas.fit}>
+                <Maximize />
+              </IconButton>
+              <IconButton label="Focus selected piece" shortcut="F" onClick={canvas.focusSelected} disabled={!canvas.canFocus}>
+                <Crosshair />
+              </IconButton>
+              <span className="te-sep" aria-hidden />
+              <IconButton label="Undo" shortcut="⌘Z" onClick={undo} disabled={history.length <= 1}>
+                <Undo2 />
+              </IconButton>
+              <IconButton label="Redo" shortcut="⌘⇧Z" onClick={redo} disabled={future.length === 0}>
+                <Redo2 />
+              </IconButton>
+            </Island>
+
+            <Island className="te-preview-bar" role="group" aria-label="Preview the overlay as">
+              <span className="te-preview-label">Preview as</span>
+              <div className="te-preview-modes" role="radiogroup" aria-label="Broadcast state">
+                {(
+                  [
+                    ["live", "Live feed"],
+                    ["game", "Game"],
+                    ["break", "Break"],
+                    ["towel", "Towel"],
+                    ["base", "Base"],
+                    ["winner", "Winner"]
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={previewMode === mode}
+                    className="te-preview-mode"
+                    onClick={() => applyPreviewMode(mode)}
+                  >
+                    {mode === "live" ? <span className={live.data?.sourceStatus === "ok" ? "te-live-dot" : "te-live-dot te-live-dot--off"} aria-hidden /> : null}
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {eventKind ? (
+                <>
+                  <span className="te-sep" aria-hidden />
+                  <div className="te-preview-modes" role="radiogroup" aria-label="Which team">
+                    {(["left", "right"] as const).map((side) => (
                       <button
-                        className={editorMode === "basic" ? "segmented-button active" : "segmented-button"}
-                        onClick={() => setEditorMode("basic")}
+                        key={side}
                         type="button"
+                        role="radio"
+                        aria-checked={previewSide === side}
+                        className="te-preview-mode"
+                        onClick={() => applyPreviewMode(previewMode, side)}
                       >
-                        Basic
-                      </button>
-                      <button
-                        className={editorMode === "advanced" ? "segmented-button active" : "segmented-button"}
-                        onClick={() => setEditorMode("advanced")}
-                        type="button"
-                      >
-                        Advanced
-                      </button>
-                    </div>
-                  </div>
-                  {!selectAllMode && selectedEditableComponent ? (
-                    <div className="editor-selection-meta">
-                      <span>{selectedSlotConfig.title}</span>
-                      <span>{selectedEditableComponent.kind === "text" ? "Text component" : "Image component"}</span>
-                      <span>{selectedEditableComponent.visible ? "Visible" : "Hidden"}</span>
-                    </div>
-                  ) : null}
-                </SectionCard>
-
-                {selectedSlot === "center" ? (
-                  <SectionCard title="Center Behavior" description="Choose what the lower center line shows during game time and during breaks." defaultOpen={false}>
-                    <div className="editor-subsection-stack">
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Display Modes</h4>
-                          <p>Decide what the secondary center line shows during live play and during breaks.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label>
-                            Game mode
-                            <select
-                              value={theme.centerSecondary.gameMode}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.gameMode = event.target.value as "timer" | "staticText" | "hidden";
-                                })
-                              }
-                            >
-                              <option value="staticText">Static text</option>
-                              <option value="timer">Break timer</option>
-                              <option value="hidden">Hidden</option>
-                            </select>
-                          </label>
-                          <label>
-                            Break mode
-                            <select
-                              value={theme.centerSecondary.breakMode}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.breakMode = event.target.value as "timer" | "staticText" | "hidden";
-                                })
-                              }
-                            >
-                              <option value="timer">Break timer</option>
-                              <option value="staticText">Static text</option>
-                              <option value="hidden">Hidden</option>
-                            </select>
-                          </label>
-                          {theme.centerSecondary.gameMode === "staticText" ? (
-                            <TextField
-                              label="Game text"
-                              value={theme.centerSecondary.gameText}
-                              onChange={(value) => patchTheme((draft) => (draft.centerSecondary.gameText = value))}
-                            />
-                          ) : null}
-                          {theme.centerSecondary.breakMode === "staticText" ? (
-                            <TextField
-                              label="Break text"
-                              value={theme.centerSecondary.breakText}
-                              onChange={(value) => patchTheme((draft) => (draft.centerSecondary.breakText = value))}
-                            />
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Mode Transition</h4>
-                          <p>Control the motion when the center secondary changes between timer and static text.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label>
-                            Transition animation
-                            <select
-                              value={theme.centerSecondary.transition.animation}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.transition.animation = event.target.value as "none" | "fade" | "slide-up" | "slide-left" | "slide-right";
-                                })
-                              }
-                            >
-                              <option value="none">none</option>
-                              <option value="fade">fade</option>
-                              <option value="slide-up">slide-up</option>
-                              <option value="slide-left">slide-left</option>
-                              <option value="slide-right">slide-right</option>
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Transition duration"
-                            unit="ms"
-                            value={theme.centerSecondary.transition.durationMs}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.transition.durationMs = value;
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Timer Style</h4>
-                          <p>Used when the secondary line is showing a live break timer.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label>
-                            Timer font
-                            <select
-                              value={theme.centerSecondary.timerStyle.fontFamily}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.timerStyle.fontFamily =
-                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
-                                })
-                              }
-                            >
-                              {fontFamilies.map((font) => (
-                                <option key={font} value={font}>
-                                  {font}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Timer size"
-                            unit="px"
-                            value={theme.centerSecondary.timerStyle.fontSize}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timerStyle.fontSize = value;
-                              })
-                            }
-                          />
-                          <ColorField
-                            label="Timer color"
-                            value={theme.centerSecondary.timerStyle.color}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timerStyle.color = value;
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Static Text Style</h4>
-                          <p>Used when the secondary line is showing a label instead of a timer.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label>
-                            Static text font
-                            <select
-                              value={theme.centerSecondary.staticStyle.fontFamily}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.staticStyle.fontFamily =
-                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
-                                })
-                              }
-                            >
-                              {fontFamilies.map((font) => (
-                                <option key={font} value={font}>
-                                  {font}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Static text size"
-                            unit="px"
-                            value={theme.centerSecondary.staticStyle.fontSize}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.staticStyle.fontSize = value;
-                              })
-                            }
-                          />
-                          <ColorField
-                            label="Static text color"
-                            value={theme.centerSecondary.staticStyle.color}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.staticStyle.color = value;
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Game Finished Overlay</h4>
-                          <p>Show or suppress the automatic `GAME FINISHED` replacement on the lower center line. This does not control the winner treatment.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label className="checkbox editor-subsection-toggle">
-                            <input
-                              type="checkbox"
-                              checked={theme.centerSecondary.gameFinished.enabled}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.gameFinished.enabled = event.target.checked;
-                                })
-                              }
-                            />
-                            Game finished overlay enabled
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="editor-subsection-card">
-                        <div className="editor-subsection-header">
-                          <h4>Timeout Overlay</h4>
-                          <p>Flash a one-shot `TIMEOUT` treatment on top of the break timer when break time suddenly jumps upward.</p>
-                        </div>
-                        <div className="form-grid editor-subsection-grid">
-                          <label className="checkbox editor-subsection-toggle">
-                            <input
-                              type="checkbox"
-                              checked={theme.centerSecondary.timeout.enabled}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.timeout.enabled = event.target.checked;
-                                })
-                              }
-                            />
-                            Timeout overlay enabled
-                          </label>
-                          <TextField
-                            label="Timeout text"
-                            value={theme.centerSecondary.timeout.text}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.text = value;
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Timeout duration"
-                            unit="ms"
-                            value={theme.centerSecondary.timeout.durationMs}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.durationMs = value;
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Trigger increase"
-                            unit="s"
-                            value={theme.centerSecondary.timeout.minIncreaseSeconds}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.minIncreaseSeconds = value;
-                              })
-                            }
-                          />
-                          <label>
-                            Timeout font
-                            <select
-                              value={theme.centerSecondary.timeout.fontFamily}
-                              onChange={(event) =>
-                                patchTheme((draft) => {
-                                  draft.centerSecondary.timeout.fontFamily =
-                                    event.target.value as ThemeDefinition["components"]["homeName"]["fontFamily"];
-                                })
-                              }
-                            >
-                              {fontFamilies.map((font) => (
-                                <option key={font} value={font}>
-                                  {font}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <NumberField
-                            label="Timeout size"
-                            unit="px"
-                            value={theme.centerSecondary.timeout.fontSize}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.fontSize = value;
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Timeout weight"
-                            value={theme.centerSecondary.timeout.fontWeight}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.fontWeight = value;
-                              })
-                            }
-                          />
-                          <NumberField
-                            label="Timeout spacing"
-                            unit="px"
-                            step={0.1}
-                            value={theme.centerSecondary.timeout.letterSpacing}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.letterSpacing = value;
-                              })
-                            }
-                          />
-                          <ColorField
-                            label="Timeout text color"
-                            value={theme.centerSecondary.timeout.color}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.color = value;
-                              })
-                            }
-                          />
-                          <ColorField
-                            label="Timeout background"
-                            value={theme.centerSecondary.timeout.backgroundColor}
-                            onChange={(value) =>
-                              patchTheme((draft) => {
-                                draft.centerSecondary.timeout.backgroundColor = value;
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </SectionCard>
-                ) : null}
-
-                {selectAllMode ? (
-                  <SectionCard title="All Components" description="Drag the group box on the canvas to move the entire scoreboard composition together." defaultOpen>
-                    <div className="inline-action-grid">
-                      <button type="button" className="secondary-button" onClick={centerAllComponents}>
-                        Align top-center
-                      </button>
-                      <button type="button" className="secondary-button" onClick={() => setSelectAllMode(false)}>
-                        Exit select all
-                      </button>
-                    </div>
-                    <p className="hint">Selecting any individual piece on the canvas or in the slot list will leave group mode.</p>
-                  </SectionCard>
-                ) : null}
-
-                {!selectAllMode && selectedEditableComponent ? (
-                  <ThemeComponentInspector
-                    theme={theme}
-                    patchTheme={patchTheme}
-                    selectedSlot={selectedSlot}
-                    selectedSummaryLabel={selectedSummaryLabel}
-                    selectionModeDetail={selectionModeDetail}
-                    selectAllMode={selectAllMode}
-                    selectedEditableComponent={selectedEditableComponent}
-                    selectedComponentSource={selectedEntry?.source ?? "fixed"}
-                    selectedSlotConfig={selectedSlotConfig}
-                    selectedShortLabel={selectedShortLabel}
-                    patchSelectedComponent={patchSelectedComponent}
-                    canBringBackward={canBringBackward}
-                    canBringForward={canBringForward}
-                    reorderSelectedComponent={reorderSelectedComponent}
-                    selectedMirroredPair={selectedMirroredPair}
-                    mirrorSelectedPieceLayout={mirrorSelectedPieceLayout}
-                    bringSelectedIntoView={bringSelectedIntoView}
-                    resetSelectedPieceToSaved={resetSelectedPieceToSaved}
-                    savedSnapshot={savedSnapshot}
-                    selectedTextComponent={selectedTextComponent}
-                    patchSelectedTextComponent={patchSelectedTextComponent}
-                    selectedImageComponent={selectedImageComponent}
-                    selectedLogoContext={selectedLogoContext}
-                    assets={assets.data ?? []}
-                    onUploadAsset={(file, target) => void uploadAssetIntoTarget(file, target)}
-                    onDuplicateFreeComponent={duplicateSelectedFreeComponent}
-                    onDeleteFreeComponent={deleteSelectedFreeComponent}
-                  />
-                ) : (
-                  <SectionCard title="Component" description="Pick a scoreboard block from the structure cards or directly from the canvas." defaultOpen>
-                    <p className="hint">Nothing selected yet.</p>
-                  </SectionCard>
-                )}
-              </div>
-            ) : null}
-
-            {inspectorView === "concede" ? (
-              <div className="inspector-stack">
-                <SectionCard title="General Overlay" description="Shared layout, typography, border, and motion settings for all team overlay events." defaultOpen>
-                  <div className="inline-action-grid">
-                    {(
-                      Object.entries(concedePresets) as Array<
-                        [keyof typeof concedePresets, (typeof concedePresets)[keyof typeof concedePresets]]
-                      >
-                    ).map(([presetId, preset]) => (
-                      <button key={presetId} type="button" className="secondary-button" onClick={() => applyConcedePreset(presetId)}>
-                        {preset.label}
+                        {side === "left" ? "Left team" : "Right team"}
                       </button>
                     ))}
                   </div>
-                  <div className="form-grid">
-                    <label className="checkbox">
-                      <input type="checkbox" checked={theme.teamEventOverlay.general.enabled} onChange={(event) => patchOverlayGeneral((general) => (general.enabled = event.target.checked))} />
-                      Enabled
-                    </label>
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        checked={theme.teamEventOverlay.general.teamSwitchEnabled}
-                        onChange={(event) => patchOverlayGeneral((general) => (general.teamSwitchEnabled = event.target.checked))}
-                      />
-                      Team switch transition
-                    </label>
-                    <label>
-                      Follow container
-                      <select
-                        value={theme.teamEventOverlay.general.followTarget}
-                        onChange={(event) =>
-                          patchOverlayGeneral(
-                            (general) =>
-                              (general.followTarget = event.target.value as ThemeDefinition["teamEventOverlay"]["general"]["followTarget"])
-                          )
-                        }
-                      >
-                        <option value="none">none</option>
-                        <option value="logo">logo container</option>
-                        <option value="name">name container</option>
-                      </select>
-                    </label>
-                    <label>
-                      Placement
-                      <select value={theme.teamEventOverlay.general.placementMode} onChange={(event) => patchOverlayGeneral((general) => (general.placementMode = event.target.value as "full-panel" | "center-stamp" | "top-ribbon"))}>
-                        <option value="center-stamp">center-stamp</option>
-                        <option value="top-ribbon">top-ribbon</option>
-                        <option value="full-panel">full-panel</option>
-                      </select>
-                    </label>
-                    <label>
-                      Position
-                      <select value={theme.teamEventOverlay.general.position} onChange={(event) => patchOverlayGeneral((general) => (general.position = event.target.value as "above" | "overlapping-top"))}>
-                        <option value="above">above</option>
-                        <option value="overlapping-top">overlapping-top</option>
-                      </select>
-                    </label>
-                    <label>
-                      Animation
-                      <select value={theme.teamEventOverlay.general.animationPreset} onChange={(event) => patchOverlayGeneral((general) => (general.animationPreset = event.target.value as "slide-horizontal" | "slide-vertical" | "none"))}>
-                        <option value="slide-vertical">slide-vertical</option>
-                        <option value="slide-horizontal">slide-horizontal</option>
-                        <option value="none">none</option>
-                      </select>
-                    </label>
-                    <NumberField label="Duration" unit="ms" value={theme.teamEventOverlay.general.durationMs} onChange={(value) => patchOverlayGeneral((general) => (general.durationMs = value))} />
-                    <NumberField label="Font size" unit="px" value={theme.teamEventOverlay.general.fontSize} onChange={(value) => patchOverlayGeneral((general) => (general.fontSize = value))} />
-                    <NumberField label="Font weight" value={theme.teamEventOverlay.general.fontWeight} onChange={(value) => patchOverlayGeneral((general) => (general.fontWeight = value))} />
-                    <NumberField label="Letter spacing" unit="px" step={0.1} value={theme.teamEventOverlay.general.letterSpacing} onChange={(value) => patchOverlayGeneral((general) => (general.letterSpacing = value))} />
-                    <NumberField label="Offset X" unit="px" value={theme.teamEventOverlay.general.offsetX} onChange={(value) => patchOverlayGeneral((general) => (general.offsetX = value))} />
-                    <NumberField label="Offset Y" unit="px" value={theme.teamEventOverlay.general.offsetY} onChange={(value) => patchOverlayGeneral((general) => (general.offsetY = value))} />
-                    <NumberField label="Height" unit="px" value={theme.teamEventOverlay.general.height} onChange={(value) => patchOverlayGeneral((general) => (general.height = value))} />
-                    <NumberField label="Padding" unit="px" value={theme.teamEventOverlay.general.padding} onChange={(value) => patchOverlayGeneral((general) => (general.padding = value))} />
-                    <NumberField label="Border width" unit="px" value={theme.teamEventOverlay.general.borderWidth} onChange={(value) => patchOverlayGeneral((general) => (general.borderWidth = value))} />
-                    <label style={{ display: "block", marginTop: "0.5rem", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", color: "var(--md-text-secondary)" }}>Corner Radius (px)</label>
-                    <div className="compact-grid" style={{ marginTop: "0.25rem", marginBottom: "0.5rem" }}>
-                      <NumberField label="Top L" value={theme.teamEventOverlay.general.borderRadius[0]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[0] = val))} />
-                      <NumberField label="Top R" value={theme.teamEventOverlay.general.borderRadius[1]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[1] = val))} />
-                      <NumberField label="Btm L" value={theme.teamEventOverlay.general.borderRadius[3]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[3] = val))} />
-                      <NumberField label="Btm R" value={theme.teamEventOverlay.general.borderRadius[2]} onChange={(val) => patchOverlayGeneral((general) => (general.borderRadius[2] = val))} />
-                    </div>
-                    <ColorField label="Border color" value={theme.teamEventOverlay.general.borderColor} onChange={(value) => patchOverlayGeneral((general) => (general.borderColor = value))} />
-                    <label>
-                      Font family
-                      <select value={theme.teamEventOverlay.general.fontFamily} onChange={(event) => patchOverlayGeneral((general) => (general.fontFamily = event.target.value as ThemeDefinition["teamEventOverlay"]["general"]["fontFamily"]))}>
-                        {fontFamilies.map((font) => (
-                          <option key={font} value={font}>
-                            {font}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Text align
-                      <select value={theme.teamEventOverlay.general.textAlign} onChange={(event) => patchOverlayGeneral((general) => (general.textAlign = event.target.value as "left" | "center" | "right"))}>
-                        <option value="left">left</option>
-                        <option value="center">center</option>
-                        <option value="right">right</option>
-                      </select>
-                    </label>
-                    <label>
-                      Background fit
-                      <select value={theme.teamEventOverlay.general.backgroundImageFit} onChange={(event) => patchOverlayGeneral((general) => (general.backgroundImageFit = event.target.value as "cover" | "contain" | "stretch"))}>
-                        <option value="cover">cover</option>
-                        <option value="contain">contain</option>
-                        <option value="stretch">stretch</option>
-                      </select>
-                    </label>
-                    <label>
-                      Background position
-                      <select value={theme.teamEventOverlay.general.backgroundImagePosition} onChange={(event) => patchOverlayGeneral((general) => (general.backgroundImagePosition = event.target.value as "center" | "top" | "bottom" | "left" | "right"))}>
-                        <option value="center">center</option>
-                        <option value="top">top</option>
-                        <option value="bottom">bottom</option>
-                        <option value="left">left</option>
-                        <option value="right">right</option>
-                      </select>
-                    </label>
-                    <TextField label="Shadow" value={theme.teamEventOverlay.general.shadow} onChange={(value) => patchOverlayGeneral((general) => (general.shadow = value))} />
-                  </div>
-                </SectionCard>
-                <SectionCard title="Concede Overlay" description="Text and surface styling specific to concede events." defaultOpen>
-                  <div className="form-grid">
-                    <label className="checkbox">
-                      <input type="checkbox" checked={theme.teamEventOverlay.concede.enabled} onChange={(event) => patchConcede((concede) => (concede.enabled = event.target.checked))} />
-                      Enabled
-                    </label>
-                    <TextField label="Text" value={theme.teamEventOverlay.concede.text} onChange={(value) => patchConcede((concede) => (concede.text = value))} />
-                    <ColorField label="Text color" value={theme.teamEventOverlay.concede.color} onChange={(value) => patchConcede((concede) => (concede.color = value))} />
-                    <ColorField label="Background" value={theme.teamEventOverlay.concede.backgroundColor} onChange={(value) => patchConcede((concede) => (concede.backgroundColor = value))} />
-                    <ColorField label="Overlay color" value={theme.teamEventOverlay.concede.backgroundOverlayColor} onChange={(value) => patchConcede((concede) => (concede.backgroundOverlayColor = value))} />
-                    <PercentField label="Overlay opacity" value={theme.teamEventOverlay.concede.backgroundOverlayOpacity} onChange={(value) => patchConcede((concede) => (concede.backgroundOverlayOpacity = value))} />
-                    <label>
-                      Background asset
-                      <select value={theme.teamEventOverlay.concede.backgroundImageAssetId ?? ""} onChange={(event) => patchConcede((concede) => (concede.backgroundImageAssetId = event.target.value || null))}>
-                        <option value="">None</option>
-                        {assets.data?.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            {asset.originalName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="secondary-button">
-                      Upload concede background
-                      <input
-                        hidden
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) {
-                            void uploadAssetIntoTarget(file, "concede");
-                          }
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                </SectionCard>
-                <SectionCard title="Base Overlay" description="Text and surface styling specific to base events." defaultOpen={false}>
-                  <div className="form-grid">
-                    <label className="checkbox">
-                      <input type="checkbox" checked={theme.teamEventOverlay.base.enabled} onChange={(event) => patchBaseOverlay((base) => (base.enabled = event.target.checked))} />
-                      Enabled
-                    </label>
-                    <TextField label="Text" value={theme.teamEventOverlay.base.text} onChange={(value) => patchBaseOverlay((base) => (base.text = value))} />
-                    <ColorField label="Text color" value={theme.teamEventOverlay.base.color} onChange={(value) => patchBaseOverlay((base) => (base.color = value))} />
-                    <ColorField label="Background" value={theme.teamEventOverlay.base.backgroundColor} onChange={(value) => patchBaseOverlay((base) => (base.backgroundColor = value))} />
-                    <ColorField label="Overlay color" value={theme.teamEventOverlay.base.backgroundOverlayColor} onChange={(value) => patchBaseOverlay((base) => (base.backgroundOverlayColor = value))} />
-                    <PercentField label="Overlay opacity" value={theme.teamEventOverlay.base.backgroundOverlayOpacity} onChange={(value) => patchBaseOverlay((base) => (base.backgroundOverlayOpacity = value))} />
-                    <label>
-                      Background asset
-                      <select value={theme.teamEventOverlay.base.backgroundImageAssetId ?? ""} onChange={(event) => patchBaseOverlay((base) => (base.backgroundImageAssetId = event.target.value || null))}>
-                        <option value="">None</option>
-                        {assets.data?.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            {asset.originalName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="secondary-button">
-                      Upload base background
-                      <input
-                        hidden
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) {
-                            void uploadAssetIntoTarget(file, "base");
-                          }
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                </SectionCard>
-                <SectionCard title="Winner Overlay" description="Independent team-side winner reveal shown for a non-tied finished match." defaultOpen={false}>
-                  <div className="form-grid">
-                    <label className="checkbox">
-                      <input type="checkbox" checked={theme.teamEventOverlay.winner.enabled} onChange={(event) => patchWinnerOverlay((winner) => (winner.enabled = event.target.checked))} />
-                      Enabled
-                    </label>
-                    <TextField label="Text" value={theme.teamEventOverlay.winner.text} onChange={(value) => patchWinnerOverlay((winner) => (winner.text = value))} />
-                    <ColorField label="Text color" value={theme.teamEventOverlay.winner.color} onChange={(value) => patchWinnerOverlay((winner) => (winner.color = value))} />
-                    <ColorField label="Background" value={theme.teamEventOverlay.winner.backgroundColor} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundColor = value))} />
-                    <ColorField label="Overlay color" value={theme.teamEventOverlay.winner.backgroundOverlayColor} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundOverlayColor = value))} />
-                    <PercentField label="Overlay opacity" value={theme.teamEventOverlay.winner.backgroundOverlayOpacity} onChange={(value) => patchWinnerOverlay((winner) => (winner.backgroundOverlayOpacity = value))} />
-                    <label>
-                      Background asset
-                      <select value={theme.teamEventOverlay.winner.backgroundImageAssetId ?? ""} onChange={(event) => patchWinnerOverlay((winner) => (winner.backgroundImageAssetId = event.target.value || null))}>
-                        <option value="">None</option>
-                        {assets.data?.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            {asset.originalName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="secondary-button">
-                      Upload winner background
-                      <input
-                        hidden
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) {
-                            void uploadAssetIntoTarget(file, "winner");
-                          }
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                </SectionCard>
-              </div>
-            ) : null}
+                  <IconButton label="Play the entrance again" onClick={() => setOverlayKey((key) => key + 1)}>
+                    <Play />
+                  </IconButton>
+                </>
+              ) : null}
+              <span className="te-sep" aria-hidden />
+              <IconButton
+                label="Preview data: scores, clocks, names and logos"
+                pressed={propsView === "preview"}
+                onClick={() => setPropsView((view) => (view === "preview" ? "auto" : "preview"))}
+              >
+                <SlidersHorizontal />
+              </IconButton>
+            </Island>
 
+            <Island className="te-corner">
+              <IconButton
+                label={`Appearance: ${appearance.preference === "system" ? `system (${appearance.resolved})` : appearance.preference}. Click to change`}
+                onClick={() =>
+                  appearance.setPreference(appearance.preference === "system" ? "light" : appearance.preference === "light" ? "dark" : "system")
+                }
+              >
+                {appearance.preference === "system" ? <Monitor /> : appearance.preference === "light" ? <Sun /> : <Moon />}
+              </IconButton>
+              <ShortcutsHelp />
+            </Island>
+          </>
+        )}
+      />
+      </div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="te-menu" onCloseAutoFocus={(event) => event.preventDefault()}>
+          {arrangeActions ? (
+            <ArrangeMenuItems actions={arrangeActions} />
+          ) : (
+            <>
+              <ContextMenu.Item className="te-menu-item" onSelect={selectAllComponents}>
+                <SquareDashedMousePointer /> <span className="te-menu-label">Select all pieces</span>
+              </ContextMenu.Item>
+              <ContextMenu.Item className="te-menu-item" onSelect={addFreeTextComponent}>
+                <Type /> <span className="te-menu-label">Add text</span>
+                <kbd className="te-menu-kbd">T</kbd>
+              </ContextMenu.Item>
+              <ContextMenu.Item className="te-menu-item" onSelect={addFreeImageComponent}>
+                <ImageIcon /> <span className="te-menu-label">Add image</span>
+                <kbd className="te-menu-kbd">I</kbd>
+              </ContextMenu.Item>
+            </>
+          )}
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+      </ContextMenu.Root>
+
+      {layersCollapsed ? (
+        <Island className="te-layers-pill">
+          <button type="button" className="te-text-btn" onClick={() => setLayersCollapsed(false)}>
+            <PanelRightOpen aria-hidden /> Layers
+          </button>
+        </Island>
+      ) : (
+        <aside className="te-island te-layers" aria-label="Layers">
+          <LayersPanel
+            theme={theme}
+            groups={editorRailGroups}
+            selectedIds={new Set(selectAllMode ? listThemeComponentEntries(theme).map((entry) => entry.id) : selectedIds.length ? selectedIds : selected ? [selected] : [])}
+            lockedIds={lockedIds}
+            onSelect={(pieceId, additive) => selectComponent(pieceId, { additive })}
+            onToggleVisible={(pieceId) =>
+              patchTheme((draft) => {
+                const component = getThemeComponent(draft, pieceId);
+                if (component) {
+                  component.visible = !component.visible;
+                }
+              })
+            }
+            onToggleLock={(pieceId) => toggleLock([pieceId])}
+            onToggleTeamLogos={(visible) =>
+              patchTheme((draft) => {
+                draft.components.homeTeamLogo.visible = visible;
+                draft.components.awayTeamLogo.visible = visible;
+              })
+            }
+            onCollapse={() => setLayersCollapsed(true)}
+          />
+        </aside>
+      )}
+
+      <aside className="te-island te-props" aria-label="Properties">
+        {propsView !== "auto" ? (
+          <div className="te-subview">
+            <header className="te-subview-head">
+              <IconButton label="Back to properties" onClick={() => setPropsView("auto")}>
+                <ArrowLeft />
+              </IconButton>
+              <h2>Preview data</h2>
+            </header>
+            <div className="te-subview-body">
+              <PreviewDataProperties
+                data={{
+                  enabled: previewEnabled,
+                  period: previewPeriod,
+                  event: previewEvent,
+                  sidesSwitched: previewSidesSwitched,
+                  names: previewNameMode,
+                  leftLogo: previewLeftLogoMode,
+                  rightLogo: previewRightLogoMode,
+                  leftScore: previewLeftScore,
+                  rightScore: previewRightScore,
+                  gameClock: previewGameTimerValue,
+                  breakClock: previewBreakTimerValue
+                }}
+                onChange={(next) => {
+                  if (next.enabled !== undefined) setPreviewEnabled(next.enabled);
+                  if (next.period !== undefined) setPreviewPeriod(next.period);
+                  if (next.event !== undefined) setPreviewEvent(next.event);
+                  if (next.sidesSwitched !== undefined) setPreviewSidesSwitched(next.sidesSwitched);
+                  if (next.names !== undefined) setPreviewNameMode(next.names);
+                  if (next.leftLogo !== undefined) setPreviewLeftLogoMode(next.leftLogo);
+                  if (next.rightLogo !== undefined) setPreviewRightLogoMode(next.rightLogo);
+                  if (next.leftScore !== undefined) setPreviewLeftScore(next.leftScore);
+                  if (next.rightScore !== undefined) setPreviewRightScore(next.rightScore);
+                  if (next.gameClock !== undefined) setPreviewGameTimerValue(next.gameClock);
+                  if (next.breakClock !== undefined) setPreviewBreakTimerValue(next.breakClock);
+                }}
+                onReset={() => applyPreviewMode("live")}
+              />
             </div>
           </div>
-        </div>
-      </div>
-    </AdminPageFrame>
+        ) : (
+          <>
+            {arrangeActions && arrangeActions.count > 1 ? <ArrangePanel actions={arrangeActions} /> : null}
+            {eventCardSelected && eventKind ? (
+              <EventOverlayProperties
+                theme={theme}
+                kind={eventKind}
+                side={previewSide}
+                assets={assets.data ?? []}
+                swatches={Array.from(
+                  new Set(
+                    listThemeComponentEntries(theme)
+                      .flatMap(({ component }) => [component.backgroundColor, component.borderColor, "color" in component ? component.color : ""])
+                      .filter((value) => /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) && !(value.length === 9 && value.toLowerCase().endsWith("00")))
+                      .map((value) => value.toLowerCase())
+                  )
+                ).slice(0, 12)}
+                presets={Object.entries(concedePresets).map(([presetId, preset]) => ({ id: presetId, label: preset.label }))}
+                patchGeneral={patchOverlayGeneral}
+                patchEvent={patchEventSettings}
+                onApplyPreset={(presetId) => applyConcedePreset(presetId as keyof typeof concedePresets)}
+                onUpload={(file) => void uploadAssetIntoTarget(file, eventKind)}
+                onSelectFollowed={() => eventCard?.onBadgeClick?.()}
+              />
+            ) : selectAllMode ? (
+              <p className="te-note">All pieces are selected. Drag any of them to move the whole scoreboard, or use Arrange above.</p>
+            ) : selectedIds.length > 1 ? (
+              <p className="te-note">
+                {selectedIds.length} pieces selected. Arrange applies to all of them; select a single piece to edit its style.
+              </p>
+            ) : selectedEntry ? (
+              <>
+              <PieceProperties
+                entry={selectedEntry}
+                theme={theme}
+                assets={assets.data ?? []}
+                logoContext={selectedLogoContext}
+                canReset={Boolean(savedSnapshot)}
+                patch={(update) => patchSelectedComponent(update as (component: ThemeComponent) => void)}
+                onUpload={(file, target) => void uploadAssetIntoTarget(file, target)}
+                onResetToSaved={resetSelectedPieceToSaved}
+                onBringIntoFrame={bringSelectedIntoView}
+                centreLine={
+                  selectedSlot === "center" ? (
+                    <PanelSection title="Centre line" defaultOpen={false}>
+                      <CentreLineProperties line={theme.centerSecondary} swatches={themeSwatches(theme)} patch={(update) => patchTheme((draft) => update(draft.centerSecondary))} />
+                    </PanelSection>
+                  ) : null
+                }
+              />
+              {arrangeActions ? <ArrangePanel actions={arrangeActions} /> : null}
+              </>
+            ) : (
+              <ThemeProperties
+                theme={theme}
+                patchTheme={patchTheme}
+                layoutPresets={builtinThemes.map((preset) => ({ id: preset.id, name: preset.name }))}
+                onSyncTeams={syncTeamSlot}
+                onMirrorTeams={mirrorTeamSlotLayout}
+                onApplyPreset={applyLayoutPreset}
+                onOpenEventOverlay={() => applyPreviewMode("towel")}
+                onOpenPreviewData={() => setPropsView("preview")}
+              />
+            )}
+          </>
+        )}
+      </aside>
+    </div>
+    </Tooltip.Provider>
   );
 }

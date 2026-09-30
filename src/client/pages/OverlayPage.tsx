@@ -38,6 +38,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
           theme={theme}
           live={live.data}
           assets={assets.data ?? []}
+          transparentBackground={mode === "preview" && theme.canvas.transparentPreview}
           operatorTextValues={
             operatorText.data?.themeId === theme.id
               ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))

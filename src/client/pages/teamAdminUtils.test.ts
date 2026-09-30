@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TeamRecord } from "../../shared/theme";
-import { filterAndSortTeams, hasTeamUnsavedChanges } from "./teamAdminUtils";
+import { filterAndSortTeams, formatUpdatedAt, hasTeamUnsavedChanges } from "./teamAdminUtils";
 
 function makeTeam(overrides: Partial<TeamRecord>): TeamRecord {
   return {
@@ -67,6 +67,23 @@ describe("filterAndSortTeams", () => {
 
     const oldestFirst = filterAndSortTeams(teams, "", "all", "updatedAsc");
     expect(oldestFirst.map((team) => team.id)).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("formatUpdatedAt", () => {
+  const now = new Date(2026, 8, 30, 15, 0);
+
+  it("says Today for today", () => {
+    expect(formatUpdatedAt(new Date(2026, 8, 30, 9, 30).toISOString(), now)).toBe("Today");
+  });
+
+  it("drops the year inside the current year and keeps it otherwise", () => {
+    expect(formatUpdatedAt(new Date(2026, 4, 18).toISOString(), now)).not.toMatch(/2026/);
+    expect(formatUpdatedAt(new Date(2025, 4, 18).toISOString(), now)).toMatch(/2025/);
+  });
+
+  it("reports an unreadable date", () => {
+    expect(formatUpdatedAt("not a date", now)).toBe("Unknown");
   });
 });
 

@@ -1,92 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Clock3, Palette, Radio } from "lucide-react";
-import { formatClock } from "../../shared/normalize";
-import type {
-  AppSettings,
-  NormalizedLiveState,
-  TeamMatchResult,
-  TeamRecord,
-  ThemeDefinition
-} from "../../shared/theme";
-import { ApiError, api } from "../api";
-import { useAutoCloseRowActionMenus, useLiveState, useOperatorTextState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
-import { showToast } from "../toast";
+import * as Popover from "@radix-ui/react-popover";
 import {
-  AdminPageFrame,
-  AdminPageHeader,
-  AdminStatTile,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  FieldHint,
-  Input,
-  Select,
-  Textarea,
-  buttonVariants
-} from "../components/ui";
-
-// Overlay preview with zoom controls (persisted in localStorage)
-function OverlayPreviewWithZoom({ liveUrl }: { liveUrl: string }) {
-  const [zoom, setZoom] = useState(() => {
-    const stored = window.localStorage.getItem("overlayPreviewZoom");
-    const parsed = stored ? parseFloat(stored) : 2;
-    return isNaN(parsed) ? 2 : Math.min(3, Math.max(1, parsed));
-  });
-  useEffect(() => {
-    window.localStorage.setItem("overlayPreviewZoom", String(zoom));
-  }, [zoom]);
-
-  function handleZoomIn() {
-    setZoom((z: number) => Math.min(3, Math.round((z + 0.25) * 100) / 100));
-  }
-  function handleZoomOut() {
-    setZoom((z: number) => Math.max(1, Math.round((z - 0.25) * 100) / 100));
-  }
-
-  return (
-    <div
-      className="group/zoom relative overflow-hidden rounded-md3m border border-md3-outlineVariant bg-black"
-      tabIndex={0}
-    >
-      <div
-        className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 opacity-0 transition-opacity group-hover/zoom:opacity-100 group-focus-within/zoom:opacity-100"
-        style={{ pointerEvents: "auto" }}
-      >
-        <button
-          type="button"
-          aria-label="Zoom out"
-          className="rounded border border-md3-outlineVariant bg-md3-surface px-2 py-0.5 text-lg font-bold text-md3-onSurfaceVariant disabled:opacity-50"
-          onClick={handleZoomOut}
-          disabled={zoom <= 1}
-        >
-          –
-        </button>
-        <span className="min-w-[2.5em] text-center text-xs font-semibold text-md3-onSurfaceVariant">{zoom.toFixed(2)}x</span>
-        <button
-          type="button"
-          aria-label="Zoom in"
-          className="rounded border border-md3-outlineVariant bg-md3-surface px-2 py-0.5 text-lg font-bold text-md3-onSurfaceVariant disabled:opacity-50"
-          onClick={handleZoomIn}
-          disabled={zoom >= 3}
-        >
-          +
-        </button>
-      </div>
-      <iframe
-        title="Live scoreboard overlay"
-        src={liveUrl}
-        className="h-[184px] w-full origin-center border-0 pointer-events-none transition-transform duration-200"
-        style={{ transform: `scale(${zoom})` }}
-        loading="lazy"
-      />
-    </div>
-  );
-}
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  ArrowUpRight,
+  Cable,
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  Copy,
+  Database,
+  ImageOff,
+  Info,
+  Layers,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  Replace,
+  TriangleAlert
+} from "lucide-react";
+import { formatClock } from "../../shared/normalize";
+import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
+import type { AppSettings, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
+import { ApiError, api } from "../api";
+import { useAssets, useLiveState, useOperatorTextState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { showToast } from "../toast";
+import { Button, Chip, Dot, Grow, Toolbar, type Tone } from "../components/admin/kit";
+import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -163,100 +105,6 @@ function eventLabel(event: NormalizedLiveState["teamEvent"]) {
   }
 }
 
-function matchTone(match: TeamMatchResult) {
-  if (match.status === "matched") {
-    return "success" as const;
-  }
-  if (match.status === "uncertain") {
-    return "warning" as const;
-  }
-  return "critical" as const;
-}
-
-function confidenceTone(confidence: number) {
-  if (confidence >= 0.95) {
-    return "success" as const;
-  }
-  if (confidence >= 0.75) {
-    return "warning" as const;
-  }
-  return "info" as const;
-}
-
-function sourceStatusTone(sourceStatus: NormalizedLiveState["sourceStatus"] | undefined) {
-  if (sourceStatus === "ok") {
-    return "success" as const;
-  }
-  if (sourceStatus === "error") {
-    return "critical" as const;
-  }
-  if (sourceStatus === "paused") {
-    return "info" as const;
-  }
-  return "warning" as const;
-}
-
-function logoTone(logo: LogoResolution) {
-  if (logo.tone === "ok") {
-    return "success" as const;
-  }
-  if (logo.tone === "warning") {
-    return "warning" as const;
-  }
-  return "info" as const;
-}
-
-function resolutionNoteClass(tone: "ok" | "warning" | "critical" | "info") {
-  if (tone === "ok") {
-    return "grid gap-1 rounded-md3m border border-[#245b3224] bg-[var(--md3-success-container)] px-4 py-3";
-  }
-  if (tone === "warning") {
-    return "grid gap-1 rounded-md3m border border-[#b8800038] bg-[#fff9e8] px-4 py-3";
-  }
-  if (tone === "critical") {
-    return "grid gap-1 rounded-md3m border border-[#c93a2c38] bg-[#fff2f0] px-4 py-3";
-  }
-  return "grid gap-1 rounded-md3m border border-[#005fa32e] bg-[#eef7ff] px-4 py-3";
-}
-
-function warningCardClass(severity: WarningItem["severity"]) {
-  if (severity === "critical") {
-    return "grid gap-3 rounded-md3m border border-[#e4b9b4] border-l-4 border-l-[#c54535] bg-[#fff7f6] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.06)]";
-  }
-  if (severity === "warning") {
-    return "grid gap-3 rounded-md3m border border-[#e5cf8f] border-l-4 border-l-[#a97400] bg-[#fffdf4] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.05)]";
-  }
-  return "grid gap-3 rounded-md3m border border-[#b6d2ec] border-l-4 border-l-[#1f73b8] bg-[#f5faff] p-4 shadow-[0_1px_2px_rgba(10,18,32,0.05)]";
-}
-
-function severityIconClass(severity: WarningItem["severity"] | "ok") {
-  if (severity === "ok") {
-    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--md3-success-container)] text-[0.76rem] font-extrabold text-[#245b32]";
-  }
-  if (severity === "warning") {
-    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#fff0c2] text-[0.76rem] font-extrabold text-[#7a4b00]";
-  }
-  if (severity === "critical") {
-    return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#fde4e1] text-[0.76rem] font-extrabold text-[#962b22]";
-  }
-  return "inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[#dceeff] text-[0.76rem] font-extrabold text-[#0d4a7c]";
-}
-
-function dataTileClassName() {
-  return "grid gap-1.5 rounded-md3s border border-md3-outlineVariant bg-md3-surface px-3.5 py-3";
-}
-
-function dataTileLabelClassName() {
-  return "text-[0.72rem] font-bold uppercase tracking-[0.06em] text-md3-onSurfaceVariant";
-}
-
-function dataTileValueClassName() {
-  return "text-sm leading-snug text-md3-onBackground";
-}
-
-function riskCardClassName() {
-  return "border-md3-outlineVariant bg-md3-surface";
-}
 
 type GoLiveIssue = {
   severity: "critical" | "warning" | "info";
@@ -272,40 +120,106 @@ const ISSUE_SEVERITY_RANK: Record<GoLiveIssue["severity"], number> = {
   info: 1
 };
 
-function issueBadgeVariant(severity: GoLiveIssue["severity"]) {
-  if (severity === "critical") {
-    return "critical" as const;
+
+// Which root cause an issue belongs to, so one outage does not surface as several cards.
+const ISSUE_GROUPS: Record<string, { key: string; title?: string; fix?: string }> = {
+  "Live feed unreachable": { key: "feed" },
+  "Upstream reachable": { key: "feed" },
+  "No data from the feed yet": { key: "feed" },
+  "Waiting for the feed": { key: "feed" },
+  "Feed data is out of date": { key: "feed" },
+  "Live data fresh": { key: "feed" },
+  "Left team needs confirmation": { key: "teams", title: "Team names need confirmation", fix: "Pick the team for each side in Team names on air." },
+  "Right team needs confirmation": { key: "teams", title: "Team names need confirmation", fix: "Pick the team for each side in Team names on air." },
+  "Left team resolved": { key: "teams", title: "Team names need confirmation", fix: "Pick the team for each side in Team names on air." },
+  "Right team resolved": { key: "teams", title: "Team names need confirmation", fix: "Pick the team for each side in Team names on air." },
+  "Left team has no logo": { key: "logos", title: "Team logos missing" },
+  "Right team has no logo": { key: "logos", title: "Team logos missing" },
+  "Logo coverage": { key: "logos", title: "Team logos missing" },
+  "Both teams show the event logo": { key: "logos", title: "Team logos missing" }
+};
+
+function groupIssuesByCause(issues: GoLiveIssue[]) {
+  const groups = new Map<string, GoLiveIssue[]>();
+  for (const issue of issues) {
+    const key = ISSUE_GROUPS[issue.title]?.key ?? issue.title;
+    groups.set(key, [...(groups.get(key) ?? []), issue]);
   }
-  if (severity === "warning") {
-    return "warning" as const;
-  }
-  return "info" as const;
+
+  return Array.from(groups.values())
+    .map((members) => {
+      const lead = [...members].sort((a, b) => ISSUE_SEVERITY_RANK[b.severity] - ISSUE_SEVERITY_RANK[a.severity])[0];
+      const group = members.length > 1 ? ISSUE_GROUPS[lead.title] : undefined;
+      // Keep each distinct fact once: drop details another member already states in full.
+      const unique = Array.from(new Set(members.map((member) => member.detail.trim().replace(/\.$/, "")).filter(Boolean)));
+      const details = unique.filter((detail) => !unique.some((other) => other !== detail && other.includes(detail)));
+      const detail = details.map((item) => `${item}.`).join(" ");
+      return {
+        ...lead,
+        title: group?.title ?? lead.title,
+        detail,
+        // A cause that only repeated the detail would now repeat it twice.
+        cause: lead.cause === lead.detail ? detail : lead.cause,
+        fix: group?.fix ?? lead.fix
+      };
+    })
+    .sort((a, b) => ISSUE_SEVERITY_RANK[b.severity] - ISSUE_SEVERITY_RANK[a.severity]);
 }
+
+function describeFeed(live: NormalizedLiveState | null, settings: AppSettings) {
+  if (!live) {
+    return { label: "Connecting", variant: "info" as const, detail: "Waiting for the first live state." };
+  }
+  const age = live.fetchedAt ? formatAge(live.fetchedAt).toLowerCase() : null;
+  if (!settings.pollEnabled || live.sourceStatus === "paused") {
+    return {
+      label: "Paused",
+      variant: "warning" as const,
+      detail: age ? `Polling stopped. Overlay holds data from ${age}.` : "Polling stopped before any data arrived."
+    };
+  }
+  if (live.sourceStatus === "error") {
+    return {
+      label: "Feed error",
+      variant: "critical" as const,
+      detail: age ? `Overlay holds data from ${age}.` : "No data received yet. Overlay shows placeholders."
+    };
+  }
+  if (live.sourceStatus === "idle" || !live.fetchedAt) {
+    return { label: "Connecting", variant: "warning" as const, detail: "No data received yet. Overlay shows placeholders." };
+  }
+  const staleThresholdMs = Math.max(settings.pollIntervalMs * 4, 5000);
+  if (Date.now() - Date.parse(live.fetchedAt) > staleThresholdMs) {
+    return { label: "Stale", variant: "warning" as const, detail: `Last update ${age}.` };
+  }
+  return { label: "Live", variant: "success" as const, detail: `Updated ${age}.` };
+}
+
 
 function normalizeReadinessIssue(check: ReadinessCheck): Pick<GoLiveIssue, "severity" | "title" | "detail"> {
   switch (check.label) {
     case "Upstream reachable":
       return {
         severity: "warning",
-        title: "Upstream feed error",
+        title: "Live feed unreachable",
         detail: check.detail
       };
     case "Polling enabled":
       return {
         severity: "warning",
-        title: "Polling is paused",
+        title: "Polling is stopped",
         detail: check.detail
       };
     case "Live data fresh":
       return {
         severity: "warning",
-        title: check.detail === "No successful fetch yet." ? "No successful live fetch yet" : "Live data is stale",
+        title: check.detail === "No successful fetch yet." ? "No data from the feed yet" : "Feed data is out of date",
         detail: check.detail
       };
     case "Published theme ready":
       return {
         severity: "critical",
-        title: "No published theme",
+        title: "No theme on air",
         detail: check.detail
       };
     case "Left team resolved":
@@ -337,28 +251,28 @@ function normalizeReadinessIssue(check: ReadinessCheck): Pick<GoLiveIssue, "seve
 
 function issueGuidance(title: string, detail: string) {
   switch (title) {
-    case "Upstream feed error":
+    case "Live feed unreachable":
       return {
-        cause: "The PBResults `/live` source is unreachable or returning an error.",
-        fix: "Check upstream PBResults server/network, verify URL in Settings, then press Refresh now."
+        cause: "The PBResults live feed can't be reached, or it is returning errors.",
+        fix: "Check the PBResults machine and the network, confirm the feed address in Settings, then press Refresh now."
       };
-    case "Live data is stale":
+    case "Feed data is out of date":
     case "Live data fresh":
       return {
-        cause: "Recent live updates are delayed beyond expected polling freshness.",
-        fix: "Keep polling enabled, verify upstream connectivity, and wait for a new successful fetch."
+        cause: "No new update has arrived for longer than a few polling cycles.",
+        fix: "Leave polling on, check the connection to the PBResults machine, and wait for the next update."
       };
-    case "Polling is paused":
+    case "Polling is stopped":
     case "Polling enabled":
       return {
-        cause: "Automatic polling is currently disabled.",
-        fix: "Click Start polling and confirm status changes to Active."
+        cause: "The app has stopped asking PBResults for updates, so the overlay is frozen.",
+        fix: "Press Start polling at the top of this page; the status changes to Live."
       };
-    case "No successful live fetch yet":
-    case "Waiting for live state":
+    case "No data from the feed yet":
+    case "Waiting for the feed":
       return {
-        cause: "No successful `/live` response has been received in this session yet.",
-        fix: "Confirm upstream URL and connectivity, keep polling active, and refresh once source is healthy."
+        cause: "The app has not received any data from PBResults since it started.",
+        fix: "Confirm the feed address in Settings and the network, keep polling on, then press Refresh now."
       };
     case "Left team needs confirmation":
     case "Right team needs confirmation":
@@ -366,30 +280,30 @@ function issueGuidance(title: string, detail: string) {
     case "Right team resolved":
       return {
         cause: detail,
-        fix: "Use Team resolution (Step 1 quick suggestions first, then Step 2 manual selection if needed)."
+        fix: "Pick the team in Team names on air, from the suggestion or the search."
       };
-    case "Left logo unresolved":
-    case "Right logo unresolved":
+    case "Left team has no logo":
+    case "Right team has no logo":
     case "Logo coverage":
       return {
         cause: detail,
-        fix: "Add team logo in Teams registry or configure fallback/logo assets in Theme Editor."
+        fix: "Add the logo in Teams, or set a fallback image for the logo slot in the theme editor."
       };
-    case "No published theme":
+    case "No theme on air":
     case "Published theme ready":
       return {
         cause: detail,
-        fix: "Publish/select a valid theme in Themes before continuing on-air."
+        fix: "Open Themes and publish the theme this event uses."
       };
     case "Upstream reachable":
       return {
         cause: detail,
-        fix: "Confirm upstream server health and network route to the configured source URL."
+        fix: "Check the PBResults machine is running and reachable at the feed address in Settings."
       };
     default:
       return {
         cause: detail,
-        fix: "Open the related section on this page and resolve the highlighted issue before go-live."
+        fix: "Resolve it in the matching section of this page before going on air."
       };
   }
 }
@@ -444,64 +358,6 @@ function resolveLogoSource(
   }
 }
 
-function severityIcon(severity: WarningItem["severity"] | "ok") {
-  if (severity === "critical") {
-    return "!";
-  }
-  if (severity === "warning") {
-    return "!";
-  }
-  if (severity === "info") {
-    return "i";
-  }
-  return "OK";
-}
-
-function teamOptionLabel(team: TeamRecord) {
-  const detail = team.shortName?.trim() ? ` · ${team.shortName.trim()}` : "";
-  return `${team.canonicalName}${detail}`;
-}
-
-function describeResolutionState(match: TeamMatchResult, rememberedLiveName: boolean) {
-  if (match.resolutionSource === "manual") {
-    return {
-      tone: "ok" as const,
-      title: "Temporary match active",
-      detail: "This side is currently using an operator override for the current live name."
-    };
-  }
-
-  if (rememberedLiveName) {
-    return {
-      tone: "ok" as const,
-      title: "Live name remembered",
-      detail: `"${match.inputName}" will keep matching ${match.team?.canonicalName ?? "this team"} automatically.`
-    };
-  }
-
-  if (match.status === "matched") {
-    return {
-      tone: "ok" as const,
-      title: "Automatic match ready",
-      detail: "The live name is resolving cleanly without operator intervention."
-    };
-  }
-
-  if (match.status === "uncertain") {
-    return {
-      tone: "warning" as const,
-      title: "Needs confirmation",
-      detail: "Choose the correct team before this side goes on air."
-    };
-  }
-
-  return {
-    tone: "critical" as const,
-    title: "No match yet",
-    detail: "Pick a team manually or use one of the suggestions below."
-  };
-}
-
 function buildWarnings(
   settings: AppSettings,
   live: NormalizedLiveState | null,
@@ -514,24 +370,24 @@ function buildWarnings(
   if (!settings.pollEnabled) {
     warnings.push({
       severity: "warning",
-      title: "Polling is paused",
-      detail: "The app is not fetching new /live updates until polling is started again."
+      title: "Polling is stopped",
+      detail: "No new data is fetched until polling starts again."
     });
   }
 
   if (!theme) {
     warnings.push({
       severity: "critical",
-      title: "No published theme",
-      detail: "Choose a published theme before using the live overlay on air."
+      title: "No theme on air",
+      detail: "The live overlay has no theme to show."
     });
   }
 
   if (!live) {
     warnings.push({
       severity: "warning",
-      title: "Waiting for live state",
-      detail: "The Operations page has not received live feed data yet."
+      title: "Waiting for the feed",
+      detail: "No live data has arrived yet."
     });
     return warnings;
   }
@@ -539,16 +395,16 @@ function buildWarnings(
   if (live.sourceStatus === "error") {
     warnings.push({
       severity: "critical",
-      title: "Upstream feed error",
-      detail: live.errorMessage ?? "The upstream /live endpoint could not be reached."
+      title: "Live feed unreachable",
+      detail: live.errorMessage ?? "The PBResults live feed could not be reached."
     });
   }
 
   if (live.sourceStatus === "idle") {
     warnings.push({
       severity: "warning",
-      title: "No successful live fetch yet",
-      detail: "Waiting for the first successful response from the upstream /live feed."
+      title: "No data from the feed yet",
+      detail: "Waiting for the first update from PBResults."
     });
   }
 
@@ -556,7 +412,7 @@ function buildWarnings(
     warnings.push({
       severity: live.displayLeftTeamMatch.status === "uncertain" ? "warning" : "critical",
       title: "Left team needs confirmation",
-      detail: `Live name "${live.displayLeftTeamMatch.inputName}" is ${live.displayLeftTeamMatch.status}.`
+      detail: `The feed sent “${live.displayLeftTeamMatch.inputName}” and no team is picked, so it shows on air as sent.`
     });
   }
 
@@ -564,14 +420,14 @@ function buildWarnings(
     warnings.push({
       severity: live.displayRightTeamMatch.status === "uncertain" ? "warning" : "critical",
       title: "Right team needs confirmation",
-      detail: `Live name "${live.displayRightTeamMatch.inputName}" is ${live.displayRightTeamMatch.status}.`
+      detail: `The feed sent “${live.displayRightTeamMatch.inputName}” and no team is picked, so it shows on air as sent.`
     });
   }
 
   if (leftLogo.key === "missing") {
     warnings.push({
       severity: "warning",
-      title: "Left logo unresolved",
+      title: "Left team has no logo",
       detail: leftLogo.label
     });
   }
@@ -579,7 +435,7 @@ function buildWarnings(
   if (rightLogo.key === "missing") {
     warnings.push({
       severity: "warning",
-      title: "Right logo unresolved",
+      title: "Right team has no logo",
       detail: rightLogo.label
     });
   }
@@ -587,8 +443,8 @@ function buildWarnings(
   if (leftLogo.key === "eventLogo" && rightLogo.key === "eventLogo") {
     warnings.push({
       severity: "info",
-      title: "Both sides are using the event logo fallback",
-      detail: "The scoreboard may look ambiguous if both teams share the same fallback logo."
+      title: "Both teams show the event logo",
+      detail: "Viewers may not tell the teams apart when both show the same image."
     });
   }
 
@@ -596,7 +452,7 @@ function buildWarnings(
   if (live.fetchedAt && Date.now() - Date.parse(live.fetchedAt) > staleThresholdMs && live.sourceStatus !== "paused") {
     warnings.push({
       severity: "warning",
-      title: "Live data is stale",
+      title: "Feed data is out of date",
       detail: `Last successful fetch was ${formatAge(live.fetchedAt)}.`
     });
   }
@@ -604,290 +460,393 @@ function buildWarnings(
   return warnings;
 }
 
-function ResolutionCard({
+type TeamSearchResult = {
+  team: TeamRecord;
+  via: string | null;
+};
+
+// Ranks active teams against the typed query: name prefix, then alias/live-name prefix, then substring.
+function searchTeams(teams: TeamRecord[], query: string, limit = 6): TeamSearchResult[] {
+  const needle = normalizeTeamName(query);
+  if (!needle) {
+    return [];
+  }
+
+  const ranked: Array<TeamSearchResult & { rank: number }> = [];
+  for (const team of teams) {
+    if (!team.active) {
+      continue;
+    }
+    const name = normalizeTeamName(team.canonicalName);
+    if (name.startsWith(needle)) {
+      ranked.push({ team, via: null, rank: 0 });
+      continue;
+    }
+    const aliases = generateTeamAliases(team);
+    const aliasPrefix = aliases.find((alias) => normalizeTeamName(alias).startsWith(needle));
+    if (aliasPrefix) {
+      ranked.push({ team, via: aliasPrefix, rank: 1 });
+      continue;
+    }
+    if (name.includes(needle)) {
+      ranked.push({ team, via: null, rank: 2 });
+      continue;
+    }
+    const aliasContains = aliases.find((alias) => normalizeTeamName(alias).includes(needle));
+    if (aliasContains) {
+      ranked.push({ team, via: aliasContains, rank: 3 });
+    }
+  }
+
+  return ranked
+    .sort((a, b) => a.rank - b.rank || a.team.canonicalName.localeCompare(b.team.canonicalName))
+    .slice(0, limit)
+    .map(({ team, via }) => ({ team, via }));
+}
+
+function describeResolution(match: TeamMatchResult, rememberedLiveName: boolean) {
+  if (!match.inputName.trim()) {
+    return { label: "Waiting", variant: "info" as const, hint: "No team name from the feed yet." };
+  }
+  if (match.resolutionSource === "manual") {
+    return { label: "Override", variant: "success" as const, hint: "You picked this team for the current live name." };
+  }
+  if (rememberedLiveName) {
+    return { label: "Remembered", variant: "success" as const, hint: null };
+  }
+  if (match.status === "matched") {
+    return { label: "Matched", variant: "success" as const, hint: null };
+  }
+  if (match.status === "uncertain") {
+    return { label: "Check", variant: "warning" as const, hint: "Not certain. Confirm the suggestion or search for the right team." };
+  }
+  return { label: "No match", variant: "critical" as const, hint: "Pick the team for this name." };
+}
+
+function feedTone(variant: ReturnType<typeof describeFeed>["variant"]): Tone {
+  return variant === "success" ? "ok" : variant === "critical" ? "critical" : variant === "warning" ? "warning" : "blue";
+}
+
+function statusTone(variant: ReturnType<typeof describeResolution>["variant"]): Tone {
+  return variant === "success" ? "ok" : variant === "critical" ? "critical" : variant === "warning" ? "warning" : "neutral";
+}
+
+function FactList({ items }: { items: Array<[string, React.ReactNode]> }) {
+  return (
+    <dl className="ad-facts">
+      {items.map(([label, value]) => (
+        <Fragment key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
+
+function Disclosure({ icon, title, summary, children }: { icon: React.ReactNode; title: string; summary: string; children: React.ReactNode }) {
+  return (
+    <details className="ad-disclose">
+      <summary>
+        {icon}
+        <b>{title}</b>
+        <span className="ad-muted">{summary}</span>
+        <ChevronDown className="ad-disclose-chevron" aria-hidden />
+      </summary>
+      <div className="ad-disclose-body">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * Finds a team by typing. Enter uses the highlighted team for this match; Shift+Enter also remembers the feed name.
+ * Shared by the inline picker (when a name needs a team) and the Change team popover.
+ */
+function TeamPicker({
+  side,
+  inputName,
+  teams,
+  logoFor,
+  suggestions,
+  disabled,
+  autoFocus,
+  createName,
+  onPick,
+  onCreate
+}: {
+  side: "left" | "right";
+  inputName: string;
+  teams: TeamRecord[];
+  logoFor: (team: Pick<TeamRecord, "logoAssetId" | "alternateLogoAssetId"> | null | undefined) => string | undefined;
+  suggestions: TeamMatchResult["candidates"];
+  disabled: boolean;
+  /** Only the Change team popover takes focus; the inline picker must never pull focus away mid-typing. */
+  autoFocus: boolean;
+  /** Offered when the feed name has no team: creates one with that name and puts it on air. */
+  createName: string | null;
+  onPick: (teamId: string, remember: boolean) => void;
+  onCreate: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const [remember, setRemember] = useState(false);
+  const searched = useMemo(() => searchTeams(teams, query), [query, teams]);
+  const byId = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
+  const options = query.trim()
+    ? searched.map((result) => ({ id: result.team.id, name: result.team.canonicalName, tag: result.via ? `as ${result.via}` : null, team: result.team }))
+    : suggestions.map((candidate) => ({
+        id: candidate.teamId,
+        name: candidate.teamName,
+        tag: `${Math.round(candidate.confidence * 100)}%`,
+        team: byId.get(candidate.teamId) ?? null
+      }));
+  const listId = `team-picker-${side}`;
+
+  function pick(index: number, rememberName: boolean) {
+    const target = options[index];
+    if (!target || disabled) return;
+    onPick(target.id, rememberName);
+    setQuery("");
+  }
+
+  return (
+    <div className="ad-picker">
+      <input
+        className="ad-input"
+        role="combobox"
+        aria-expanded={options.length > 0}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-label={`Search a team for the ${side} side`}
+        aria-activedescendant={options[highlight] ? `${listId}-${options[highlight].id}` : undefined}
+        autoComplete="off"
+        autoFocus={autoFocus}
+        placeholder="Search teams, short names, match names"
+        value={query}
+        disabled={disabled}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setHighlight(0);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" && options.length) {
+            event.preventDefault();
+            setHighlight((current) => (current + 1) % options.length);
+          } else if (event.key === "ArrowUp" && options.length) {
+            event.preventDefault();
+            setHighlight((current) => (current - 1 + options.length) % options.length);
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            pick(highlight, remember || event.shiftKey);
+          } else if (event.key === "Escape" && query) {
+            event.preventDefault();
+            event.stopPropagation();
+            setQuery("");
+          }
+        }}
+      />
+      <ul id={listId} role="listbox" className="ad-picker-list" aria-label={query.trim() ? "Matching teams" : "Suggested teams"}>
+        {options.length === 0 ? (
+          <li className="ad-picker-empty">{query.trim() ? `No active team matches “${query.trim()}”.` : "Type to search the team registry."}</li>
+        ) : (
+          options.map((option, index) => {
+            const logo = logoFor(option.team);
+            return (
+              <li
+                key={option.id}
+                id={`${listId}-${option.id}`}
+                role="option"
+                aria-selected={index === highlight}
+                className="ad-picker-option"
+                onMouseEnter={() => setHighlight(index)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  pick(index, remember || event.shiftKey);
+                }}
+              >
+                <span className="ad-picker-logo">{logo ? <img src={logo} alt="" /> : null}</span>
+                <span className="ad-picker-name">{option.name}</span>
+                {option.tag ? <span className="ad-picker-tag">{option.tag}</span> : null}
+              </li>
+            );
+          })
+        )}
+      </ul>
+      {createName ? (
+        <button type="button" className="ad-picker-create" disabled={disabled} onClick={onCreate}>
+          <Plus aria-hidden />
+          Create team “{createName}”
+        </button>
+      ) : null}
+      <label className="ad-picker-remember">
+        <input className="ad-check" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+        <span>
+          Remember “{inputName || "this name"}”
+          <span className="ad-hint">Next time the feed sends it, the same team is picked automatically.</span>
+        </span>
+      </label>
+      <div className="ad-picker-keys ad-hint">
+        <kbd>↵</kbd> Use for this match <kbd>⇧↵</kbd> Use and remember
+      </div>
+    </div>
+  );
+}
+
+function TeamSide({
   side,
   match,
   renderedName,
   teams,
-  selectedTeamId,
+  logoFor,
   resolving,
   clearing,
-  onChangeSelection,
+  canCreate,
   onApply,
-  onApplyAndRemember,
-  onClear
+  onClear,
+  onCreate
 }: {
   side: "left" | "right";
   match: TeamMatchResult;
   renderedName: string;
   teams: TeamRecord[];
-  selectedTeamId: string;
+  logoFor: (team: Pick<TeamRecord, "logoAssetId" | "alternateLogoAssetId"> | null | undefined) => string | undefined;
   resolving: boolean;
   clearing: boolean;
-  onChangeSelection: (teamId: string) => void;
-  onApply: (teamId?: string) => void;
-  onApplyAndRemember: (teamId?: string) => void;
+  canCreate: boolean;
+  onApply: (teamId: string, remember: boolean) => void;
   onClear: () => void;
+  onCreate: () => void;
 }) {
-  const title = side === "left" ? "Left side on screen" : "Right side on screen";
+  const hasInput = Boolean(match.inputName.trim());
   const manualOverrideActive = match.resolutionSource === "manual";
-  const needsResolution = match.status !== "matched" || manualOverrideActive;
   const rememberedLiveName = Boolean(match.resolutionSource === "automatic" && match.team?.liveMatchNames.includes(match.matchedAlias ?? ""));
-  const showSuggestedTeams = needsResolution && match.candidates.length > 0;
-  const resolutionState = describeResolutionState(match, rememberedLiveName);
-  const activeTeams = teams.filter((team) => team.active);
-  const statusLabel = manualOverrideActive
-    ? "Override active"
-    : match.status === "matched"
-      ? "Matched"
-      : match.status === "uncertain"
-        ? "Needs review"
-        : "Unmatched";
-  const statusVariant = manualOverrideActive ? "success" : matchTone(match);
-  const verdict = manualOverrideActive
-    ? "Temporary decision is active. Confirm this is still correct for on-air output."
-    : match.status === "matched"
-      ? "No action required. This side is currently stable."
-      : match.status === "uncertain"
-        ? "Confirm team before going on air."
-        : "Assignment required before this side is safe for on-air.";
-  const detailItems = [
-    ["Normalized live input", match.normalizedInput || "—"],
-    ["Matched alias", match.matchedAlias ?? (manualOverrideActive ? "Manual override" : "—")],
-    ["Confidence", `${Math.round(match.confidence * 100)}%`]
-  ];
-  const manualSelectionDefaultOpen = !manualOverrideActive && needsResolution && !showSuggestedTeams;
-  const resolutionViewKey = `${match.inputName}|${match.status}|${manualOverrideActive ? "manual" : "auto"}|${match.candidates
-    .map((candidate) => candidate.teamId)
-    .join(",")}`;
-  const previousResolutionViewKeyRef = useRef(resolutionViewKey);
-  const closeManualSelectionAfterQuickActionRef = useRef(false);
-  const [manualSelectionOpen, setManualSelectionOpen] = useState(() => manualSelectionDefaultOpen);
+  const needsPick = hasInput && match.status !== "matched" && !manualOverrideActive;
+  const status = describeResolution(match, rememberedLiveName);
+  const [changing, setChanging] = useState(false);
 
+  // Close the picker whenever the live name or its resolution changes underneath the operator.
+  const resolutionKey = `${match.inputName}|${match.status}|${match.resolutionSource}|${match.teamId ?? ""}`;
+  const previousKeyRef = useRef(resolutionKey);
   useEffect(() => {
-    if (previousResolutionViewKeyRef.current !== resolutionViewKey) {
-      previousResolutionViewKeyRef.current = resolutionViewKey;
-      if (closeManualSelectionAfterQuickActionRef.current) {
-        closeManualSelectionAfterQuickActionRef.current = false;
-        setManualSelectionOpen(false);
-        return;
-      }
-      setManualSelectionOpen(manualSelectionDefaultOpen);
+    if (previousKeyRef.current !== resolutionKey) {
+      previousKeyRef.current = resolutionKey;
+      setChanging(false);
     }
-  }, [manualSelectionDefaultOpen, resolutionViewKey]);
+  }, [resolutionKey]);
 
-  function handleQuickSuggestionApply(teamId: string) {
-    closeManualSelectionAfterQuickActionRef.current = true;
-    setManualSelectionOpen(false);
-    onApply(teamId);
-  }
-
-  function handleQuickSuggestionApplyAndRemember(teamId: string) {
-    closeManualSelectionAfterQuickActionRef.current = true;
-    setManualSelectionOpen(false);
-    onApplyAndRemember(teamId);
-  }
+  const busy = resolving || !hasInput;
+  const label = status.label === "Override" ? "Picked by you" : status.label === "Check" ? "Not sure" : status.label;
+  const logo = logoFor(match.team);
+  const pickHint =
+    match.status === "uncertain" && match.candidates[0]
+      ? `Looks like ${match.candidates[0].teamName}. Confirm it, or search for the right team.`
+      : match.status === "unmatched"
+        ? "Nothing in Teams looks like this name."
+        : status.hint;
+  const picker = (
+    <TeamPicker
+      side={side}
+      inputName={match.inputName}
+      teams={teams}
+      logoFor={logoFor}
+      suggestions={(needsPick ? match.candidates : match.candidates.filter((candidate) => candidate.teamId !== match.teamId)).slice(0, 3)}
+      disabled={busy}
+      autoFocus={!needsPick}
+      createName={needsPick && match.status === "unmatched" && canCreate ? match.inputName.trim() : null}
+      onPick={(teamId, remember) => {
+        setChanging(false);
+        onApply(teamId, remember);
+      }}
+      onCreate={onCreate}
+    />
+  );
 
   return (
-    <Card className="grid min-h-full content-start gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-4">
-      <div className="panel-header items-start">
-        <strong>{title}</strong>
-        <div className="action-row compact justify-end max-[780px]:justify-start">
-          <Badge variant={statusVariant}>{statusLabel}</Badge>
-          {rememberedLiveName ? (
-            <Badge variant="success">remembered live name</Badge>
-          ) : null}
-        </div>
-      </div>
-      <div className={resolutionNoteClass(needsResolution ? resolutionState.tone : "ok")}>
-        <strong>{needsResolution ? resolutionState.title : "Stable"}</strong>
-        <p className="m-0 text-sm text-md3-onSurfaceVariant">{verdict}</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className={dataTileClassName()}>
-          <strong className={dataTileLabelClassName()}>Live input</strong>
-          <span className={dataTileValueClassName()}>{match.inputName || "—"}</span>
-        </div>
-        <div className={dataTileClassName()}>
-          <strong className={dataTileLabelClassName()}>Assigned team</strong>
-          <span className={dataTileValueClassName()}>{match.team?.canonicalName ?? "Not resolved"}</span>
-        </div>
-        <div className={dataTileClassName()}>
-          <strong className={dataTileLabelClassName()}>Mode</strong>
-          <span className={dataTileValueClassName()}>
-            {manualOverrideActive
-              ? "Manual override"
-              : rememberedLiveName
-                ? "Remembered live name"
-                : match.status === "matched"
-                  ? "Automatic"
-                  : "Needs operator review"}
-          </span>
-        </div>
+    <div className={needsPick ? "ad-team-side needs-pick" : "ad-team-side"}>
+      <div className="ad-side-label">
+        {side === "left" ? <ArrowLeftToLine aria-hidden /> : <ArrowRightToLine aria-hidden />}
+        {side === "left" ? "Left team" : "Right team"}
+        <Chip tone={statusTone(status.variant)}>{label}</Chip>
       </div>
 
-      <div className="grid content-start gap-3">
-        {showSuggestedTeams ? (
-          <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-4">
-            <div className="panel-header">
-              <div>
-                <strong>Step 1: Quick suggestions</strong>
-                <FieldHint>Choose the best candidate if it matches what should be on air.</FieldHint>
-              </div>
+      {hasInput ? (
+        <div className="ad-team-id">
+          <span className={logo ? "ad-team-logo" : "ad-team-logo is-empty"}>{logo ? <img src={logo} alt="" /> : <ImageOff aria-hidden />}</span>
+          <div className="ad-team-text">
+            <div className={match.team ? "ad-team-name" : "ad-team-name is-missing"}>{match.team?.canonicalName ?? "No team yet"}</div>
+            <div className="ad-feed-name">
+              Feed sends <code>{match.inputName}</code>
+              {match.team ? null : " · on air as typed"}
             </div>
-            {match.candidates.slice(0, 3).map((candidate, index) => (
-              <div
-                key={`${candidate.teamId}-${candidate.matchedAlias}`}
-                className={`grid gap-3 rounded-md3s border border-md3-outlineVariant bg-md3-surfaceContainer px-4 py-3 ${index === 0 ? "border-[#005fa33d] shadow-md31" : ""}`}
-              >
-                <div className="grid gap-1.5">
-                  <strong>{candidate.teamName}</strong>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={confidenceTone(candidate.confidence)}>{Math.round(candidate.confidence * 100)}% confidence</span>
-                    <span className="text-md3-onSurfaceVariant">{candidate.matchedAlias ? `Matched by ${candidate.matchedAlias}` : "Suggested candidate"}</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    type="button"
-                    onClick={() => handleQuickSuggestionApply(candidate.teamId)}
-                    disabled={resolving || !match.inputName.trim()}
-                  >
-                    Match now
-                  </Button>
-                  {manualOverrideActive ? (
-                    <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
-                      {clearing ? "Clearing…" : "Back to automatic"}
-                    </Button>
-                  ) : null}
-                  <details className="row-action-menu">
-                    <summary className={buttonVariants({ variant: "secondary" })}>More</summary>
-                    <div className="row-action-menu-list">
-                      <Button
-                        variant="secondary"
-                        type="button"
-                        onClick={() => handleQuickSuggestionApplyAndRemember(candidate.teamId)}
-                        disabled={resolving || !match.inputName.trim()}
-                      >
-                        Match and remember
-                      </Button>
-                      <Link className={buttonVariants({ variant: "secondary" })} to={`/admin/teams/${candidate.teamId}`}>
-                        Open team
-                      </Link>
-                    </div>
-                  </details>
-                </div>
-              </div>
-            ))}
           </div>
-        ) : (
-          <div className="grid gap-1 rounded-md3m border border-dashed border-md3-outline bg-md3-surface px-4 py-3">
-            <strong>No action required</strong>
-            <p className="m-0 text-sm text-md3-onSurfaceVariant">
-              {manualOverrideActive
-                ? "Override is active. Use Change assignment only if this needs correction."
-                : needsResolution
-                  ? "No quick suggestion is ready. Use manual selection."
-                  : "This side is stable for current live input."}
-            </p>
-          </div>
-        )}
-        {manualOverrideActive && !manualSelectionOpen ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" type="button" onClick={() => setManualSelectionOpen(true)}>
-              Change assignment
+        </div>
+      ) : (
+        <p className="ad-hint">{status.hint}</p>
+      )}
+
+      {needsPick ? (
+        <>
+          <p className={match.status === "unmatched" ? "ad-side-hint is-critical" : "ad-side-hint"}>{pickHint}</p>
+          {picker}
+        </>
+      ) : hasInput ? (
+        <div className="ad-team-actions">
+          <Popover.Root open={changing} onOpenChange={setChanging}>
+            <Popover.Trigger asChild>
+              <Button disabled={busy}>
+                <Replace aria-hidden />
+                Change team
+              </Button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content className="ad-scope ad-pop ad-picker-pop" align="start" sideOffset={6}>
+                {picker}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+          {manualOverrideActive ? (
+            <Button variant="text" onClick={onClear} disabled={clearing}>
+              {clearing ? "Clearing…" : "Back to automatic"}
             </Button>
-          </div>
-        ) : null}
-        <details
-          className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface data-[state=open]:bg-md3-surfaceContainer"
-          open={manualSelectionOpen}
-          onToggle={(event) => setManualSelectionOpen(event.currentTarget.open)}
-        >
-          <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
-            <div>
-              <strong>{needsResolution ? "Step 2: Manual selection" : "Change assignment"}</strong>
-              <FieldHint>
-                {needsResolution ? "Use this only if suggestions are wrong or missing." : "Use this if you need to change the current assignment."}
-              </FieldHint>
-            </div>
+          ) : null}
+          {resolving ? <span className="ad-hint">Applying…</span> : null}
+        </div>
+      ) : null}
+
+      {status.hint && hasInput && !needsPick ? <p className="ad-side-hint">{status.hint}</p> : null}
+
+      {hasInput ? (
+        <details className="ad-why">
+          <summary>
+            <ChevronRight aria-hidden />
+            Why this team?
           </summary>
-          <div className="grid gap-4 px-4 pb-4">
-            <div className="grid gap-3 rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
-              <div className="action-row compact items-end">
-                <Select value={selectedTeamId} onChange={(event) => onChangeSelection(event.target.value)}>
-                  <option value="">Select a team…</option>
-                  {activeTeams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {teamOptionLabel(team)}
-                    </option>
-                  ))}
-                </Select>
-                <Button variant="secondary" type="button" onClick={() => onApply()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
-                  {resolving ? "Applying…" : "Match now"}
-                </Button>
-                {manualOverrideActive ? (
-                  <Button variant="secondary" type="button" onClick={onClear} disabled={clearing}>
-                    {clearing ? "Clearing…" : "Back to automatic"}
-                  </Button>
-                ) : null}
-                <details className="row-action-menu row-action-menu--up">
-                  <summary className={buttonVariants({ variant: "secondary" })}>{resolving ? "Applying…" : "More"}</summary>
-                  <div className="row-action-menu-list">
-                    <Button variant="secondary" type="button" onClick={() => onApplyAndRemember()} disabled={!selectedTeamId || resolving || !match.inputName.trim()}>
-                      Match and remember
-                    </Button>
-                    <Link className={buttonVariants({ variant: "secondary" })} to="/admin/teams">
-                      Manage teams
-                    </Link>
-                  </div>
-                </details>
-              </div>
-            </div>
-          </div>
+          <FactList
+            items={[
+              ["Read as", match.normalizedInput || "—"],
+              ["Matched by", match.matchedAlias ?? (manualOverrideActive ? "Your pick" : "—")],
+              ["How sure", `${Math.round(match.confidence * 100)}%`],
+              ["Shown on air", renderedName || "—"]
+            ]}
+          />
         </details>
-        <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surface">
-          <summary className="flex list-none items-start justify-between gap-4 px-4 py-3">
-            <div>
-              <strong>Why this match?</strong>
-              <FieldHint>Technical details for verification.</FieldHint>
-            </div>
-          </summary>
-          <div className="grid gap-4 px-4 pb-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {detailItems.map(([label, value]) => (
-                <div key={label} className={dataTileClassName()}>
-                  <strong className={dataTileLabelClassName()}>{label}</strong>
-                  <span className={dataTileValueClassName()}>{value}</span>
-                </div>
-              ))}
-              <div className={dataTileClassName()}>
-                <strong className={dataTileLabelClassName()}>Shown on overlay</strong>
-                <span className={dataTileValueClassName()}>{renderedName || "—"}</span>
-              </div>
-            </div>
-          </div>
-        </details>
-      </div>
-    </Card>
+      ) : null}
+    </div>
   );
 }
 
 export function OperationsPage() {
-  useAutoCloseRowActionMenus();
   const settings = useSettings();
   const themes = useThemes();
   const teams = useTeams();
+  const assets = useAssets();
   const runtimeInfo = useRuntimeInfo();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const operatorText = useOperatorTextState();
   const [togglingPoll, setTogglingPoll] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [resolutionDrafts, setResolutionDrafts] = useState<{ left: string; right: string }>({ left: "", right: "" });
   const [resolvingSide, setResolvingSide] = useState<"left" | "right" | null>(null);
   const [clearingSide, setClearingSide] = useState<"left" | "right" | null>(null);
-  const previousRawNamesRef = useRef<{ left: string; right: string }>({ left: "", right: "" });
   const operatorThemeIdRef = useRef<string | null>(null);
   const [operatorTextDrafts, setOperatorTextDrafts] = useState<Record<string, string>>({});
   const [dirtyOperatorTextIds, setDirtyOperatorTextIds] = useState<Set<string>>(() => new Set());
@@ -905,7 +864,6 @@ export function OperationsPage() {
       ? runtimeInfo.data.preferredOrigin
       : browserOrigin;
   const liveUrl = browserOrigin ? `${browserOrigin}/overlay/live` : "/overlay/live";
-  const embeddedLiveUrl = `${liveUrl}?embeddedEvents=1`;
   const previewUrl = publishedTheme && browserOrigin ? `${browserOrigin}/overlay/preview/${publishedTheme.id}` : publishedTheme ? `/overlay/preview/${publishedTheme.id}` : null;
   const vmixLiveUrl = vmixOrigin ? `${vmixOrigin}/overlay/live` : liveUrl;
   const vmixPreviewUrl = publishedTheme && vmixOrigin ? `${vmixOrigin}/overlay/preview/${publishedTheme.id}` : previewUrl;
@@ -953,19 +911,19 @@ export function OperationsPage() {
       },
       {
         label: "Left team resolved",
-        ok: live.data?.displayLeftTeamMatch.status === "matched",
+        ok: live.data?.displayLeftTeamMatch.status === "matched" || !live.data?.displayLeftTeamMatch.inputName.trim(),
         detail:
           live.data?.displayLeftTeamMatch.status === "matched"
             ? live.data.displayLeftTeamMatch.team?.canonicalName ?? "Matched"
-            : `Current status: ${live.data?.displayLeftTeamMatch.status ?? "waiting"}`
+            : `The feed sent “${live.data?.displayLeftTeamMatch.inputName ?? ""}” and no team is picked, so it shows on air as sent.`
       },
       {
         label: "Right team resolved",
-        ok: live.data?.displayRightTeamMatch.status === "matched",
+        ok: live.data?.displayRightTeamMatch.status === "matched" || !live.data?.displayRightTeamMatch.inputName.trim(),
         detail:
           live.data?.displayRightTeamMatch.status === "matched"
             ? live.data.displayRightTeamMatch.team?.canonicalName ?? "Matched"
-            : `Current status: ${live.data?.displayRightTeamMatch.status ?? "waiting"}`
+            : `The feed sent “${live.data?.displayRightTeamMatch.inputName ?? ""}” and no team is picked, so it shows on air as sent.`
       },
       {
         label: "Logo coverage",
@@ -1005,56 +963,18 @@ export function OperationsPage() {
       }
     });
 
-    return Array.from(deduped.values());
+    return groupIssuesByCause(Array.from(deduped.values()));
   }, [readinessChecks, warnings]);
 
   const goLiveStatus = useMemo(() => {
     if (goLiveIssues.some((issue) => issue.severity === "critical")) {
-      return { label: "Blocked", variant: "critical" as const };
+      return { label: "Action needed", variant: "critical" as const };
     }
     if (goLiveIssues.length > 0) {
-      return { label: "Needs review", variant: "warning" as const };
+      return { label: "Check", variant: "warning" as const };
     }
     return { label: "Ready", variant: "success" as const };
   }, [goLiveIssues]);
-
-  const lastUpdateTone = useMemo<"success" | "warning" | "critical">(() => {
-    const fetchedAt = live.data?.fetchedAt;
-    if (!fetchedAt) {
-      return "critical";
-    }
-
-    const ageMs = Date.now() - Date.parse(fetchedAt);
-    const pollIntervalMs = settings.data?.pollIntervalMs ?? 1000;
-    const staleThresholdMs = Math.max(pollIntervalMs * 4, 5000);
-    if (Number.isNaN(ageMs) || ageMs < 0) {
-      return "warning";
-    }
-
-    if (ageMs <= staleThresholdMs) {
-      return "success";
-    }
-
-    return live.data?.sourceStatus === "error" ? "critical" : "warning";
-  }, [live.data?.fetchedAt, live.data?.sourceStatus, settings.data?.pollIntervalMs]);
-
-  useEffect(() => {
-    const leftRaw = live.data?.displayLeftTeamMatch.inputName ?? "";
-    const rightRaw = live.data?.displayRightTeamMatch.inputName ?? "";
-    const previous = previousRawNamesRef.current;
-    const leftChanged = leftRaw !== previous.left;
-    const rightChanged = rightRaw !== previous.right;
-
-    if (!leftChanged && !rightChanged) {
-      return;
-    }
-
-    previousRawNamesRef.current = { left: leftRaw, right: rightRaw };
-    setResolutionDrafts((current) => ({
-      left: leftChanged ? live.data?.displayLeftTeamMatch.teamId || "" : current.left,
-      right: rightChanged ? live.data?.displayRightTeamMatch.teamId || "" : current.right
-    }));
-  }, [live.data?.displayLeftTeamMatch.inputName, live.data?.displayLeftTeamMatch.teamId, live.data?.displayRightTeamMatch.inputName, live.data?.displayRightTeamMatch.teamId]);
 
   useEffect(() => {
     const state = operatorText.data;
@@ -1079,6 +999,9 @@ export function OperationsPage() {
   }, [dirtyOperatorTextIds, operatorText.data]);
 
   async function handleSetPolling(enabled: boolean) {
+    if (!enabled && !window.confirm("Stop polling the live feed? The overlay freezes on the current data until you start polling again.")) {
+      return;
+    }
     setTogglingPoll(true);
     try {
       const next = enabled ? await api.startLivePolling() : await api.stopLivePolling();
@@ -1112,8 +1035,7 @@ export function OperationsPage() {
     }
   }
 
-  async function handleApplyResolution(side: "left" | "right", match: TeamMatchResult, forcedTeamId?: string, remember = false, forceReassign = false) {
-    const teamId = forcedTeamId ?? resolutionDrafts[side];
+  async function handleApplyResolution(side: "left" | "right", match: TeamMatchResult, teamId: string, remember = false, forceReassign = false) {
     if (!teamId || !match.inputName.trim()) {
       return;
     }
@@ -1126,10 +1048,6 @@ export function OperationsPage() {
         remember,
         forceReassign
       });
-      setResolutionDrafts((current) => ({
-        ...current,
-        [side]: teamId
-      }));
       if (result.rememberedTeam || result.reassignedFromTeam) {
         teams.setData((current) =>
           (current ?? []).map((team) => {
@@ -1173,10 +1091,6 @@ export function OperationsPage() {
     setClearingSide(side);
     try {
       await api.clearLiveTeamResolution(side, match.inputName);
-      setResolutionDrafts((current) => ({
-        ...current,
-        [side]: ""
-      }));
       showToast({ kind: "success", message: `Override cleared for "${match.inputName}".` });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to clear team override." });
@@ -1227,431 +1141,408 @@ export function OperationsPage() {
     }
   }
 
+
+  async function handleTakeAll() {
+    const fields = operatorText.data?.fields ?? [];
+    for (const field of fields) {
+      const draft = operatorTextDrafts[field.componentId] ?? field.value;
+      if (dirtyOperatorTextIds.has(field.componentId) && draft.length <= field.maxLength) {
+        await handleTakeOperatorText(field.componentId);
+      }
+    }
+  }
+
+  const [creatingSide, setCreatingSide] = useState<"left" | "right" | null>(null);
+
+  // Creates a team named exactly as the feed sends it, so it also matches automatically next time, and puts it on air.
+  async function handleCreateTeam(side: "left" | "right", match: TeamMatchResult) {
+    const name = match.inputName.trim();
+    if (!name || creatingSide) return;
+    setCreatingSide(side);
+    try {
+      const created = await api.createTeam({ canonicalName: name, active: true });
+      teams.setData((current) => [...(current ?? []), created].sort((left, right) => left.canonicalName.localeCompare(right.canonicalName)));
+      showToast({ kind: "success", message: `Created ${created.canonicalName}. Add its logo in Teams.` });
+      await handleApplyResolution(side, match, created.id, false);
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to create the team." });
+    } finally {
+      setCreatingSide(null);
+    }
+  }
+
+  function canCreateTeam(inputName: string) {
+    const wanted = normalizeTeamName(inputName);
+    return Boolean(wanted) && !(teams.data ?? []).some((team) => normalizeTeamName(team.canonicalName) === wanted);
+  }
+
+  const assetUrl = useMemo(() => new Map((assets.data ?? []).map((asset) => [asset.id, asset.url])), [assets.data]);
+  const logoFor = (team: Pick<TeamRecord, "logoAssetId" | "alternateLogoAssetId"> | null | undefined) => {
+    const id = team?.logoAssetId ?? team?.alternateLogoAssetId;
+    return id ? assetUrl.get(id) : undefined;
+  };
+
   if (!settings.data || !themes.data || !teams.data) {
     return (
-      <Card>
-        <CardContent>Loading operations…</CardContent>
-      </Card>
+      <div className="ad-page ad-scope">
+        <Toolbar title="Operations" />
+        <p className="ad-hint" style={{ padding: 20 }}>
+          Loading operations…
+        </p>
+      </div>
     );
   }
 
+  const feed = describeFeed(live.data, settings.data);
+  const operatorFields = operatorText.data?.fields ?? [];
+  const pendingTakeIds = operatorFields
+    .filter((field) => dirtyOperatorTextIds.has(field.componentId) && (operatorTextDrafts[field.componentId] ?? field.value).length <= field.maxLength)
+    .map((field) => field.componentId);
+  const stripOperatorText =
+    operatorText.data && publishedTheme && operatorText.data.themeId === publishedTheme.id
+      ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))
+      : {};
+  const stripMarkers: StripMarker[] = [];
+  if (live.data) {
+    for (const [side, match] of [
+      ["left", live.data.displayLeftTeamMatch],
+      ["right", live.data.displayRightTeamMatch]
+    ] as const) {
+      if (!match.inputName.trim() || match.status === "matched" || match.resolutionSource === "manual") continue;
+      stripMarkers.push({
+        side,
+        tone: match.status === "uncertain" ? "warning" : "critical",
+        label: `${match.status === "uncertain" ? "Not sure" : "No team"} · shows “${match.inputName}”${match.team ? "" : ", no logo"}`
+      });
+    }
+  }
+  const readyChecks: Array<{ label: string; detail: string }> = [
+    { label: "Feed reachable", detail: live.data?.fetchedAt ? formatAge(live.data.fetchedAt) : "—" },
+    { label: "Polling on", detail: `every ${settings.data.pollIntervalMs} ms` },
+    { label: "Theme on air", detail: publishedTheme?.name ?? "—" },
+    { label: "Both teams matched", detail: live.data?.displayLeftTeamMatch.inputName ? "left and right" : "waiting for names" },
+    { label: "Team logos", detail: leftLogo.key === "registry" && rightLogo.key === "registry" ? "from Teams" : "fallback in use" }
+  ];
+
   return (
-    <AdminPageFrame className="panel-stack gap-4 w-[90%] !max-w-none">
-      <AdminPageHeader
-        eyebrow="Operations"
-        title="Live operator overview"
-        description="Live graphics and team resolution stay in view; setup and diagnostics remain secondary."
-        actions={(
-          <div className="action-row compact items-center max-[1200px]:w-full max-[1200px]:justify-start">
-            <Button variant="secondary" type="button" onClick={() => void handleRefreshNow()} disabled={refreshing}>
-              {refreshing ? "Refreshing..." : "Refresh now"}
-            </Button>
-            <Button
-              variant={settings.data.pollEnabled ? "danger" : "default"}
-              type="button"
-              onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
-              disabled={togglingPoll}
-            >
-              {togglingPoll ? "Updating..." : settings.data!.pollEnabled ? "Stop polling" : "Start polling"}
-            </Button>
-          </div>
-        )}
-      />
+    <div className="ad-page ad-scope">
+      <Toolbar title="Operations">
+        <span className="ad-feed-state" role="status" aria-live="polite">
+          <Chip tone={feedTone(feed.variant)}>
+            <Dot tone={feed.variant === "success" ? "live" : feed.variant === "critical" ? "critical" : feed.variant === "warning" ? "warning" : undefined} flat />
+            {feed.label === "Live" ? "Feed live" : feed.label}
+          </Chip>
+          <span className="ad-hint" title={live.data?.errorMessage ?? undefined}>
+            {feed.detail}
+            {settings.data.pollEnabled ? ` Checking every ${settings.data.pollIntervalMs} ms.` : ""}
+          </span>
+        </span>
+        <Grow />
+        {goLiveIssues.length ? (
+          <a className="ad-btn ad-btn--ghost ad-issues-link" href="#operator-status">
+            <TriangleAlert aria-hidden />
+            {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
+          </a>
+        ) : null}
+        <Button variant="ghost" onClick={() => void handleRefreshNow()} disabled={refreshing}>
+          <RefreshCw aria-hidden />
+          {refreshing ? "Refreshing…" : "Refresh now"}
+        </Button>
+        <Button
+          variant={settings.data.pollEnabled ? "default" : "primary"}
+          onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
+          disabled={togglingPoll}
+        >
+          {settings.data.pollEnabled ? <Pause aria-hidden /> : <Play aria-hidden />}
+          {togglingPoll ? "Updating…" : settings.data.pollEnabled ? "Stop polling" : "Start polling"}
+        </Button>
+      </Toolbar>
 
-      <Card className="p-0">
-        <details>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-            <div className="grid gap-0.5">
-              <strong className="text-sm">vMix and browser-source setup</strong>
-              <span className="text-xs text-md3-onSurfaceVariant">Live URL, host address, and overlay shortcuts</span>
-            </div>
-            <span className="text-xs font-semibold text-md3-primary">Show configuration</span>
-          </summary>
-          <div className="grid gap-3 border-t border-md3-outlineVariant/70 px-4 py-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className={dataTileClassName()}>
-                <strong className={dataTileLabelClassName()}>vMix live URL</strong>
-                <span className={dataTileValueClassName()}>{vmixLiveUrl}</span>
-              </div>
-              <div className={dataTileClassName()}>
-                <strong className={dataTileLabelClassName()}>Host IP for vMix</strong>
-                <span className={dataTileValueClassName()}>{runtimeInfo.data?.preferredHost ?? "Current origin in use"}</span>
-              </div>
-            </div>
-            <div className="action-row compact">
-              <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={vmixLiveUrl} target="_blank" rel="noreferrer">
-                Open live overlay
-              </a>
-              <Button variant="secondary" size="sm" type="button" onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
-                Copy live URL
-              </Button>
-            </div>
-          </div>
-        </details>
-      </Card>
-
-      <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
-        <AdminStatTile
-          tone={sourceStatusTone(live.data?.sourceStatus)}
-          icon={<Activity className="h-3.5 w-3.5" />}
-          label="Live feed"
-          value={<Badge variant={sourceStatusTone(live.data?.sourceStatus)}>{live.data?.sourceStatus ?? "loading"}</Badge>}
-          detail={live.data?.errorMessage ?? "Live feed available"}
-        />
-        <AdminStatTile
-          tone={settings.data.pollEnabled ? "success" : "warning"}
-          icon={<Radio className="h-3.5 w-3.5" />}
-          label="Polling"
-          value={<Badge variant={settings.data.pollEnabled ? "success" : "warning"}>{settings.data.pollEnabled ? "Active" : "Paused"}</Badge>}
-          detail={`${settings.data.pollIntervalMs} ms interval`}
-        />
-        <AdminStatTile
-          tone={lastUpdateTone}
-          icon={<Clock3 className="h-3.5 w-3.5" />}
-          label="Last update"
-          value={formatAge(live.data?.fetchedAt ?? null)}
-          detail={formatTimestamp(live.data?.fetchedAt ?? null)}
-        />
-        <AdminStatTile
-          tone={publishedTheme ? "success" : "warning"}
-          icon={<Palette className="h-3.5 w-3.5" />}
-          label="Published theme"
-          value={publishedTheme?.name ?? "None selected"}
-          detail={publishedTheme ? "Ready for overlay" : "Choose one in Themes"}
-        />
-      </div>
-
-      <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)] items-start gap-4 max-[1200px]:grid-cols-1">
-        <div className="panel-stack min-w-0 gap-4">
-          <Card>
-            <CardHeader>
-              <div>
-                <p className="eyebrow">Team resolution</p>
-                <CardTitle className="text-xl">Resolve live team names</CardTitle>
-                <CardDescription>When in doubt: use quick suggestions first, then manual selection if needed. Overrides apply only to the current raw live name.</CardDescription>
-              </div>
-            </CardHeader>
-            {live.data ? (
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
-                <ResolutionCard
-                  side="left"
-                  match={live.data.displayLeftTeamMatch}
-                  renderedName={live.data.displayLeftTeam.name}
-                  teams={teams.data}
-                  selectedTeamId={resolutionDrafts.left}
-                  resolving={resolvingSide === "left"}
-                  clearing={clearingSide === "left"}
-                  onChangeSelection={(teamId) => setResolutionDrafts((current) => ({ ...current, left: teamId }))}
-                  onApply={(teamId) => void handleApplyResolution("left", live.data!.displayLeftTeamMatch, teamId)}
-                  onApplyAndRemember={(teamId) => void handleApplyResolution("left", live.data!.displayLeftTeamMatch, teamId, true)}
-                  onClear={() => void handleClearResolution("left")}
-                />
-                <ResolutionCard
-                  side="right"
-                  match={live.data.displayRightTeamMatch}
-                  renderedName={live.data.displayRightTeam.name}
-                  teams={teams.data}
-                  selectedTeamId={resolutionDrafts.right}
-                  resolving={resolvingSide === "right"}
-                  clearing={clearingSide === "right"}
-                  onChangeSelection={(teamId) => setResolutionDrafts((current) => ({ ...current, right: teamId }))}
-                  onApply={(teamId) => void handleApplyResolution("right", live.data!.displayRightTeamMatch, teamId)}
-                  onApplyAndRemember={(teamId) => void handleApplyResolution("right", live.data!.displayRightTeamMatch, teamId, true)}
-                  onClear={() => void handleClearResolution("right")}
-                />
-              </div>
-            ) : (
-              <p>{live.error ?? "Waiting for live data…"}</p>
-            )}
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div>
-                <p className="eyebrow">Match snapshot</p>
-                <CardTitle className="text-xl">Current scoreboard state</CardTitle>
-                <CardDescription>This is exactly what currently drives the on-air overlay output.</CardDescription>
-              </div>
-            </CardHeader>
-            {live.data ? (
-              <div className="grid gap-3">
-                <div className="grid grid-cols-4 gap-3 max-[1200px]:grid-cols-1">
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Teams on screen</strong>
-                    <span className={dataTileValueClassName()}>
-                      {live.data.displayLeftTeam.name || "Left"} vs {live.data.displayRightTeam.name || "Right"}
-                    </span>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Score</strong>
-                    <span className={dataTileValueClassName()}>
-                      {live.data.displayLeftTeam.score} - {live.data.displayRightTeam.score}
-                    </span>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Main clock</strong>
-                    <span className={dataTileValueClassName()}>{formatClock(live.data.gameTimer.value)}</span>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>State / period</strong>
-                    <span className={dataTileValueClassName()}>
-                      {live.data.state} / {live.data.period}
-                    </span>
-                  </div>
+      <div className="ad-body">
+        <div className="ad-ops2">
+          <OnAirStrip
+            theme={publishedTheme}
+            live={live.data}
+            assets={assets.data ?? []}
+            operatorTextValues={stripOperatorText}
+            markers={stripMarkers}
+            summary={
+              live.data ? (
+                <>
+                  <b>
+                    {live.data.displayLeftTeam.name || "Left"} {live.data.displayLeftTeam.score}–{live.data.displayRightTeam.score}{" "}
+                    {live.data.displayRightTeam.name || "Right"}
+                  </b>{" "}
+                  · {formatClock(live.data.gameTimer.value)} · {live.data.state} / {live.data.period}
+                </>
+              ) : (
+                live.error ?? "Waiting for live data…"
+              )
+            }
+            overlayUrl={vmixLiveUrl}
+            onCopyUrl={() => void handleCopyOverlayUrl(vmixLiveUrl)}
+          />
+          <div className="ad-ops2-grid">
+            <div className="ad-ops-col">
+              <section className="ad-surface" aria-labelledby="team-resolution-title">
+                <div className="ad-section-head ad-ops-head">
+                  <h2 id="team-resolution-title" className="ad-title">
+                    Team names on air
+                  </h2>
+                  <p className="ad-hint">A pick applies to this feed name only, unless you choose Remember.</p>
                 </div>
-                <details className="rounded-md3m border border-md3-outlineVariant bg-md3-surface px-4 py-3">
-                  <summary className="cursor-pointer list-none text-sm font-semibold text-md3-onSurfaceVariant">More scoreboard details</summary>
-                  <div className="mt-3 grid grid-cols-2 gap-3 max-[1200px]:grid-cols-1">
-                    <div className={dataTileClassName()}>
-                      <strong className={dataTileLabelClassName()}>Break clock</strong>
-                      <span className={dataTileValueClassName()}>{formatClock(live.data.breakTimer.value)}</span>
-                    </div>
-                    <div className={dataTileClassName()}>
-                      <strong className={dataTileLabelClassName()}>Round</strong>
-                      <span className={dataTileValueClassName()}>{live.data.round}</span>
-                    </div>
-                    <div className={dataTileClassName()}>
-                      <strong className={dataTileLabelClassName()}>Side switch</strong>
-                      <span className={dataTileValueClassName()}>{live.data.sidesSwitched ? "On" : "Off"}</span>
-                    </div>
-                    <div className={dataTileClassName()}>
-                      <strong className={dataTileLabelClassName()}>Current event</strong>
-                      <span className={dataTileValueClassName()}>{eventLabel(live.data.teamEvent)}</span>
-                    </div>
-                    <div className={dataTileClassName()}>
-                      <strong className={dataTileLabelClassName()}>Second game</strong>
-                      <span className={dataTileValueClassName()}>{Array.isArray(live.data.secondGame) ? "Available" : "None"}</span>
-                    </div>
+                {live.data ? (
+                  <div className="ad-resolve">
+                    <TeamSide
+                      side="left"
+                      match={live.data.displayLeftTeamMatch}
+                      renderedName={live.data.displayLeftTeam.name}
+                      teams={teams.data}
+                      logoFor={logoFor}
+                      resolving={resolvingSide === "left" || creatingSide === "left"}
+                      clearing={clearingSide === "left"}
+                      onApply={(teamId, remember) => void handleApplyResolution("left", live.data!.displayLeftTeamMatch, teamId, remember)}
+                      onClear={() => void handleClearResolution("left")}
+                      canCreate={canCreateTeam(live.data.displayLeftTeamMatch.inputName)}
+                      onCreate={() => void handleCreateTeam("left", live.data!.displayLeftTeamMatch)}
+                    />
+                    <TeamSide
+                      side="right"
+                      match={live.data.displayRightTeamMatch}
+                      renderedName={live.data.displayRightTeam.name}
+                      teams={teams.data}
+                      logoFor={logoFor}
+                      resolving={resolvingSide === "right" || creatingSide === "right"}
+                      clearing={clearingSide === "right"}
+                      onApply={(teamId, remember) => void handleApplyResolution("right", live.data!.displayRightTeamMatch, teamId, remember)}
+                      onClear={() => void handleClearResolution("right")}
+                      canCreate={canCreateTeam(live.data.displayRightTeamMatch.inputName)}
+                      onCreate={() => void handleCreateTeam("right", live.data!.displayRightTeamMatch)}
+                    />
                   </div>
-                </details>
-              </div>
-            ) : (
-              <p>{live.error ?? "Waiting for live data…"}</p>
-            )}
-          </Card>
-        </div>
+                ) : (
+                  <p className="ad-hint ad-section">{live.error ?? "Waiting for live data…"}</p>
+                )}
+              </section>
 
-        <div className="panel-stack sticky top-4 min-w-0 gap-4 max-[1200px]:static">
-          <Card>
-            <CardHeader>
-              <div>
-                <p className="eyebrow">On-air now</p>
-                <CardTitle className="text-xl">Live overlay view</CardTitle>
-                <CardDescription>Current scoreboard overlay render.</CardDescription>
-              </div>
-            </CardHeader>
-            <OverlayPreviewWithZoom liveUrl={embeddedLiveUrl} />
-          </Card>
-
-          <Card className="p-4">
-            <CardHeader className="mb-3">
-              <div>
-                <CardTitle className="text-lg">Operator-controlled graphics</CardTitle>
-                <CardDescription>Draft a value, then Take it live.</CardDescription>
-              </div>
-            </CardHeader>
-            {operatorText.error ? <FieldHint>{operatorText.error}</FieldHint> : null}
-            {operatorText.data?.fields.length ? (
-              <div className="grid gap-2">
-                {operatorText.data.fields.map((field) => {
-                  const draft = operatorTextDrafts[field.componentId] ?? field.value;
-                  const dirty = dirtyOperatorTextIds.has(field.componentId);
-                  const busy = operatorTextBusyId === field.componentId;
-                  const updateDraft = (value: string) => {
-                    setOperatorTextDrafts((current) => ({ ...current, [field.componentId]: value }));
-                    setDirtyOperatorTextIds((current) => new Set(current).add(field.componentId));
-                  };
-                  return (
-                    <div key={field.componentId} className="grid gap-2 rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainerLow p-3">
-                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        <div className="flex min-w-0 items-baseline gap-2">
-                          <strong className="text-sm">{field.label}</strong>
-                          <span className="truncate text-xs text-md3-onSurfaceVariant">On air: {field.value || "(blank)"}</span>
+            {operatorFields.length || operatorText.error ? (
+              <section className="ad-surface" aria-labelledby="operator-text-title">
+                <div className="ad-section">
+                  <div className="ad-section-head">
+                    <h2 id="operator-text-title" className="ad-title">
+                      Operator text
+                    </h2>
+                    <p className="ad-hint">
+                      {operatorFields.length > 1
+                        ? `${operatorFields.length} in this theme${pendingTakeIds.length ? ` · ${pendingTakeIds.length === 1 ? "1 draft" : `${pendingTakeIds.length} drafts`} not on air` : ""}`
+                        : "Type a draft, then Take it live."}
+                    </p>
+                    {pendingTakeIds.length > 1 ? (
+                      <Button variant="primary" onClick={() => void handleTakeAll()} disabled={operatorTextBusyId !== null}>
+                        <Dot flat />
+                        Take all ({pendingTakeIds.length})
+                      </Button>
+                    ) : null}
+                  </div>
+                  {operatorText.error ? <p className="ad-hint">{operatorText.error}</p> : null}
+                  <div className="ad-og-list">
+                    {operatorFields.map((field) => {
+                      const draft = operatorTextDrafts[field.componentId] ?? field.value;
+                      const dirty = dirtyOperatorTextIds.has(field.componentId);
+                      const busy = operatorTextBusyId === field.componentId;
+                      const inputId = `optext-${field.componentId}`;
+                      const updateDraft = (value: string) => {
+                        setOperatorTextDrafts((current) => ({ ...current, [field.componentId]: value }));
+                        setDirtyOperatorTextIds((current) => new Set(current).add(field.componentId));
+                      };
+                      const take = () => {
+                        if (!busy && dirty && draft.length <= field.maxLength) void handleTakeOperatorText(field.componentId);
+                      };
+                      return (
+                        <div key={field.componentId} className="ad-og-row">
+                          <label className="ad-og-label" htmlFor={inputId}>
+                            {field.label}
+                            {field.multiline ? <small>Several lines</small> : null}
+                          </label>
+                          <div className="ad-og-main">
+                            {field.multiline ? (
+                              <textarea
+                                id={inputId}
+                                className="ad-textarea"
+                                rows={2}
+                                maxLength={field.maxLength}
+                                value={draft}
+                                onChange={(event) => updateDraft(event.target.value)}
+                              />
+                            ) : (
+                              <input
+                                id={inputId}
+                                className="ad-input"
+                                maxLength={field.maxLength}
+                                value={draft}
+                                onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    take();
+                                  }
+                                }}
+                              />
+                            )}
+                            <div className="ad-og-air" title={field.value}>
+                              <Dot tone="tally" flat />
+                              On air: <b>{field.value || "(blank)"}</b>
+                              <span className="ad-og-count">
+                                {draft.length} / {field.maxLength}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="ad-og-actions">
+                            <Chip tone={dirty ? "warning" : field.hasOverride ? "ok" : "neutral"}>{dirty ? "Draft" : field.hasOverride ? "On air" : "Default"}</Chip>
+                            <Button variant="ghost" disabled={busy || !field.hasOverride} onClick={() => void handleResetOperatorText(field.componentId)} title="Back to the theme's default text">
+                              Reset
+                            </Button>
+                            <Button variant="primary" disabled={busy || !dirty || draft.length > field.maxLength} onClick={take} title="Put this text on air (Enter)">
+                              {busy ? "Taking…" : "Take"}
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-md3-onSurfaceVariant">{draft.length}/{field.maxLength}</span>
-                          <Badge variant={dirty ? "warning" : field.hasOverride ? "success" : "default"}>
-                            {dirty ? "Draft" : field.hasOverride ? "Live override" : "Theme default"}
-                          </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            ) : null}
+            </div>
+            <div className="ad-ops-col">
+              <section id="operator-status" className="ad-surface" aria-labelledby="checks-title">
+                <div className="ad-section-head ad-ops-head">
+                  <h2 id="checks-title" className="ad-title">
+                    Checks
+                  </h2>
+                  <Chip tone={goLiveStatus.variant === "success" ? "ok" : goLiveStatus.variant} className="ad-push">
+                    {goLiveStatus.label}
+                  </Chip>
+                </div>
+                {goLiveIssues.length ? (
+                  <ul className="ad-issues">
+                    {goLiveIssues.map((issue) => (
+                      <li key={`${issue.severity}-${issue.title}`} className={`ad-issue is-${issue.severity}`}>
+                        {issue.severity === "info" ? <Info aria-hidden /> : <TriangleAlert aria-hidden />}
+                        <div>
+                          <b>
+                            <span className="ad-sr">{issue.severity === "critical" ? "Critical: " : issue.severity === "warning" ? "Warning: " : "Note: "}</span>
+                            {issue.title}
+                          </b>
+                          {issue.cause !== issue.detail ? <p className="ad-muted">{issue.cause}</p> : null}
+                          <p className="ad-muted ad-break">{issue.detail}</p>
+                          <p>
+                            <b>Fix:</b> {issue.fix}
+                          </p>
                         </div>
-                      </div>
-                      {field.multiline ? (
-                        <Textarea
-                          rows={2}
-                          maxLength={field.maxLength}
-                          value={draft}
-                          onChange={(event) => updateDraft(event.target.value)}
-                        />
-                      ) : (
-                        <Input
-                          maxLength={field.maxLength}
-                          value={draft}
-                          onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
-                        />
-                      )}
-                      <div className="action-row compact justify-end">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          type="button"
-                          disabled={busy || !field.hasOverride}
-                          onClick={() => void handleResetOperatorText(field.componentId)}
-                        >
-                          Reset
-                        </Button>
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={busy || !dirty || draft.length > field.maxLength}
-                          onClick={() => void handleTakeOperatorText(field.componentId)}
-                        >
-                          {busy ? "Updating..." : "Take"}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <FieldHint>The published theme has no operator-controlled text components.</FieldHint>
-            )}
-          </Card>
-
-          <Card className={riskCardClassName()}>
-            <CardHeader>
-              <div>
-                <p className="eyebrow">Go-live status</p>
-                <CardTitle className="text-xl">Operator status</CardTitle>
-                <CardDescription>Only items needing attention are shown with cause and fix actions.</CardDescription>
-              </div>
-              <Badge variant={goLiveStatus.variant}>
-                {goLiveStatus.label}
-              </Badge>
-            </CardHeader>
-            {goLiveIssues.length ? (
-              <div className="grid gap-3">
-                {goLiveIssues.map((issue) => (
-                  <div key={`${issue.severity}-${issue.title}`} className={warningCardClass(issue.severity)}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span className={severityIconClass(issue.severity)}>{severityIcon(issue.severity)}</span>
-                        <div className="grid gap-1">
-                          <strong className="text-base leading-tight">{issue.title}</strong>
-                          <p className="m-0 text-sm leading-snug text-md3-onSurfaceVariant">{issue.detail}</p>
-                        </div>
-                      </div>
-                      <Badge variant={issueBadgeVariant(issue.severity)} className="normal-case tracking-[0.02em]">
-                        {issue.severity === "critical" ? "Immediate" : issue.severity === "warning" ? "Needs action" : "Heads up"}
-                      </Badge>
-                    </div>
-                    <div className="grid gap-1.5 border-t border-md3-outlineVariant/70 pt-2">
-                      <p className="m-0 flex items-start gap-2 text-sm leading-snug text-md3-onBackground">
-                        <span className="mt-0.5 inline-flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-md3-surfaceContainerHigh text-[0.66rem] font-extrabold text-md3-onSurfaceVariant">
-                          ?
-                        </span>
-                        <span><strong>Cause</strong>: {issue.cause}</span>
-                      </p>
-                      <p className="m-0 flex items-start gap-2 text-sm leading-snug text-md3-onBackground">
-                        <span className="mt-0.5 inline-flex h-4.5 w-4.5 flex-none items-center justify-center rounded-full bg-md3-surfaceContainerHigh text-[0.66rem] font-extrabold text-md3-onSurfaceVariant">
-                          →
-                        </span>
-                        <span><strong>Fix</strong>: {issue.fix}</span>
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <FieldHint>All checks are healthy. Safe to proceed on air.</FieldHint>
-            )}
-          </Card>
-
-          <Card>
-            <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer data-[state=open]:bg-md3-surface">
-              <summary className="flex list-none items-start justify-between gap-4 px-4 py-4">
-                <div>
-                  <p className="eyebrow">Overlay details</p>
-                  <h3>On-air details</h3>
-                </div>
-              </summary>
-              <div className="grid gap-4 px-4 pb-4">
-                <div className="grid gap-3">
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Published theme</strong>
-                    <span className={dataTileValueClassName()}>{publishedTheme?.name ?? "None selected"}</span>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Left logo source</strong>
-                    <Badge variant={logoTone(leftLogo)}>{leftLogo.label}</Badge>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Right logo source</strong>
-                    <Badge variant={logoTone(rightLogo)}>{rightLogo.label}</Badge>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Lower line mode</strong>
-                    <span className={dataTileValueClassName()}>
-                      {live.data?.period === "BREAK"
-                        ? publishedTheme?.centerSecondary.breakMode ?? "—"
-                        : publishedTheme?.centerSecondary.gameMode ?? "—"}
-                    </span>
-                  </div>
-                  <div className={dataTileClassName()}>
-                    <strong className={dataTileLabelClassName()}>Active overlay state</strong>
-                    <span className={dataTileValueClassName()}>
-                      {live.data?.teamEvent === "none"
-                        ? "Normal"
-                        : live.data?.teamEvent.startsWith("towel")
-                          ? "Towel overlay"
-                          : "Base overlay"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </Card>
-
-          <Card>
-            <details className="overflow-visible rounded-md3m border border-md3-outlineVariant bg-md3-surfaceContainer data-[state=open]:bg-md3-surface">
-              <summary className="flex list-none items-start justify-between gap-4 px-4 py-4">
-                <div>
-                  <p className="eyebrow">Quick links</p>
-                  <h3>Shortcuts</h3>
-                </div>
-              </summary>
-              <div className="grid gap-4 px-4 pb-4">
-                <div className="action-row compact">
-                  <a className={buttonVariants({ variant: "secondary" })} href={vmixLiveUrl} target="_blank" rel="noreferrer">
-                    Open live overlay
-                  </a>
-                  <Button variant="secondary" type="button" onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
-                    Copy live URL
-                  </Button>
-                  {vmixPreviewUrl ? (
-                    <a className={buttonVariants({ variant: "secondary" })} href={vmixPreviewUrl} target="_blank" rel="noreferrer">
-                      Open preview
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <ul className="ad-checks">
+                    {readyChecks.map((check) => (
+                      <li key={check.label}>
+                        <CircleCheck aria-hidden />
+                        {check.label}
+                        <span className="ad-hint">{check.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section className="ad-surface" aria-label="Setup and diagnostics">
+                <Disclosure icon={<Cable aria-hidden />} title="vMix setup" summary="URL, host, shortcuts">
+                  <FactList
+                    items={[
+                      ["vMix live URL", <span className="ad-break">{vmixLiveUrl}</span>],
+                      ["Host address for vMix", runtimeInfo.data?.preferredHost ?? "The address in use now"]
+                    ]}
+                  />
+                  <div className="ad-actions">
+                    <Button onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
+                      <Copy aria-hidden />
+                      Copy live URL
+                    </Button>
+                    <a className="ad-btn ad-btn--ghost" href={vmixLiveUrl} target="_blank" rel="noreferrer">
+                      Open live overlay
                     </a>
-                  ) : null}
-                  {publishedTheme ? (
-                    <Link className={buttonVariants({ variant: "secondary" })} to={`/admin/themes/${publishedTheme.id}`}>
-                      Open theme editor
-                    </Link>
-                  ) : null}
-                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/teams">
-                    Manage teams
-                  </Link>
-                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/themes">
-                    Manage themes
-                  </Link>
-                  <Link className={buttonVariants({ variant: "secondary" })} to="/admin/settings">
-                    Open settings
-                  </Link>
-                </div>
-              </div>
-            </details>
-          </Card>
+                    {vmixPreviewUrl ? (
+                      <a className="ad-btn ad-btn--ghost" href={vmixPreviewUrl} target="_blank" rel="noreferrer">
+                        Open preview
+                      </a>
+                    ) : null}
+                    {publishedTheme ? (
+                      <Link className="ad-btn ad-btn--ghost" to={`/admin/themes/${publishedTheme.id}`}>
+                        Edit theme on air
+                      </Link>
+                    ) : null}
+                  </div>
+                </Disclosure>
+                <Disclosure icon={<Database aria-hidden />} title="Feed data" summary="What the feed sends">
+                  {live.data ? (
+                    <FactList
+                      items={[
+                        ["Teams on screen", `${live.data.displayLeftTeam.name || "Left"} vs ${live.data.displayRightTeam.name || "Right"}`],
+                        ["Score", `${live.data.displayLeftTeam.score} – ${live.data.displayRightTeam.score}`],
+                        ["Main clock", formatClock(live.data.gameTimer.value)],
+                        ["Break clock", formatClock(live.data.breakTimer.value)],
+                        ["State / period", `${live.data.state} / ${live.data.period}`],
+                        ["Round", String(live.data.round)],
+                        ["Sides switched", live.data.sidesSwitched ? "Yes" : "No"],
+                        ["Current event", eventLabel(live.data.teamEvent)],
+                        ["Second game", Array.isArray(live.data.secondGame) ? "Available" : "None"],
+                        ["Last update", formatTimestamp(live.data.fetchedAt)]
+                      ]}
+                    />
+                  ) : (
+                    <p className="ad-hint">{live.error ?? "Waiting for live data…"}</p>
+                  )}
+                </Disclosure>
+                <Disclosure icon={<Layers aria-hidden />} title="Overlay details" summary="Logo sources, modes">
+                  <FactList
+                    items={[
+                      ["Theme on air", publishedTheme?.name ?? "None"],
+                      ["Left logo", <Chip tone={leftLogo.tone === "ok" ? "ok" : leftLogo.tone === "warning" ? "warning" : "blue"}>{leftLogo.label}</Chip>],
+                      ["Right logo", <Chip tone={rightLogo.tone === "ok" ? "ok" : rightLogo.tone === "warning" ? "warning" : "blue"}>{rightLogo.label}</Chip>],
+                      [
+                        "Lower line",
+                        live.data?.period === "BREAK" ? publishedTheme?.centerSecondary.breakMode ?? "—" : publishedTheme?.centerSecondary.gameMode ?? "—"
+                      ],
+                      [
+                        "Operator text",
+                        operatorFields.length ? (
+                          `${operatorFields.length} in this theme`
+                        ) : (
+                          <>
+                            None in this theme
+                            {publishedTheme ? (
+                              <>
+                                {" · "}
+                                <Link className="ad-text-link" to={`/admin/themes/${publishedTheme.id}`}>
+                                  Edit theme on air
+                                </Link>
+                              </>
+                            ) : null}
+                          </>
+                        )
+                      ],
+                      [
+                        "Overlay state",
+                        live.data?.teamEvent === "none" ? "Normal" : live.data?.teamEvent.startsWith("towel") ? "Towel overlay" : "Base overlay"
+                      ]
+                    ]}
+                  />
+                </Disclosure>
+              </section>
+            </div>
+          </div>
         </div>
       </div>
-    </AdminPageFrame>
+    </div>
   );
 }

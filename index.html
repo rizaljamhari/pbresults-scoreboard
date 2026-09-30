@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PBResults Scoreboard</title>
+    <script>
+      // Apply the admin's light/dark choice before first paint, so dark mode never flashes white.
+      // Overlay routes are skipped: the broadcast never takes the admin theme. The admin shell keeps it in sync after load.
+      (function () {
+        if (location.pathname.indexOf("/overlay") === 0) return;
+        var preference = null;
+        try {
+          preference = localStorage.getItem("pbresults.admin.appearance");
+        } catch (error) {}
+        var dark = preference === "dark" || (preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.adminTheme = dark ? "dark" : "light";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

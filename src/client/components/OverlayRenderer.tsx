@@ -9,6 +9,8 @@ type OverlayRendererProps = {
   assets?: StoredAsset[];
   operatorTextValues?: Record<string, string>;
   editable?: boolean;
+  /** Admin previews only: leave the canvas unpainted so what sits behind it shows through. Never used on air. */
+  transparentBackground?: boolean;
   selectedComponentId?: string | null;
   onSelectComponent?: (id: string) => void;
 };
@@ -302,7 +304,8 @@ function winnerSideFromSnapshot(snapshot: OverlaySnapshot): "left" | "right" | n
   return snapshot.leftScore > snapshot.rightScore ? "left" : "right";
 }
 
-function resolveEventLabelRect(
+/** Where an event card sits for a team side; shared with the editor so the card can be selected and dragged. */
+export function resolveEventLabelRect(
   side: "left" | "right",
   theme: ThemeDefinition,
   overlayGeneral: ThemeDefinition["teamEventOverlay"]["general"]
@@ -378,6 +381,7 @@ export function OverlayRenderer({
   assets = [],
   operatorTextValues = {},
   editable = false,
+  transparentBackground = false,
   selectedComponentId,
   onSelectComponent
 }: OverlayRendererProps) {
@@ -709,7 +713,7 @@ export function OverlayRenderer({
       style={{
         width: theme.canvas.width,
         height: theme.canvas.height,
-        background: theme.canvas.backgroundColor
+        ...(transparentBackground ? {} : { background: theme.canvas.backgroundColor })
       }}
     >
       {editable && theme.canvas.safeArea ? <div className="safe-area" /> : null}
@@ -1037,7 +1041,8 @@ export function OverlayRenderer({
                       fit={component.backgroundImageFit}
                       position={component.backgroundImagePosition}
                     />
-                  ) : editable ? (
+                  ) : editable && !surface.background.backgroundImage ? (
+                    // Placeholder only for a truly empty image piece; art painted as the background needs no label.
                     <span>{component.label}</span>
                   ) : null}
                 </span>

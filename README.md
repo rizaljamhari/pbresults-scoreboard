@@ -18,22 +18,26 @@ This project exists to add:
 - live operator resolution for difficult team names
 - a workflow that fits real event production instead of a fixed stock scoreboard
 
-## Visual example
+## Visual tour
 
-### Live overlay output
+### Operations
 
-![Live overlay example](./docs/images/live-overlay-example.png)
+The live control page keeps the on-air scoreboard, team matches, operator text, and production checks in one view.
+
+![Revamped Operations page showing the on-air scoreboard strip and live controls](./docs/images/admin-operations-example.png)
 
 ### Theme editor
 
-![Theme editor example](./docs/images/theme-editor-example.png)
+Design directly on the broadcast frame, adjust the selected piece in Properties, and switch between live and event preview states.
+
+![Revamped full-window theme editor with canvas, Properties, and Layers](./docs/images/theme-editor-example.png)
 
 ## What it does
 
 - polls a PBResults `/live` feed
 - normalizes live state for overlays and operator UI
-- provides an operator-first live control page at `/admin/operations`
-- lets you build and publish scoreboard themes
+- provides an operator-first live control page with an on-air preview, team resolution, operator text, and readiness checks
+- lets you build and publish scoreboard themes in a full-window visual editor with snapping, layers, and preview states
 - supports designer-created free text and image layers
 - exposes operator-controlled text with explicit Take and Reset actions during live production
 - manages team registry, aliases, and learned live match names
@@ -46,13 +50,14 @@ This project exists to add:
 ## Main pages
 
 - `/admin/operations`
-  - live health
-  - team resolution
-  - readiness and warnings
+  - on-air scoreboard preview and browser-source URL
+  - live team resolution and operator text Take controls
+  - feed, theme, and team readiness checks
 - `/admin/themes`
-  - theme management and editor
+  - theme gallery with live previews and Put on air
+  - full-window theme editor with Properties, Layers, and Preview as controls
 - `/admin/teams`
-  - team registry, logos, aliases, live match names
+  - team registry, logos, aliases, live match names, and side-panel editing
 - `/admin/settings`
   - upstream URL, publishing, polling, backup/import, software updates
 - `/overlay/live`
