@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // PBRESULTS_COORDINATOR_VERSION: 1
 //
 // Root launcher for the Windows portable package, started by "Run Scoreboard.cmd" or by the update coordinator.

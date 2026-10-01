@@ -76,8 +76,16 @@ function makeRoot() {
 function makeApp(appDir, version, mode = "healthy") {
   fs.mkdirSync(path.join(appDir, "node"), { recursive: true });
   const nodeTarget = path.join(appDir, "node", "node.exe");
-  if (process.platform === "win32") fs.copyFileSync(process.execPath, nodeTarget);
-  else fs.symlinkSync(process.execPath, nodeTarget);
+  if (process.platform !== "win32") {
+    fs.symlinkSync(process.execPath, nodeTarget);
+  } else {
+    // A hard link avoids copying the ~80 MB runtime for every fake version; fall back across volumes.
+    try {
+      fs.linkSync(process.execPath, nodeTarget);
+    } catch {
+      fs.copyFileSync(process.execPath, nodeTarget);
+    }
+  }
   fs.mkdirSync(path.join(appDir, "dist", "client"), { recursive: true });
   fs.mkdirSync(path.join(appDir, "dist", "server", "server"), { recursive: true });
   fs.writeFileSync(path.join(appDir, "dist", "client", "index.html"), "<!doctype html>");

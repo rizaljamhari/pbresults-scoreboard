@@ -41,6 +41,15 @@ async function waitFor(predicate: () => boolean, timeoutMs = 30_000) {
   throw new Error(`Condition was not met within ${timeoutMs} ms.`);
 }
 
+function processIsRunning(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     fs.rmSync(directory, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
@@ -82,7 +91,7 @@ describe("coordinator startup handoff", () => {
   it("keeps the detached coordinator running after it acknowledges", async () => {
     const completionPath = path.join(os.tmpdir(), `pbresults-coordinator-complete-${process.pid}-${Date.now()}`);
     const fixtureData = fixture(
-      `acknowledge("install-coordinator-started"); await sleep(700); fs.writeFileSync(${JSON.stringify(completionPath)}, "complete");`
+      `acknowledge("install-coordinator-started"); await sleep(700); fs.writeFileSync(${JSON.stringify(completionPath)}, String(process.pid));`
     );
     try {
       await spawnCoordinator("Install", fixtureData.transactionPath, "install-coordinator-started", {
@@ -91,8 +100,11 @@ describe("coordinator startup handoff", () => {
         startTimeoutMs: 15_000,
         stabilityMs: 100
       });
-      await waitFor(() => fs.existsSync(completionPath));
-      expect(fs.readFileSync(completionPath, "utf8")).toBe("complete");
+      await waitFor(() => fs.existsSync(completionPath) && fs.readFileSync(completionPath, "utf8").length > 0);
+      const coordinatorPid = Number(fs.readFileSync(completionPath, "utf8"));
+      expect(coordinatorPid).toBeGreaterThan(0);
+      // Windows keeps a running process's working directory locked; let it exit before cleanup.
+      await waitFor(() => !processIsRunning(coordinatorPid));
     } finally {
       fs.rmSync(completionPath, { force: true });
     }

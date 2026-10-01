@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // PBRESULTS_COORDINATOR_VERSION: 1
 //
 // Root update coordinator for the Windows portable package. It runs on the bundled node.exe from the portable root,
