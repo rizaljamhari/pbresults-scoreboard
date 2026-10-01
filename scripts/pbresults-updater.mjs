@@ -312,6 +312,7 @@ async function startLauncher(ctx, port) {
 export async function startAndWaitForHealth(ctx, transaction, version, releaseTag) {
   const pid = await startLauncher(ctx, transaction.port);
   transaction.newLauncherPid = pid;
+  transaction.newLauncherExited = false;
   saveTransaction(ctx, transaction, "new-process-started");
   const deadline = Date.now() + ctx.healthTimeoutMs;
   while (Date.now() < deadline) {
@@ -323,14 +324,28 @@ export async function startAndWaitForHealth(ctx, transaction, version, releaseTa
     } catch {
       // Not listening yet.
     }
-    if (!isProcessAlive(pid)) return false;
+    if (!isProcessAlive(pid)) {
+      // Remember it: Windows reuses pids quickly, so this pid must never be killed later.
+      transaction.newLauncherExited = true;
+      return false;
+    }
   }
   return false;
+}
+
+/** Windows reuses pids quickly; only ever terminate a pid that still belongs to a node.exe. */
+function isNodeProcessOnWindows(pid) {
+  const result = spawnSync("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+    windowsHide: true,
+    encoding: "utf8"
+  });
+  return typeof result.stdout === "string" && result.stdout.toLowerCase().includes('"node.exe"');
 }
 
 export async function stopProcessTree(pid) {
   if (!isProcessAlive(pid)) return;
   if (process.platform === "win32") {
+    if (!isNodeProcessOnWindows(pid)) return;
     spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
   } else {
     try {
@@ -348,7 +363,7 @@ export async function stopProcessTree(pid) {
 }
 
 async function stopNewProcess(ctx, transaction) {
-  if (!transaction.newLauncherPid) return;
+  if (!transaction.newLauncherPid || transaction.newLauncherExited) return;
   await stopProcessTree(Number(transaction.newLauncherPid));
   log(ctx, `Stopped process tree ${transaction.newLauncherPid}.`);
 }

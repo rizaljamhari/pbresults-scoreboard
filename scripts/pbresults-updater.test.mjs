@@ -12,13 +12,11 @@ import {
   isProcessAlive,
   pruneUpdateArtifacts,
   readJson,
-  runTransaction,
-  stopProcessTree
+  runTransaction
 } from "./pbresults-updater.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const roots = [];
-const launchedPids = new Set();
 
 const fakeServer = `
 import fs from "node:fs";
@@ -28,7 +26,13 @@ import { fileURLToPath } from "node:url";
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 const mode = JSON.parse(fs.readFileSync(path.join(appDir, "behavior.json"), "utf8")).mode;
 const build = JSON.parse(fs.readFileSync(path.join(appDir, "BUILD-INFO.json"), "utf8"));
+// Tests never kill pids (Windows reuses them); fake servers exit by themselves when the test writes this file.
+setInterval(() => {
+  const root = process.env.APP_ROOT_DIR;
+  if (fs.existsSync(path.join(root, "stop-fake-servers")) || fs.existsSync(path.join(root, "stop-v" + build.appVersion))) process.exit(0);
+}, 100);
 if (mode === "exit") process.exit(3);
+
 if (mode === "corrupt-data-then-exit") {
   fs.writeFileSync(path.join(process.env.APP_ROOT_DIR, "data", "settings.json"), "CORRUPTED");
   process.exit(4);
@@ -187,26 +191,21 @@ async function launch(root, port) {
   });
   await once(child, "spawn");
   child.unref();
-  launchedPids.add(child.pid);
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline && !(await health(port))) await new Promise((resolve) => setTimeout(resolve, 100));
   return child.pid;
 }
 
-function trackJournalProcess(journal) {
-  try {
-    const pid = Number(readJson(journal).newLauncherPid);
-    if (pid) launchedPids.add(pid);
-  } catch {
-    // No journal.
-  }
+function trackJournalProcess() {
+  // Processes are stopped through the stop file in afterEach, never by pid.
 }
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  for (const pid of launchedPids) await stopProcessTree(pid);
-  launchedPids.clear();
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  const finished = roots.splice(0);
+  for (const root of finished) fs.writeFileSync(path.join(root, "stop-fake-servers"), "");
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  for (const root of finished) fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
 });
 
 describe("install", () => {
@@ -219,7 +218,7 @@ describe("install", () => {
     expect((await health(port))?.appVersion).toBe("1.0.0");
 
     const journal = stageInstall(root, { id: "tx-b", sourceVersion: "1.0.0", version: "2.0.0", port, serverPid: oldLauncher });
-    setTimeout(() => void stopProcessTree(oldLauncher), 300);
+    setTimeout(() => fs.writeFileSync(path.join(root, "stop-v1.0.0"), ""), 300);
     expect(await runTransaction(context(root), "install", journal)).toBe(0);
     trackJournalProcess(journal);
 
@@ -241,7 +240,7 @@ describe("install", () => {
 
     // A second update makes the original app/ folder two versions old, so it is removed.
     const second = stageInstall(root, { id: "tx-c", sourceVersion: "2.0.0", version: "3.0.0", port, serverPid: done.newLauncherPid });
-    setTimeout(() => void stopProcessTree(done.newLauncherPid), 300);
+    setTimeout(() => fs.writeFileSync(path.join(root, "stop-v2.0.0"), ""), 300);
     expect(await runTransaction(context(root), "install", second)).toBe(0);
     trackJournalProcess(second);
     expect((await health(port))?.appVersion).toBe("3.0.0");
