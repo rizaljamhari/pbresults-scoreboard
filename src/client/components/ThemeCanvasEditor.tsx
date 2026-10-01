@@ -39,6 +39,8 @@ type ThemeCanvasEditorProps = {
 
 const CAMERA_MIN_ZOOM = 0.25;
 const CAMERA_MAX_ZOOM = 6;
+/** Screen pixels of the frame that panning always leaves inside the free canvas area. */
+const CAMERA_KEEP_VISIBLE = 120;
 
 
 
@@ -214,13 +216,20 @@ export function ThemeCanvasEditor({
 
     const scaledCanvasWidth = theme.canvas.width * scale;
     const scaledCanvasHeight = theme.canvas.height * scale;
-    const viewportWidth = frameRect.width;
-    const viewportHeight = frameRect.height;
+    // Floating panels cover the viewport's edges, so bounds use the free area between them, and any frame
+    // edge may be pulled well into that area. A margin of the frame always stays in view so it cannot be lost.
+    const insets = fullscreen ? fitInsetsRef.current ?? { top: 0, right: 0, bottom: 0, left: 0 } : { top: 0, right: 0, bottom: 0, left: 0 };
+    const freeLeft = insets.left;
+    const freeTop = insets.top;
+    const freeRight = Math.max(freeLeft + 1, frameRect.width - insets.right);
+    const freeBottom = Math.max(freeTop + 1, frameRect.height - insets.bottom);
+    const marginX = Math.min(CAMERA_KEEP_VISIBLE, scaledCanvasWidth, (freeRight - freeLeft) / 2);
+    const marginY = Math.min(CAMERA_KEEP_VISIBLE, scaledCanvasHeight, (freeBottom - freeTop) / 2);
 
-    const minX = Math.round(Math.min(0, viewportWidth - scaledCanvasWidth));
-    const maxX = Math.round(Math.max(0, viewportWidth - scaledCanvasWidth));
-    const minY = Math.round(Math.min(0, viewportHeight - scaledCanvasHeight));
-    const maxY = Math.round(Math.max(0, viewportHeight - scaledCanvasHeight));
+    const minX = Math.round(freeLeft + marginX - scaledCanvasWidth);
+    const maxX = Math.round(freeRight - marginX);
+    const minY = Math.round(freeTop + marginY - scaledCanvasHeight);
+    const maxY = Math.round(freeBottom - marginY);
 
     return {
       x: Math.round(Math.min(maxX, Math.max(minX, nextCamera.x))),
