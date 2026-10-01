@@ -59,6 +59,18 @@ export function createContext(root, overrides = {}) {
   };
 }
 
+/**
+ * Environment for child processes, without Node's IPC variables: a process that was itself forked with an IPC channel
+ * must not hand that channel to the launcher or server it starts.
+ */
+export function childEnvironment(extra = {}) {
+  const env = { ...process.env, ...extra };
+  delete env.NODE_CHANNEL_FD;
+  delete env.NODE_CHANNEL_SERIALIZATION_MODE;
+  delete env.NODE_UNIQUE_ID;
+  return env;
+}
+
 export function log(ctx, message) {
   try {
     fs.mkdirSync(path.dirname(ctx.logPath), { recursive: true });
@@ -267,7 +279,7 @@ function quoteForCmd(value) {
  * new server gets a real, visible console like a normal double-click start; the launcher reports its pid through a file.
  */
 async function startLauncher(ctx, port) {
-  const env = { ...process.env, APP_UPDATER_RECOVERY: "1" };
+  const env = childEnvironment({ APP_UPDATER_RECOVERY: "1" });
   const launcherArgs = [ctx.launcherPath, "--port", String(port), "--no-browser"];
   if (!ctx.useWindowsConsole) {
     const child = spawn(ctx.nodePath, launcherArgs, { cwd: ctx.root, env, detached: true, stdio: "ignore" });

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appInventory,
+  childEnvironment,
   createContext,
   isProcessAlive,
   pruneUpdateArtifacts,
@@ -187,7 +188,7 @@ async function launch(root, port) {
     cwd: root,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env, APP_UPDATER_RECOVERY: "1" }
+    env: childEnvironment({ APP_UPDATER_RECOVERY: "1" })
   });
   await once(child, "spawn");
   child.unref();
@@ -319,7 +320,7 @@ describe("install", () => {
     const journal = stageInstall(root, { id: "tx-lock", sourceVersion: "1.0.0", version: "2.0.0", port });
     const lockPath = path.join(root, "updates", "update.lock");
 
-    const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "ignore" });
+    const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "ignore", env: childEnvironment() });
     await once(holder, "spawn");
     try {
       fs.writeFileSync(lockPath, JSON.stringify({ pid: holder.pid }));

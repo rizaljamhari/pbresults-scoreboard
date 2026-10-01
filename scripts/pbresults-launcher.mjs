@@ -12,6 +12,7 @@ import { parseArgs } from "node:util";
 import {
   PROTOCOL_VERSION,
   RECOVERY_STARTS_APPLICATION,
+  childEnvironment,
   createContext,
   findInterruptedTransaction,
   isStartableApp,
@@ -69,8 +70,7 @@ async function main() {
   const child = spawn(path.join(appPath, "node", "node.exe"), [path.join(appPath, "start-portable.mjs")], {
     cwd: ctx.root,
     stdio: "inherit",
-    env: {
-      ...process.env,
+    env: childEnvironment({
       APP_ROOT_DIR: ctx.root,
       APP_SERVER_PORT: port,
       APP_REQUIRE_PORT: values.port ? "1" : "0",
@@ -79,7 +79,7 @@ async function main() {
       APP_BUILD_INFO_PATH: path.join(appPath, "BUILD-INFO.json"),
       APP_UPDATER_PROTOCOL_VERSION: String(PROTOCOL_VERSION),
       APP_UPDATER_RECOVERY: ""
-    }
+    })
   });
   const forward = (signal) => {
     if (child.exitCode === null) child.kill(signal);

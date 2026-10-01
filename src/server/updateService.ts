@@ -182,8 +182,13 @@ export async function spawnCoordinator(
   const rootDirectory = options.rootDirectory ?? appRootDir;
   const startTimeoutMs = options.startTimeoutMs ?? COORDINATOR_START_TIMEOUT_MS;
   const stabilityMs = options.stabilityMs ?? COORDINATOR_STABILITY_MS;
+  const env = { ...process.env };
+  delete env.NODE_CHANNEL_FD;
+  delete env.NODE_CHANNEL_SERIALIZATION_MODE;
+  delete env.NODE_UNIQUE_ID;
   const child = spawn(process.execPath, [updaterPath, "--mode", mode.toLowerCase(), "--transaction", transactionPath], {
     cwd: rootDirectory,
+    env,
     detached: true,
     windowsHide: true,
     stdio: "ignore"
