@@ -20,8 +20,8 @@ function placed(component: { x: number; y: number; width: number; height: number
 }
 
 /**
- * The part of the frame the scoreboard occupies: every visible piece plus where towel, base and winner cards can
- * appear on either side, with a little breathing room. It does not change when an event fires, so the strip on
+ * The part of the frame the scoreboard occupies: every visible piece plus where towel, base and winner cards and
+ * freely placed timeout and game finished cards can appear, with a little breathing room. It does not change when an event fires, so the strip on
  * Operations never jumps; it falls back to the whole frame for a theme with nothing visible.
  */
 export function scoreboardBand(theme: ThemeDefinition): Rect {
@@ -32,6 +32,12 @@ export function scoreboardBand(theme: ThemeDefinition): Rect {
   const general = theme.teamEventOverlay.general;
   if (general.enabled) {
     rects.push(resolveEventLabelRect("left", theme, general), resolveEventLabelRect("right", theme, general));
+  }
+  // Cards on the centre line are already inside it; free ones can sit anywhere.
+  for (const card of [theme.momentOverlays.timeout, theme.momentOverlays.gameFinished]) {
+    if (card.enabled && card.placement === "free") {
+      rects.push({ x: card.x, y: card.y, width: card.width, height: card.height });
+    }
   }
   const content = union(rects);
   if (!content) return frame;

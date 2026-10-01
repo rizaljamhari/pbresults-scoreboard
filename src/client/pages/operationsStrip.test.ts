@@ -36,6 +36,16 @@ describe("scoreboardBand", () => {
     expect(scoreboardBand(t)).toEqual(before);
   });
 
+  it("makes room for a freely placed moment card, but not a switched-off one", () => {
+    const t = theme();
+    const before = scoreboardBand(t);
+    Object.assign(t.momentOverlays.gameFinished, { placement: "free", x: 800, y: 900, width: 320, height: 60, enabled: false });
+    expect(scoreboardBand(t)).toEqual(before);
+    t.momentOverlays.gameFinished.enabled = true;
+    const band = scoreboardBand(t);
+    expect(band.y + band.height).toBeGreaterThanOrEqual(960);
+  });
+
   it("falls back to the whole frame when nothing is visible", () => {
     const t = theme();
     for (const component of Object.values(t.components)) component.visible = false;
