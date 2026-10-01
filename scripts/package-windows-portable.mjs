@@ -22,8 +22,8 @@ const logsDir = path.join(bundleRoot, "logs");
 const runtimeDir = path.join(appDir, "node");
 const portableLauncherSource = path.join(projectDir, "scripts", "portable-launcher.mjs");
 const portableLauncherTarget = path.join(appDir, "start-portable.mjs");
-const rootLauncherSource = path.join(projectDir, "scripts", "portable-launcher.ps1");
-const rootUpdaterSource = path.join(projectDir, "scripts", "portable-updater.ps1");
+const rootCoordinatorSources = ["pbresults-launcher.mjs", "pbresults-updater.mjs"].map((name) => path.join(projectDir, "scripts", name));
+const runScoreboardSource = path.join(projectDir, "scripts", "run-scoreboard.cmd");
 const nodeVersion = process.versions.node;
 const nodeRuntimeZipName = `node-v${nodeVersion}-win-x64.zip`;
 const nodeRuntimeUrl = `https://nodejs.org/dist/v${nodeVersion}/${nodeRuntimeZipName}`;
@@ -348,16 +348,12 @@ async function writeLauncherFiles() {
   await fs.copyFile(portableLauncherSource, portableLauncherTarget);
   const bootstrapDir = path.join(appDir, "updater-bootstrap");
   await fs.mkdir(bootstrapDir, { recursive: true });
-  await fs.copyFile(rootLauncherSource, path.join(bootstrapDir, "portable-launcher.ps1"));
-  await fs.copyFile(rootUpdaterSource, path.join(bootstrapDir, "portable-updater.ps1"));
-  await fs.copyFile(rootLauncherSource, path.join(bundleRoot, "portable-launcher.ps1"));
-  await fs.copyFile(rootUpdaterSource, path.join(bundleRoot, "portable-updater.ps1"));
-
-  const launcher = `@echo off
-setlocal
-set "ROOT_DIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%portable-launcher.ps1"
-`;
+  for (const source of rootCoordinatorSources) {
+    await fs.copyFile(source, path.join(bootstrapDir, path.basename(source)));
+    await fs.copyFile(source, path.join(bundleRoot, path.basename(source)));
+  }
+  await fs.copyFile(runScoreboardSource, path.join(bootstrapDir, "Run Scoreboard.cmd"));
+  await fs.copyFile(runScoreboardSource, path.join(bundleRoot, "Run Scoreboard.cmd"));
 
   const readme = `PBResults Scoreboard - Windows Portable
 ========================================
@@ -390,6 +386,7 @@ Open Settings in the local admin page to check for, download, and install update
 Installation always requires confirmation and briefly restarts the admin page and overlay.
 Before switching versions, the updater stores a safety snapshot under backups\\pre-update.
 If the new version fails its health check, the previous app and data snapshot are restored automatically.
+Only the current and previous versions are kept under versions\\; older ones are removed automatically.
 Detailed update events are written to logs\\updater.log.
 
 Writable folders
@@ -405,12 +402,11 @@ Writable folders
     builtAt,
     target: "windows-x64-portable",
     bundledNodeVersion: nodeVersion,
-    updaterProtocolVersion: 1,
+    updaterProtocolVersion: 2,
     sourceRepository: "rizaljamhari/pbresults-scoreboard",
     sourceCommit
   };
 
-  await fs.writeFile(path.join(bundleRoot, "Run Scoreboard.cmd"), launcher.replace(/\n/g, "\r\n"));
   await fs.writeFile(path.join(bundleRoot, "README-OPERATOR.txt"), readme.replace(/\n/g, "\r\n"));
   await fs.writeFile(path.join(bundleRoot, "BUILD-INFO.json"), `${JSON.stringify(buildInfo, null, 2)}\n`);
   await fs.writeFile(path.join(appDir, "BUILD-INFO.json"), `${JSON.stringify(buildInfo, null, 2)}\n`);

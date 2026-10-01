@@ -149,11 +149,11 @@ Important:
 - failed health checks restore the previous application and data snapshot automatically
 - packaged coordinator scripts carry independent versions and atomically refresh older root copies when no update transaction is active
 
-Existing v1.9 portable installations need a one-time manual bridge repair before they can acquire coordinator
-self-upgrades. Replace the root `portable-launcher.ps1` and `portable-updater.ps1`, and update the installed v1.9
-`app/dist/server/server/updateService.js` handoff so it both waits for coordinator acknowledgement and starts the
-coordinator detached from the server console. The v1.9 running bootstrap cannot install this behavior by itself.
-Keep the installation's `data/` directory unchanged during that repair.
+- only the current and previous versions are kept; older versions and update leftovers are removed automatically
+
+The updater runs on the bundled Node runtime (updater protocol 2). Installations from before this change used
+PowerShell coordinators and cannot update themselves to it: extract the new portable ZIP once and copy the old
+`data/` folder into it (or restore a backup in Settings).
 
 See also:
 

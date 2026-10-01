@@ -203,6 +203,15 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
         </div>
       ) : null}
 
+      {status.diskUsage ? (
+        <SettingRow
+          title="Disk space"
+          hint={`${status.diskUsage.versionCount} installed version${status.diskUsage.versionCount === 1 ? "" : "s"} (${formatBytes(status.diskUsage.versionsBytes)}) · ${status.diskUsage.snapshotCount} pre-update data snapshot${status.diskUsage.snapshotCount === 1 ? "" : "s"} (${formatBytes(status.diskUsage.snapshotsBytes)}). Only the current and previous versions are kept.`}
+        >
+          {null}
+        </SettingRow>
+      ) : null}
+
       {status.error ? (
         <div className="ad-callout ad-callout--critical">
           <CircleAlert aria-hidden />

@@ -461,8 +461,8 @@ Portable folder structure:
 - `updates/`
 - `backups/pre-update/`
 - `Run Scoreboard.cmd`
-- `portable-launcher.ps1`
-- `portable-updater.ps1`
+- `pbresults-launcher.mjs`
+- `pbresults-updater.mjs`
 - `current-version.json`
 - `README-OPERATOR.txt`
 

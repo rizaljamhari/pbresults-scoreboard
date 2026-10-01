@@ -2,9 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { spawn, type SpawnOptions } from "node:child_process";
-import { promisify } from "node:util";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   UPDATER_PROTOCOL_VERSION,
   UPDATE_SOURCE_REPOSITORY,
@@ -22,11 +20,13 @@ import {
   currentVersionPath,
   dataDir,
   portableUpdaterPath,
+  preUpdateBackupsDir,
   updateDownloadsDir,
   updateStagingDir,
   updateTransactionsDir
 } from "./runtimePaths.js";
 import { assertTrustedDownloadUrl } from "./updateSecurity.js";
+import { StageFailure, stageRelease } from "./updateStage.js";
 import {
   atomicWriteJson,
   createTransaction,
@@ -38,34 +38,16 @@ import {
 } from "./updateStorage.js";
 import { getSettings } from "./storage.js";
 
-const execFileAsync = promisify(execFile);
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FIRST_CHECK_DELAY_MS = 30_000;
 const MAX_JITTER_MS = 10 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 60_000;
 const MANIFEST_MAX_BYTES = 1024 * 1024;
-const COORDINATOR_START_TIMEOUT_MS = 10_000;
+const COORDINATOR_START_TIMEOUT_MS = 30_000;
 const COORDINATOR_STABILITY_MS = 250;
 const AUTOMATIC_BUSY_RETRY_MS = 60_000;
-const COORDINATOR_BOOTSTRAP = `
-$ErrorActionPreference = 'Stop'
-$Updater = $env:PB_COORDINATOR_UPDATER_PATH
-$Mode = $env:PB_COORDINATOR_MODE
-$TransactionPath = $env:PB_COORDINATOR_TRANSACTION_PATH
-$PidPath = $env:PB_COORDINATOR_PID_PATH
-$Arguments = @(
-  '-NoProfile',
-  '-ExecutionPolicy', 'Bypass',
-  '-File', ('"' + $Updater + '"'),
-  '-Mode', $Mode,
-  '-TransactionPath', ('"' + $TransactionPath + '"')
-)
-$Coordinator = Start-Process -FilePath 'powershell.exe' -ArgumentList $Arguments -PassThru
-[System.IO.File]::WriteAllText($PidPath, [string]$Coordinator.Id, [System.Text.UTF8Encoding]::new($false))
-$Coordinator.WaitForExit()
-exit $Coordinator.ExitCode
-`.trim();
+
 
 type ReleaseMetadata = {
   manifestName: string;
@@ -186,6 +168,10 @@ function transactionResult(transaction: Record<string, unknown>): UpdateStatus["
   };
 }
 
+/**
+ * Start the root coordinator on this server's own node.exe as a detached process, so it outlives the server it is
+ * about to stop, and wait until it records that it has taken over the transaction.
+ */
 export async function spawnCoordinator(
   mode: "Install" | "Rollback",
   transactionPath: string,
@@ -196,96 +182,57 @@ export async function spawnCoordinator(
   const rootDirectory = options.rootDirectory ?? appRootDir;
   const startTimeoutMs = options.startTimeoutMs ?? COORDINATOR_START_TIMEOUT_MS;
   const stabilityMs = options.stabilityMs ?? COORDINATOR_STABILITY_MS;
-  const launch = createCoordinatorLaunch(mode, updaterPath, transactionPath, rootDirectory);
-  fs.rmSync(launch.pidPath, { force: true });
-  const child = spawn("powershell.exe", launch.arguments, launch.options);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      child.once("spawn", resolve);
-      child.once("error", reject);
-    });
+  const child = spawn(process.execPath, [updaterPath, "--mode", mode.toLowerCase(), "--transaction", transactionPath], {
+    cwd: rootDirectory,
+    detached: true,
+    windowsHide: true,
+    stdio: "ignore"
+  });
+  let exitCode: number | null = null;
+  let exited = false;
+  child.once("exit", (code) => {
+    exited = true;
+    exitCode = code;
+  });
+  const exitedEarly = (when: string) =>
+    new UpdateFailure(
+      "UPDATE_ACTIVATION_FAILED",
+      `The ${mode.toLowerCase()} coordinator exited ${when} (exit code ${exitCode ?? "unknown"}). The current version is still running.`,
+      true
+    );
 
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", reject);
+  });
+  try {
     const deadline = Date.now() + startTimeoutMs;
     while (Date.now() < deadline) {
-      if (child.exitCode !== null || child.signalCode !== null) {
-        throw new UpdateFailure(
-          "UPDATE_ACTIVATION_FAILED",
-          `The ${mode.toLowerCase()} coordinator exited before it was ready (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
-          true
-        );
-      }
       let acknowledged = false;
       try {
         acknowledged = readTransaction(transactionPath).phase === startedPhase;
       } catch {
         // The coordinator atomically replaces the journal while acknowledging startup.
       }
+      if (!acknowledged && exited) throw exitedEarly("before it was ready");
       if (acknowledged) {
         await new Promise((resolve) => setTimeout(resolve, stabilityMs));
-        if (child.exitCode !== null || child.signalCode !== null) {
-          throw new UpdateFailure(
-            "UPDATE_ACTIVATION_FAILED",
-            `The ${mode.toLowerCase()} coordinator exited during startup (exit code ${child.exitCode ?? "unknown"}). The current version is still running.`,
-            true
-          );
-        }
+        if (exited && exitCode !== 0) throw exitedEarly("during startup");
         child.unref();
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    stopCoordinatorStartup(child, launch.pidPath);
     throw new UpdateFailure(
       "UPDATE_ACTIVATION_FAILED",
       `The ${mode.toLowerCase()} coordinator did not acknowledge startup within ${startTimeoutMs} ms. The current version is still running.`,
       true
     );
-  } finally {
-    fs.rmSync(launch.pidPath, { force: true });
+  } catch (error) {
+    if (!exited) child.kill();
+    child.unref();
+    throw error;
   }
-}
-
-export function createCoordinatorLaunch(
-  mode: "Install" | "Rollback",
-  updaterPath: string,
-  transactionPath: string,
-  rootDirectory: string
-): { arguments: string[]; options: SpawnOptions; pidPath: string } {
-  const pidPath = path.join(
-    path.dirname(transactionPath),
-    `.coordinator-${mode.toLowerCase()}-${process.pid}-${randomUUID()}.pid`
-  );
-  return {
-    arguments: ["-NoProfile", "-EncodedCommand", Buffer.from(COORDINATOR_BOOTSTRAP, "utf16le").toString("base64")],
-    options: {
-      cwd: rootDirectory,
-      stdio: "ignore",
-      windowsHide: false,
-      env: {
-        ...process.env,
-        PB_COORDINATOR_UPDATER_PATH: updaterPath,
-        PB_COORDINATOR_MODE: mode,
-        PB_COORDINATOR_TRANSACTION_PATH: transactionPath,
-        PB_COORDINATOR_PID_PATH: pidPath
-      }
-    },
-    pidPath
-  };
-}
-
-function stopCoordinatorStartup(child: ReturnType<typeof spawn>, pidPath: string) {
-  try {
-    const coordinatorPid = Number(fs.readFileSync(pidPath, "utf8").trim());
-    if (Number.isSafeInteger(coordinatorPid) && coordinatorPid > 0) {
-      process.kill(coordinatorPid);
-    }
-  } catch {
-    // The independent coordinator may not have started or may already have exited.
-  }
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill();
-  }
-  child.unref();
 }
 
 export class UpdateService {
@@ -301,6 +248,7 @@ export class UpdateService {
   private activeTransactionPath: string | null = null;
   private showSkippedRelease = false;
   private rateLimitResetAtMs: number | null = null;
+  private diskUsageCache: { at: number; value: UpdateStatus["diskUsage"] } | null = null;
 
   constructor() {
     this.activeTransactionPath = this.persisted.transactionPath;
@@ -396,8 +344,35 @@ export class UpdateService {
       skippedVersion: this.persisted.skippedVersion,
       lastResult: this.persisted.lastResult,
       error: this.error,
-      rollbackAvailable
+      rollbackAvailable,
+      diskUsage: this.bootstrap.supported ? this.measureDiskUsage() : null
     };
+  }
+
+  /** Space held by retained versions and pre-update snapshots. Walking node_modules is slow, so this is cached. */
+  private measureDiskUsage(): UpdateStatus["diskUsage"] {
+    if (this.diskUsageCache && Date.now() - this.diskUsageCache.at < 60_000) return this.diskUsageCache.value;
+    const folders = (root: string) =>
+      fs.existsSync(root)
+        ? fs.readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => path.join(root, entry.name))
+        : [];
+    const versions = folders(path.join(appRootDir, "versions"));
+    const legacyApp = path.join(appRootDir, "app");
+    if (fs.existsSync(legacyApp)) versions.push(legacyApp);
+    const snapshots = folders(preUpdateBackupsDir).filter((folder) => !folder.endsWith(".partial"));
+    let value: UpdateStatus["diskUsage"] = null;
+    try {
+      value = {
+        versionCount: versions.length,
+        versionsBytes: versions.reduce((total, folder) => total + directorySize(folder), 0),
+        snapshotCount: snapshots.length,
+        snapshotsBytes: snapshots.reduce((total, folder) => total + directorySize(folder), 0)
+      };
+    } catch {
+      value = null;
+    }
+    this.diskUsageCache = { at: Date.now(), value };
+    return value;
   }
 
   async check(manual = true): Promise<UpdateStatus> {
@@ -812,17 +787,23 @@ export class UpdateService {
       this.activeTransactionPath = createTransaction(transaction);
       this.persisted.transactionPath = this.activeTransactionPath;
       this.phase = "staging";
-      await execFileAsync("powershell.exe", [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        portableUpdaterPath,
-        "-Mode",
-        "Stage",
-        "-TransactionPath",
-        this.activeTransactionPath
-      ]);
+      try {
+        await stageRelease(appRootDir, this.activeTransactionPath, transaction);
+      } catch (error) {
+        const failure =
+          error instanceof StageFailure
+            ? new UpdateFailure(error.code, error.message, false)
+            : this.asFailure(error, "UPDATE_PAYLOAD_INVALID", "The update package could not be prepared.", false);
+        atomicWriteJson(this.activeTransactionPath, {
+          ...transaction,
+          phase: "failed",
+          outcome: "failed",
+          completedAt: new Date().toISOString(),
+          errorCode: failure.code,
+          errorMessage: failure.message
+        });
+        throw failure;
+      }
       const staged = readTransaction(this.activeTransactionPath);
       if (staged.phase !== "prepared" || typeof staged.preparedAppPath !== "string") {
         throw new UpdateFailure("UPDATE_PAYLOAD_INVALID", "The staged application failed validation.", false);

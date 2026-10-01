@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
-import { refreshCoordinatorScript } from "./portableBootstrap.js";
+import { refreshCoordinatorScript, updaterLockIsActive } from "./portableBootstrap.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -14,8 +14,8 @@ function temporaryDirectory(): string {
   return directory;
 }
 
-function coordinator(version: number, body = "Write-Output 'coordinator'"): string {
-  return `# PBRESULTS_COORDINATOR_VERSION: ${version}\n${body}\n`;
+function coordinator(version: number, body = "console.log('coordinator');"): string {
+  return `// PBRESULTS_COORDINATOR_VERSION: ${version}\n${body}\n`;
 }
 
 afterEach(() => {
@@ -27,8 +27,8 @@ afterEach(() => {
 describe("portable coordinator refresh", () => {
   it("installs a missing coordinator", () => {
     const root = temporaryDirectory();
-    const source = path.join(root, "source.ps1");
-    const destination = path.join(root, "portable-updater.ps1");
+    const source = path.join(root, "source.mjs");
+    const destination = path.join(root, "pbresults-updater.mjs");
     fs.writeFileSync(source, coordinator(2));
 
     expect(refreshCoordinatorScript(source, destination, path.join(root, "update.lock"))).toBe("installed");
@@ -37,8 +37,8 @@ describe("portable coordinator refresh", () => {
 
   it("does not rewrite an identical coordinator", () => {
     const root = temporaryDirectory();
-    const source = path.join(root, "source.ps1");
-    const destination = path.join(root, "portable-updater.ps1");
+    const source = path.join(root, "source.mjs");
+    const destination = path.join(root, "pbresults-updater.mjs");
     fs.writeFileSync(source, coordinator(2));
     fs.copyFileSync(source, destination);
     const before = fs.statSync(destination).mtimeMs;
@@ -49,56 +49,54 @@ describe("portable coordinator refresh", () => {
 
   it("atomically replaces an older coordinator with a newer packaged version", () => {
     const root = temporaryDirectory();
-    const source = path.join(root, "source.ps1");
-    const destination = path.join(root, "portable-updater.ps1");
-    fs.writeFileSync(source, coordinator(3, "Write-Output 'new'"));
-    fs.writeFileSync(destination, coordinator(2, "Write-Output 'old'"));
+    const source = path.join(root, "source.mjs");
+    const destination = path.join(root, "pbresults-updater.mjs");
+    fs.writeFileSync(source, coordinator(3, "console.log('new');"));
+    fs.writeFileSync(destination, coordinator(2, "console.log('old');"));
 
     expect(refreshCoordinatorScript(source, destination, path.join(root, "update.lock"))).toBe("updated");
-    expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(3, "Write-Output 'new'"));
+    expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(3, "console.log('new');"));
     expect(fs.readdirSync(root).some((name) => /\.tmp$|\.bak$/.test(name))).toBe(false);
   });
 
   it("does not downgrade a newer installed coordinator", () => {
     const root = temporaryDirectory();
-    const source = path.join(root, "source.ps1");
-    const destination = path.join(root, "portable-updater.ps1");
+    const source = path.join(root, "source.mjs");
+    const destination = path.join(root, "pbresults-updater.mjs");
     fs.writeFileSync(source, coordinator(2));
-    fs.writeFileSync(destination, coordinator(4, "Write-Output 'future'"));
+    fs.writeFileSync(destination, coordinator(4, "console.log('future');"));
 
     expect(refreshCoordinatorScript(source, destination, path.join(root, "update.lock"))).toBe("newer-present");
-    expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(4, "Write-Output 'future'"));
+    expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(4, "console.log('future');"));
   });
 
-  it.runIf(process.platform === "win32")("defers replacement while a coordinator holds the update lock", async () => {
+  it("defers replacement while a live coordinator holds the update lock", async () => {
     const root = temporaryDirectory();
-    const source = path.join(root, "source.ps1");
-    const destination = path.join(root, "portable-updater.ps1");
+    const source = path.join(root, "source.mjs");
+    const destination = path.join(root, "pbresults-updater.mjs");
     const lock = path.join(root, "update.lock");
-    const ready = path.join(root, "ready");
     fs.writeFileSync(source, coordinator(3));
     fs.writeFileSync(destination, coordinator(2));
-    const child = spawn(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-Command",
-        "$s=[IO.File]::Open($env:LOCK,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None);" +
-          "[IO.File]::WriteAllText($env:READY,'ready'); Start-Sleep -Seconds 20; $s.Dispose()"
-      ],
-      { env: { ...process.env, LOCK: lock, READY: ready }, stdio: "ignore" }
-    );
+    const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "ignore" });
     try {
-      const deadline = Date.now() + 30_000;
-      while (!fs.existsSync(ready) && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      expect(fs.existsSync(ready)).toBe(true);
+      await once(holder, "spawn");
+      fs.writeFileSync(lock, JSON.stringify({ pid: holder.pid, startedAt: new Date().toISOString() }));
+      expect(updaterLockIsActive(lock)).toBe(true);
       expect(refreshCoordinatorScript(source, destination, lock)).toBe("deferred-active");
       expect(fs.readFileSync(destination, "utf8")).toBe(coordinator(2));
     } finally {
-      child.kill();
-      await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 30_000))]);
+      holder.kill();
+      await once(holder, "exit");
     }
+  });
+
+  it("treats a lock left by a process that has exited as stale", async () => {
+    const root = temporaryDirectory();
+    const lock = path.join(root, "update.lock");
+    const finished = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
+    await once(finished, "exit");
+    fs.writeFileSync(lock, JSON.stringify({ pid: finished.pid, startedAt: new Date().toISOString() }));
+    expect(updaterLockIsActive(lock)).toBe(false);
+    expect(fs.existsSync(lock)).toBe(false);
   });
 });

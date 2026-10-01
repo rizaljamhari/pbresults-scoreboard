@@ -235,7 +235,7 @@ Persist an envelope rather than plaintext:
 }
 ```
 
-Use a non-interactive PowerShell DPAPI bridge because PowerShell is already a required component of the portable update workflow:
+Use a non-interactive PowerShell DPAPI bridge. (The update workflow no longer uses PowerShell, so reconsider a native Node DPAPI binding when this is built.)
 
 - invoke `powershell.exe` with a static encoded script
 - send plaintext or ciphertext through stdin, never a command-line argument

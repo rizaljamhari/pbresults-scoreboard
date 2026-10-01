@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const UPDATER_PROTOCOL_VERSION = 1;
+export const UPDATER_PROTOCOL_VERSION = 2;
 export const UPDATE_ARCHIVE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 export const UPDATE_UNPACKED_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 export const UPDATE_SOURCE_REPOSITORY = "rizaljamhari/pbresults-scoreboard";
@@ -179,7 +179,16 @@ export const updateStatusSchema = z.object({
       retryable: z.boolean()
     })
     .nullable(),
-  rollbackAvailable: z.boolean().default(false)
+  rollbackAvailable: z.boolean().default(false),
+  diskUsage: z
+    .object({
+      versionCount: z.number().int().nonnegative(),
+      versionsBytes: z.number().int().nonnegative(),
+      snapshotCount: z.number().int().nonnegative(),
+      snapshotsBytes: z.number().int().nonnegative()
+    })
+    .nullable()
+    .default(null)
 });
 
 export const updateDownloadRequestSchema = z.object({ version: stableVersionSchema });

@@ -18,8 +18,8 @@ export const preUpdateBackupsDir = path.resolve(path.join(appRootDir, "backups",
 export const scheduledBackupsDir = path.resolve(path.join(appRootDir, "backups", "scheduled"));
 export const backupStatePath = path.resolve(path.join(appRootDir, "backups", "backup-state.json"));
 export const currentVersionPath = path.resolve(path.join(appRootDir, "current-version.json"));
-export const portableLauncherPath = path.resolve(path.join(appRootDir, "portable-launcher.ps1"));
-export const portableUpdaterPath = path.resolve(path.join(appRootDir, "portable-updater.ps1"));
+export const portableLauncherPath = path.resolve(path.join(appRootDir, "pbresults-launcher.mjs"));
+export const portableUpdaterPath = path.resolve(path.join(appRootDir, "pbresults-updater.mjs"));
 
 export function isPathInside(parent: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(parent), path.resolve(candidate));

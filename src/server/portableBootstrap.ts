@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 import { runtimeBuild } from "./buildInfo.js";
 import {
   activeAppDir,
@@ -32,7 +33,9 @@ function atomicWriteJson(target: string, value: unknown) {
   }
 }
 
-const coordinatorVersionPattern = /^\s*#\s*PBRESULTS_COORDINATOR_VERSION:\s*(\d+)\s*$/m;
+const coordinatorVersionPattern = /^\s*(?:#|\/\/)\s*PBRESULTS_COORDINATOR_VERSION:\s*(\d+)\s*$/m;
+const coordinatorFiles = ["pbresults-launcher.mjs", "pbresults-updater.mjs"];
+const retiredRootFiles = ["portable-launcher.ps1", "portable-updater.ps1"];
 
 export function readCoordinatorVersion(scriptPath: string): number {
   if (!fs.existsSync(scriptPath)) return 0;
@@ -42,16 +45,25 @@ export function readCoordinatorVersion(scriptPath: string): number {
   return Number.isSafeInteger(version) && version > 0 ? version : 0;
 }
 
-function updaterLockIsActive(lockPath: string): boolean {
+/** The coordinator's lock records its pid; a lock whose process no longer exists is stale. */
+export function updaterLockIsActive(lockPath: string): boolean {
   if (!fs.existsSync(lockPath)) return false;
+  let pid = 0;
   try {
-    const descriptor = fs.openSync(lockPath, "r+");
-    fs.closeSync(descriptor);
-    fs.rmSync(lockPath, { force: true });
-    return false;
+    pid = Number((JSON.parse(fs.readFileSync(lockPath, "utf8")) as { pid?: unknown }).pid);
   } catch {
-    return true;
+    // Unreadable: treat as stale.
   }
+  if (Number.isSafeInteger(pid) && pid > 0) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return true;
+    }
+  }
+  fs.rmSync(lockPath, { force: true });
+  return false;
 }
 
 export type CoordinatorRefreshResult = "installed" | "updated" | "identical" | "newer-present" | "deferred-active";
@@ -104,7 +116,7 @@ export function refreshPortableCoordinators(options: {
 }): Record<string, CoordinatorRefreshResult> {
   const lockPath = path.join(options.updatesDirectory, "update.lock");
   return Object.fromEntries(
-    ["portable-launcher.ps1", "portable-updater.ps1"].map((sourceName) => [
+    coordinatorFiles.map((sourceName) => [
       sourceName,
       refreshCoordinatorScript(
         path.join(options.sourceDirectory, sourceName),
@@ -113,6 +125,21 @@ export function refreshPortableCoordinators(options: {
       )
     ])
   );
+}
+
+/** Remove old versions and update leftovers in the background; the coordinator skips this while an update runs. */
+function startBackgroundCleanup() {
+  if (!fs.existsSync(portableUpdaterPath)) return;
+  try {
+    spawn(process.execPath, [portableUpdaterPath, "--prune"], {
+      cwd: appRootDir,
+      detached: true,
+      windowsHide: true,
+      stdio: "ignore"
+    }).unref();
+  } catch (error) {
+    console.warn(`Update cleanup could not start: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export function bootstrapPortableUpdater(): { supported: boolean; reason: string | null } {
@@ -152,19 +179,15 @@ export function bootstrapPortableUpdater(): { supported: boolean; reason: string
       console.info(`Deferred coordinator refresh while an update is active: ${deferred.join(", ")}`);
     }
     const commandPath = path.join(appRootDir, "Run Scoreboard.cmd");
-    const expectedCommand = [
-      "@echo off",
-      "setlocal",
-      'set "ROOT_DIR=%~dp0"',
-      'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%portable-launcher.ps1"',
-      ""
-    ].join("\r\n");
     const existingCommand = fs.existsSync(commandPath) ? fs.readFileSync(commandPath, "utf8") : "";
-    if (!existingCommand.includes("portable-launcher.ps1")) {
+    if (!existingCommand.includes("pbresults-launcher.mjs")) {
       if (existingCommand && !fs.existsSync(`${commandPath}.legacy`)) {
         fs.copyFileSync(commandPath, `${commandPath}.legacy`, fs.constants.COPYFILE_EXCL);
       }
-      fs.writeFileSync(commandPath, expectedCommand, "utf8");
+      fs.copyFileSync(path.join(activeAppDir, "updater-bootstrap", "Run Scoreboard.cmd"), commandPath);
+    }
+    for (const retired of retiredRootFiles) {
+      fs.rmSync(path.join(appRootDir, retired), { force: true });
     }
 
     if (!fs.existsSync(currentVersionPath)) {
@@ -187,6 +210,7 @@ export function bootstrapPortableUpdater(): { supported: boolean; reason: string
 
     JSON.parse(fs.readFileSync(currentVersionPath, "utf8"));
     fs.accessSync(updatesDir, fs.constants.R_OK | fs.constants.W_OK);
+    startBackgroundCleanup();
     return { supported: true, reason: null };
   } catch (error) {
     return {

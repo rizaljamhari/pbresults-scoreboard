@@ -216,9 +216,9 @@ Target portable layout after the first managed update:
 
 ```text
 PBResults-Scoreboard/
-  Run Scoreboard.cmd
-  portable-launcher.ps1
-  portable-updater.ps1
+  Run Scoreboard.cmd                 starts pbresults-launcher.mjs on a bundled node.exe
+  pbresults-launcher.mjs
+  pbresults-updater.mjs
   current-version.json
   app/                              legacy initial application
   versions/
@@ -232,9 +232,13 @@ PBResults-Scoreboard/
     downloads/
     staging/
     transactions/
+    quarantine/
+    trash/                          folders waiting to be deleted
     update-state.json
-    update.lock
+    update.lock                     { pid, startedAt } of the running coordinator
 ```
+
+Only the active and previous versions are kept. See section 5.7.
 
 The first updater-enabled release can still run from the existing `app/` directory. Its startup bootstrap installs the stable root scripts and writes:
 
@@ -258,7 +262,7 @@ Do not use Windows symbolic links or junctions for the active pointer. They can 
 
 ### 5.5 A stable root process owns activation and rollback
 
-The running application must not replace itself. A root-level PowerShell coordinator performs installation after the application requests shutdown.
+The running application must not replace itself. A root-level Node coordinator (`pbresults-updater.mjs`, run on the outgoing server's bundled `node.exe`) performs installation after the application requests shutdown.
 
 Responsibilities are split as follows:
 
@@ -296,7 +300,29 @@ Responsibilities are split as follows:
 - preserve the existing console/log behavior
 - participate in incomplete-transaction recovery
 
-PowerShell is used only as the stable Windows coordinator. Application logic, GitHub parsing, and UI status remain TypeScript. Root scripts receive versioned protocol tests in Windows CI.
+The root coordinators are plain Node ES modules that import only Node built-ins, so they keep working whichever version is installed. Updater protocol 2 replaced the earlier PowerShell coordinators, which were flaky: four or five chained PowerShell starts, a 10-second acknowledgement window that Defender's per-launch scanning could exceed, `-EncodedCommand` antivirus heuristics, and hand-built `Start-Process` quoting. Installations on protocol 1 cannot install protocol 2 releases and are re-extracted once.
+
+Process chain:
+
+```text
+Run Scoreboard.cmd → node pbresults-launcher.mjs → node app/start-portable.mjs → server
+Install/rollback: server spawns node pbresults-updater.mjs (detached, hidden, stdio ignored)
+  → coordinator runs `cmd /c start` to open node pbresults-launcher.mjs in its own console window
+    (the launcher reports its pid through PB_LAUNCHER_PID_PATH) → new server
+Staging: in-process in the server (yauzl), no child process
+```
+
+The coordinator and launcher are covered by end-to-end tests (`scripts/pbresults-updater.test.mjs`) that run real launcher and server processes on macOS, Linux and the Windows CI runner.
+
+### 5.7 Retention of versions and update leftovers
+
+Each version folder is several hundred MB. After every terminal transaction, and in the background at each server start (`pbresults-updater.mjs --prune`, skipped while a coordinator holds the lock), the coordinator:
+
+- keeps the `active` and `previous` versions from `current-version.json` and any folder referenced by an unfinished transaction, and removes every other folder under `versions/` plus the original `app/` folder once it is neither;
+- keeps the newest 3 pre-update data snapshots and the newest 3 quarantine entries;
+- removes orphaned downloads and staging folders.
+
+A folder is renamed into `updates/trash/` before it is deleted, so a half-deleted version never sits where the launcher could pick it. A folder that cannot be moved (`EBUSY`/`EPERM`) is skipped and retried on the next run. The launcher always exits with its server, so by the time a version is two steps back nothing runs from its `node.exe`. Settings → Software updates shows the space held by retained versions and snapshots.
 
 ### 5.6 Activation uses an atomic pointer, not directory overwrite
 
@@ -613,7 +639,7 @@ The UI reports required and available bytes when this check fails. Unknown files
 
 ## 9. Secure staging and payload validation
 
-Use .NET ZIP APIs from the root PowerShell helper to inspect and extract each entry explicitly.
+Staging runs inside the server (`src/server/updateStage.ts`) with the `yauzl` streaming ZIP reader, inspecting and extracting each entry explicitly.
 
 For every archive entry:
 
@@ -951,16 +977,14 @@ For v1:
 - a package requiring a newer protocol is downloaded only if desired but cannot be installed
 - UI explains that a manual bootstrap update is required
 
-Coordinator self-upgrade uses an independent integer version marker in each PowerShell script. Bootstrap validates a
+Coordinator self-upgrade uses an independent integer version marker (`// PBRESULTS_COORDINATOR_VERSION: N`) in each root `.mjs` file. Bootstrap validates a
 same-directory temporary copy, flushes it, and atomically replaces the root script only when the packaged version is
 newer. Identical or newer root scripts are retained. An active updater lock defers replacement until the next normal
 startup so a transaction never changes the coordinator scripts it is using.
 
-Existing v1.9 installations still need a one-time manual bridge repair. Their running bootstrap only copies a
-coordinator when it is missing, so it cannot acquire this self-upgrade behavior automatically. The repair replaces
-`portable-launcher.ps1` and `portable-updater.ps1` and updates the installed v1.9
-`app/dist/server/server/updateService.js` handoff so the coordinator is detached only after its startup can be
-acknowledged safely. Persistent `data/` must remain untouched.
+Installations still running the PowerShell coordinators (updater protocol 1) cannot install protocol 2 releases; the
+manifest's `minimumUpdaterVersion: 2` makes them refuse with `UPDATE_PROTOCOL_UNSUPPORTED`. Operators extract the new
+portable ZIP once and copy their `data/` folder (or restore a backup) into it.
 
 ## 16. Release pipeline changes
 
@@ -1059,10 +1083,14 @@ Release documentation must state:
 
 ### Portable scripts and release tooling
 
-- `scripts/portable-launcher.ps1`
+- `scripts/pbresults-launcher.mjs`
   - stable pointer-aware root launcher
-- `scripts/portable-updater.ps1`
-  - lock, extraction helper, snapshot, activation, health, rollback, recovery
+- `scripts/pbresults-updater.mjs`
+  - lock, snapshot, activation, health, rollback, recovery, retention
+- `src/server/updateStage.ts`
+  - verified, per-entry ZIP extraction into staging
+- `scripts/run-scoreboard.cmd`
+  - starts the root launcher on any bundled `node.exe`
 - `scripts/portable-launcher.mjs`
   - active-app environment support and clean update exit handling
 - `scripts/package-windows-portable.mjs`
@@ -1133,7 +1161,7 @@ Cover:
 - install request with the correct UI state while the server independently rejects stale or mismatched prepared state
 - restart result imported into public update status
 
-### 18.3 PowerShell unit/contract tests on Windows CI
+### 18.3 Coordinator unit/contract tests (all platforms and Windows CI)
 
 Test root helpers against temporary directories:
 

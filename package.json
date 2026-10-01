@@ -42,6 +42,7 @@
     "react-moveable": "^0.56.0",
     "react-router-dom": "^7.6.0",
     "sharp": "^0.34.5",
+    "yauzl": "^3.4.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
@@ -49,13 +50,16 @@
     "@types/node": "^22.15.17",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vitest": "^3.1.4"
+    "vitest": "^3.1.4",
+    "yazl": "^3.3.1"
   },
   "pnpm": {
     "overrides": {
