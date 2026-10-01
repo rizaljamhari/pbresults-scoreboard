@@ -2171,7 +2171,13 @@ export function ThemeEditorPage() {
                 centreLine={
                   selectedSlot === "center" ? (
                     <PanelSection title="Centre line" defaultOpen={false}>
-                      <CentreLineProperties line={theme.centerSecondary} swatches={themeSwatches(theme)} patch={(update) => patchTheme((draft) => update(draft.centerSecondary))} />
+                      <CentreLineProperties
+                        line={theme.centerSecondary}
+                        moments={theme.momentOverlays}
+                        swatches={themeSwatches(theme)}
+                        patch={(update) => patchTheme((draft) => update(draft.centerSecondary))}
+                        patchMoments={(update) => patchTheme((draft) => update(draft.momentOverlays))}
+                      />
                     </PanelSection>
                   ) : null
                 }

@@ -266,10 +266,10 @@ details[open]:not(.editor-section-card) > summary::after {
   justify-content: center;
 }
 
-.center-secondary-timeout-overlay {
+.moment-card {
   position: absolute;
-  inset: 0;
-  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .safe-area {

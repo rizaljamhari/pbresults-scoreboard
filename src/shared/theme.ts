@@ -358,11 +358,6 @@ export const centerSecondarySchema = z.object({
   gameText: z.string().default(""),
   breakMode: z.enum(centerSecondaryModeValues).default("timer"),
   breakText: z.string().default(""),
-  gameFinished: z
-    .object({
-      enabled: z.boolean().default(true)
-    })
-    .default({}),
   timerStyle: z
     .object({
       fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
@@ -384,7 +379,61 @@ export const centerSecondarySchema = z.object({
       animation: z.enum(centerSecondaryTransitionValues).default("fade"),
       durationMs: z.number().positive().default(250)
     })
-    .default({}),
+    .default({})
+});
+
+export const momentPlacementValues = ["centreLine", "free"] as const;
+
+/**
+ * A card shown for a match moment (timeout, game finished). It either takes the centre line's box or sits
+ * freely; its type and surface are always its own.
+ */
+const momentCardSchema = z.object({
+  enabled: z.boolean().default(true),
+  text: z.string().default(""),
+  placement: z.enum(momentPlacementValues).default("centreLine"),
+  hideCentreLineContent: z.boolean().default(false),
+  // Free placement; ignored while following the centre line.
+  x: z.number().default(0),
+  y: z.number().default(0),
+  width: z.number().positive().default(240),
+  height: z.number().positive().default(44),
+  fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+  fontSize: z.number().positive().default(28),
+  fontWeight: z.number().min(100).max(900).default(700),
+  letterSpacing: z.number().default(1),
+  textAlign: z.enum(["left", "center", "right"]).default("center"),
+  color: z.string().default("#ffffff"),
+  backgroundColor: z.string().default("#00000000"),
+  backgroundImageAssetId: z.string().nullable().default(null),
+  backgroundImageFit: z.enum(backgroundImageFitValues).default("cover"),
+  backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
+  backgroundOverlayColor: z.string().default("#000000"),
+  backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
+  borderColor: z.string().default("#00000000"),
+  borderWidth: z.number().min(0).default(0),
+  borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([0, 0, 0, 0]),
+  paddingX: z.number().min(0).default(0),
+  paddingY: z.number().min(0).default(0),
+  shadow: z.string().default("none")
+});
+
+export const momentOverlaysSchema = z.object({
+  timeout: momentCardSchema
+    .extend({
+      durationMs: z.number().positive().default(1200),
+      minIncreaseSeconds: z.number().min(1).default(45)
+    })
+    .default({ text: "TIMEOUT", backgroundColor: "#b3261ecc" }),
+  gameFinished: momentCardSchema.default({ text: "GAME FINISHED", hideCentreLineContent: true })
+});
+
+// Timeout and game finished used to live inside centerSecondary and draw into the centre line itself.
+const legacyCentreLineMomentsSchema = z.object({
+  breakMode: z.enum(centerSecondaryModeValues).default("timer"),
+  gameFinished: z.object({ enabled: z.boolean().default(true) }).default({}),
+  timerStyle: centerSecondarySchema.shape.timerStyle,
+  staticStyle: centerSecondarySchema.shape.staticStyle,
   timeout: z
     .object({
       enabled: z.boolean().default(true),
@@ -401,7 +450,70 @@ export const centerSecondarySchema = z.object({
     .default({})
 });
 
-export const themeSchema = z.object({
+/**
+ * Moves the legacy centre-line timeout and game-finished settings into their own cards, following the centre
+ * line, so an older theme renders exactly as it did.
+ */
+export function migrateMomentOverlays(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+  const candidate = input as Record<string, unknown>;
+  if ("momentOverlays" in candidate) {
+    return candidate;
+  }
+
+  const legacy = legacyCentreLineMomentsSchema.safeParse(candidate.centerSecondary ?? {});
+  if (!legacy.success) {
+    return candidate;
+  }
+  const line = legacy.data;
+  const components = candidate.components as Record<string, unknown> | undefined;
+  const breakTime = textComponentSchema.safeParse(components?.breakTime);
+  const piece = breakTime.success ? breakTime.data : null;
+  const rect = piece ? { x: piece.x, y: piece.y, width: piece.width, height: piece.height } : {};
+  // Game finished used the centre line's current break style, or the piece's own type when breaks are hidden.
+  const finishedStyle =
+    line.breakMode === "timer" ? line.timerStyle : line.breakMode === "staticText" ? line.staticStyle : piece ?? line.timerStyle;
+
+  return {
+    ...candidate,
+    momentOverlays: {
+      timeout: {
+        enabled: line.timeout.enabled,
+        text: line.timeout.text,
+        placement: "centreLine",
+        hideCentreLineContent: false,
+        ...rect,
+        fontFamily: line.timeout.fontFamily,
+        fontSize: line.timeout.fontSize,
+        fontWeight: line.timeout.fontWeight,
+        letterSpacing: line.timeout.letterSpacing,
+        textAlign: piece?.textAlign ?? "center",
+        color: line.timeout.color,
+        backgroundColor: line.timeout.backgroundColor,
+        durationMs: line.timeout.durationMs,
+        minIncreaseSeconds: line.timeout.minIncreaseSeconds
+      },
+      gameFinished: {
+        enabled: line.gameFinished.enabled,
+        text: "GAME FINISHED",
+        placement: "centreLine",
+        hideCentreLineContent: true,
+        ...rect,
+        fontFamily: finishedStyle.fontFamily,
+        fontSize: finishedStyle.fontSize,
+        fontWeight: finishedStyle.fontWeight,
+        letterSpacing: piece?.letterSpacing ?? 0,
+        textAlign: piece?.textAlign ?? "center",
+        color: finishedStyle.color,
+        backgroundColor: "#00000000"
+      }
+    }
+  };
+}
+
+const themeObjectSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   description: z.string(),
@@ -426,8 +538,11 @@ export const themeSchema = z.object({
   }),
   freeComponents: z.array(freeComponentSchema).default([]),
   teamEventOverlay: teamEventOverlaySchema.default({}),
-  centerSecondary: centerSecondarySchema.default({})
+  centerSecondary: centerSecondarySchema.default({}),
+  momentOverlays: momentOverlaysSchema.default({})
 });
+
+export const themeSchema = z.preprocess(migrateMomentOverlays, themeObjectSchema);
 
 export const settingsSchema = z.object({
   upstreamBaseUrl: z.string().url(),
@@ -644,7 +759,8 @@ export const assetThemeUsageLocationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("component"), key: z.enum(componentIds) }),
   z.object({ type: z.literal("free"), id: z.string(), label: z.string() }),
   z.object({ type: z.literal("surface"), key: z.string(), label: z.string() }),
-  z.object({ type: z.literal("eventOverlay"), which: z.enum(["concede", "base", "winner"]) })
+  z.object({ type: z.literal("eventOverlay"), which: z.enum(["concede", "base", "winner"]) }),
+  z.object({ type: z.literal("momentOverlay"), which: z.enum(["timeout", "gameFinished"]) })
 ]);
 
 export const assetUsageSchema = z.discriminatedUnion("kind", [

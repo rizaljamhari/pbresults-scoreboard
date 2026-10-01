@@ -2,14 +2,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
 import { normalizeLiveState } from "../../shared/normalize";
-import { OverlayRenderer } from "./OverlayRenderer";
-import type { StoredAsset } from "../../shared/theme";
+import { OverlayRenderer, resolveMomentFrame } from "./OverlayRenderer";
+import type { StoredAsset, ThemeDefinition } from "../../shared/theme";
 
 const winnerText = "TEST WINNER LABEL 739";
 
-function renderFinishedMatch(gameFinishedEnabled: boolean, winnerEnabled: boolean, scores = [2, 1]) {
+function renderFinishedMatch(gameFinishedEnabled: boolean, winnerEnabled: boolean, scores = [2, 1], adjust?: (theme: ThemeDefinition) => void) {
   const theme = structuredClone(builtinThemes[0]);
-  theme.centerSecondary.gameFinished.enabled = gameFinishedEnabled;
+  adjust?.(theme);
+  theme.momentOverlays.gameFinished.enabled = gameFinishedEnabled;
   theme.teamEventOverlay.general.enabled = true;
   theme.teamEventOverlay.winner.enabled = winnerEnabled;
   theme.teamEventOverlay.winner.text = winnerText;
@@ -51,6 +52,70 @@ describe("finished-match overlays", () => {
 
     expect(markup).toContain("GAME FINISHED");
     expect(markup).not.toContain(winnerText);
+  });
+});
+
+function styleOf(markup: string, marker: string) {
+  const start = markup.lastIndexOf("<", markup.indexOf(marker));
+  return markup.slice(start, markup.indexOf(">", start));
+}
+
+describe("game finished card", () => {
+  it("sits inside the centre line's border, in the line's stacking, and clears the break clock", () => {
+    const markup = renderFinishedMatch(true, false, [2, 1], (theme) => {
+      Object.assign(theme.components.breakTime, { x: 100, y: 50, width: 200, height: 40, borderWidth: 3, borderRadius: [8, 8, 2, 2], zIndex: 7 });
+      Object.assign(theme.centerSecondary, { breakMode: "staticText", breakText: "BREAK LINE 551" });
+    });
+    const card = styleOf(markup, 'data-piece-id="__moment:gameFinished"');
+    expect(card).toContain("left:103px;top:53px;width:194px;height:34px");
+    expect(card).toContain("z-index:7");
+    expect(card).toContain("border-radius:5px 5px 0px 0px");
+    expect(markup).not.toContain("BREAK LINE 551");
+  });
+
+  it("keeps the centre line box showing when breaks would hide it", () => {
+    const markup = renderFinishedMatch(true, false, [2, 1], (theme) => {
+      theme.centerSecondary.breakMode = "hidden";
+    });
+    expect(markup).toContain("GAME FINISHED");
+  });
+
+  it("is not shown when the centre line it follows is hidden", () => {
+    const markup = renderFinishedMatch(true, false, [2, 1], (theme) => {
+      theme.components.breakTime.visible = false;
+    });
+    expect(markup).not.toContain("GAME FINISHED");
+  });
+
+  it("can sit freely, above every piece, with its own text", () => {
+    const markup = renderFinishedMatch(true, false, [2, 1], (theme) => {
+      Object.assign(theme.momentOverlays.gameFinished, { placement: "free", x: 10, y: 20, width: 300, height: 60, text: "FINAL", hideCentreLineContent: false });
+      theme.components.breakTime.visible = false;
+    });
+    const card = styleOf(markup, 'data-piece-id="__moment:gameFinished"');
+    expect(card).toContain("left:10px;top:20px;width:300px;height:60px");
+    expect(markup).toContain("FINAL");
+    expect(markup).not.toContain("GAME FINISHED");
+  });
+
+  it("leaves the break clock showing when it is not set to hide it", () => {
+    const markup = renderFinishedMatch(true, false, [2, 1], (theme) => {
+      Object.assign(theme.momentOverlays.gameFinished, { placement: "free", hideCentreLineContent: false });
+      Object.assign(theme.centerSecondary, { breakMode: "staticText", breakText: "BREAK LINE 551" });
+    });
+    expect(markup).toContain("BREAK LINE 551");
+  });
+});
+
+describe("moment card frame", () => {
+  it("follows the centre line only while it is shown", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    expect(resolveMomentFrame("timeout", theme, false)).toBeNull();
+    const line = theme.components.breakTime;
+    expect(resolveMomentFrame("timeout", theme, true)).toMatchObject({ following: true, x: line.x + line.borderWidth });
+    theme.momentOverlays.timeout.placement = "free";
+    theme.momentOverlays.timeout.x = 42;
+    expect(resolveMomentFrame("timeout", theme, false)).toMatchObject({ following: false, x: 42 });
   });
 });
 

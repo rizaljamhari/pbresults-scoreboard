@@ -2,6 +2,7 @@ import { fontFamilies, type ThemeDefinition } from "../../../shared/theme";
 import { ColorInput, Field, FieldRow, Group, NumberInput, SelectInput, SwitchRow, TextInput } from "./fields";
 
 type CentreLine = ThemeDefinition["centerSecondary"];
+type Moments = ThemeDefinition["momentOverlays"];
 type LineMode = CentreLine["gameMode"];
 type FontFamily = CentreLine["timerStyle"]["fontFamily"];
 
@@ -27,13 +28,18 @@ const FONT_OPTIONS = fontFamilies.map((font) => ({ value: font as FontFamily, la
  */
 export function CentreLineProperties({
   line,
+  moments,
   swatches,
-  patch
+  patch,
+  patchMoments
 }: {
   line: CentreLine;
+  moments: Moments;
   swatches: string[];
   patch: (update: (line: CentreLine) => void) => void;
+  patchMoments: (update: (moments: Moments) => void) => void;
 }) {
+  const timeout = moments.timeout;
   return (
     <>
       <Group title="What it shows">
@@ -84,8 +90,8 @@ export function CentreLineProperties({
         <SwitchRow
           label="Show GAME FINISHED"
           hint="Replaces this line when a game ends. The winner card is set separately."
-          checked={line.gameFinished.enabled}
-          onChange={(checked) => patch((draft) => (draft.gameFinished.enabled = checked))}
+          checked={moments.gameFinished.enabled}
+          onChange={(checked) => patchMoments((draft) => (draft.gameFinished.enabled = checked))}
         />
       </Group>
 
@@ -93,47 +99,47 @@ export function CentreLineProperties({
         <SwitchRow
           label="Flash a timeout"
           hint="Shows once over the break timer when break time jumps up."
-          checked={line.timeout.enabled}
-          onChange={(checked) => patch((draft) => (draft.timeout.enabled = checked))}
+          checked={timeout.enabled}
+          onChange={(checked) => patchMoments((draft) => (draft.timeout.enabled = checked))}
         />
-        {line.timeout.enabled ? (
+        {timeout.enabled ? (
           <>
-            <TextInput label="Text" value={line.timeout.text} onChange={(value) => patch((draft) => (draft.timeout.text = value))} />
+            <TextInput label="Text" value={timeout.text} onChange={(value) => patchMoments((draft) => (draft.timeout.text = value))} />
             <FieldRow>
               <Field label="Shows for">
-                <NumberInput label="Timeout duration" value={line.timeout.durationMs} min={0} step={100} unit="ms" onChange={(value) => patch((draft) => (draft.timeout.durationMs = value))} />
+                <NumberInput label="Timeout duration" value={timeout.durationMs} min={0} step={100} unit="ms" onChange={(value) => patchMoments((draft) => (draft.timeout.durationMs = value))} />
               </Field>
               <Field label="When time jumps by">
                 <NumberInput
                   label="Trigger increase"
-                  value={line.timeout.minIncreaseSeconds}
+                  value={timeout.minIncreaseSeconds}
                   min={0}
                   unit="s"
-                  onChange={(value) => patch((draft) => (draft.timeout.minIncreaseSeconds = value))}
+                  onChange={(value) => patchMoments((draft) => (draft.timeout.minIncreaseSeconds = value))}
                 />
               </Field>
             </FieldRow>
-            <SelectInput label="Font" value={line.timeout.fontFamily} options={FONT_OPTIONS} onChange={(value) => patch((draft) => (draft.timeout.fontFamily = value))} />
+            <SelectInput label="Font" value={timeout.fontFamily} options={FONT_OPTIONS} onChange={(value) => patchMoments((draft) => (draft.timeout.fontFamily = value))} />
             <FieldRow>
               <Field label="Size">
-                <NumberInput label="Timeout size" value={line.timeout.fontSize} min={1} unit="px" onChange={(value) => patch((draft) => (draft.timeout.fontSize = value))} />
+                <NumberInput label="Timeout size" value={timeout.fontSize} min={1} unit="px" onChange={(value) => patchMoments((draft) => (draft.timeout.fontSize = value))} />
               </Field>
               <Field label="Weight">
-                <NumberInput label="Timeout weight" value={line.timeout.fontWeight} min={100} max={900} step={100} onChange={(value) => patch((draft) => (draft.timeout.fontWeight = value))} />
+                <NumberInput label="Timeout weight" value={timeout.fontWeight} min={100} max={900} step={100} onChange={(value) => patchMoments((draft) => (draft.timeout.fontWeight = value))} />
               </Field>
             </FieldRow>
             <Field label="Letter spacing">
               <NumberInput
                 label="Timeout letter spacing"
-                value={line.timeout.letterSpacing}
+                value={timeout.letterSpacing}
                 step={0.1}
                 precision={1}
                 unit="px"
-                onChange={(value) => patch((draft) => (draft.timeout.letterSpacing = value))}
+                onChange={(value) => patchMoments((draft) => (draft.timeout.letterSpacing = value))}
               />
             </Field>
-            <ColorInput label="Text colour" value={line.timeout.color} swatches={swatches} onChange={(value) => patch((draft) => (draft.timeout.color = value))} />
-            <ColorInput label="Background" value={line.timeout.backgroundColor} swatches={swatches} onChange={(value) => patch((draft) => (draft.timeout.backgroundColor = value))} />
+            <ColorInput label="Text colour" value={timeout.color} swatches={swatches} onChange={(value) => patchMoments((draft) => (draft.timeout.color = value))} />
+            <ColorInput label="Background" value={timeout.backgroundColor} swatches={swatches} onChange={(value) => patchMoments((draft) => (draft.timeout.backgroundColor = value))} />
           </>
         ) : null}
       </Group>

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatClock } from "../../shared/normalize";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
+import { useTimeoutToken } from "./momentTriggers";
 
 type OverlayRendererProps = {
   theme: ThemeDefinition;
@@ -30,7 +31,6 @@ type OverlaySnapshot = {
 
 const TEAM_SWITCH_ANIMATION_MS = 600;
 const TEAM_SWITCH_COOLDOWN_MS = 2200;
-const BREAK_TIMEOUT_DEFAULT_THRESHOLD_SECONDS = 45;
 
 function resolveBackgroundPosition(position: ThemeDefinition["components"]["homeName"]["backgroundImagePosition"]) {
   switch (position) {
@@ -375,6 +375,30 @@ export function resolveEventLabelRect(
   };
 }
 
+/**
+ * Where a moment card sits. On the centre line it fills the line's padding box (inside its border) and only
+ * shows while the line does; set Free, it uses its own box. Shared with the editor.
+ */
+export function resolveMomentFrame(kind: "timeout" | "gameFinished", theme: ThemeDefinition, centreLineShown: boolean) {
+  const card = theme.momentOverlays[kind];
+  if (card.placement === "centreLine") {
+    if (!centreLineShown) {
+      return null;
+    }
+    const line = theme.components.breakTime;
+    const inset = line.borderWidth;
+    return {
+      following: true,
+      x: line.x + inset,
+      y: line.y + inset,
+      width: Math.max(1, line.width - inset * 2),
+      height: Math.max(1, line.height - inset * 2),
+      borderRadius: line.borderRadius.map((radius) => Math.max(0, radius - inset)) as [number, number, number, number]
+    };
+  }
+  return { following: false, x: card.x, y: card.y, width: card.width, height: card.height, borderRadius: card.borderRadius };
+}
+
 export function OverlayRenderer({
   theme,
   live,
@@ -393,7 +417,6 @@ export function OverlayRenderer({
     from: NormalizedLiveState;
     to: NormalizedLiveState;
   } | null>(null);
-  const [breakTimeoutToken, setBreakTimeoutToken] = useState<number | null>(null);
   const [centerSecondaryAnimationTick, setCenterSecondaryAnimationTick] = useState(0);
   const [centerSecondaryExitActive, setCenterSecondaryExitActive] = useState(false);
   const previousTeamEventRef = useRef<NormalizedLiveState["teamEvent"]>("none");
@@ -403,8 +426,6 @@ export function OverlayRenderer({
   const previousSwitchLiveRef = useRef<NormalizedLiveState | null>(null);
   const lastTeamSwitchAtRef = useRef(0);
   const teamSwitchClearTimeoutRef = useRef<number | null>(null);
-  const previousBreakLiveRef = useRef<NormalizedLiveState | null>(null);
-  const breakTimeoutClearTimeoutRef = useRef<number | null>(null);
   // Towel animation repeat state
   const [towelAnimationTick, setTowelAnimationTick] = useState(0);
   const towelIntervalRef = useRef<number | null>(null);
@@ -417,7 +438,7 @@ export function OverlayRenderer({
     const token = `${snapshot.round}|${snapshot.leftName}|${snapshot.rightName}|${snapshot.leftScore}|${snapshot.rightScore}`;
     return { token, snapshot };
   }, [live]);
-  const gameFinishToken = theme.centerSecondary.gameFinished.enabled ? completedMatch?.token ?? null : null;
+  const gameFinishToken = theme.momentOverlays.gameFinished.enabled ? completedMatch?.token ?? null : null;
   const winnerReveal = useMemo(() => {
     if (!theme.teamEventOverlay.winner.enabled || !completedMatch) {
       return null;
@@ -438,62 +459,11 @@ export function OverlayRenderer({
       if (teamSwitchClearTimeoutRef.current !== null) {
         clearTimeout(teamSwitchClearTimeoutRef.current);
       }
-      if (breakTimeoutClearTimeoutRef.current !== null) {
-        clearTimeout(breakTimeoutClearTimeoutRef.current);
-      }
     },
     []
   );
 
-  useEffect(() => {
-    if (!theme.centerSecondary.timeout.enabled) {
-      previousBreakLiveRef.current = live;
-      if (breakTimeoutClearTimeoutRef.current !== null) {
-        clearTimeout(breakTimeoutClearTimeoutRef.current);
-        breakTimeoutClearTimeoutRef.current = null;
-      }
-      setBreakTimeoutToken(null);
-      return;
-    }
-
-    if (!live || live.sourceStatus !== "ok") {
-      previousBreakLiveRef.current = live;
-      return;
-    }
-
-    const previous = previousBreakLiveRef.current;
-    previousBreakLiveRef.current = live;
-
-    if (!previous || majorAnimationActive || !theme.centerSecondary.timeout.enabled) {
-      return;
-    }
-
-    const inBreakNow = live.period === "BREAK" && live.state !== "END";
-    const wasInBreak = previous.period === "BREAK" && previous.state !== "END";
-    if (!inBreakNow || !wasInBreak) {
-      return;
-    }
-
-    if (previous.breakTimer.value <= 10) {
-      return;
-    }
-
-    const increase = live.breakTimer.value - previous.breakTimer.value;
-    const threshold = theme.centerSecondary.timeout.minIncreaseSeconds || BREAK_TIMEOUT_DEFAULT_THRESHOLD_SECONDS;
-    if (increase < threshold || live.breakTimer.value < threshold) {
-      return;
-    }
-
-    const token = Date.now();
-    setBreakTimeoutToken(token);
-    if (breakTimeoutClearTimeoutRef.current !== null) {
-      clearTimeout(breakTimeoutClearTimeoutRef.current);
-    }
-    breakTimeoutClearTimeoutRef.current = window.setTimeout(() => {
-      setBreakTimeoutToken((current) => (current === token ? null : current));
-      breakTimeoutClearTimeoutRef.current = null;
-    }, theme.centerSecondary.timeout.durationMs);
-  }, [live, majorAnimationActive, theme.centerSecondary.timeout]);
+  const breakTimeoutToken = useTimeoutToken(live, theme.momentOverlays.timeout, majorAnimationActive);
 
   useEffect(() => {
     if (!overlayGeneral.teamSwitchEnabled) {
@@ -707,6 +677,72 @@ export function OverlayRenderer({
   const defaultEventLabel = concedeLabel && live && currentTeamEvent !== "none" ? concedeLabel : null;
   const activeOverlayLabel = winnerLabel ?? defaultEventLabel;
 
+  const timeoutCard = theme.momentOverlays.timeout;
+  const gameFinishedCard = theme.momentOverlays.gameFinished;
+  const timeoutVisible = Boolean(breakTimeoutToken) && timeoutCard.enabled && live?.period === "BREAK" && !gameFinishToken;
+  const gameFinishedVisible = Boolean(gameFinishToken);
+  const hideCentreLineContent =
+    (gameFinishedVisible && gameFinishedCard.hideCentreLineContent) || (timeoutVisible && timeoutCard.hideCentreLineContent);
+  // A game finished card on the centre line keeps the line's box showing even when the line has nothing to say.
+  const momentHoldsCentreLine = gameFinishedVisible && gameFinishedCard.placement === "centreLine";
+  const freeMomentZIndex =
+    Math.max(0, ...Object.values(theme.components).map((component) => component.zIndex), ...theme.freeComponents.map((component) => component.zIndex)) + 1;
+  const momentCards = [
+    { kind: "timeout" as const, card: timeoutCard, active: timeoutVisible, token: breakTimeoutToken },
+    { kind: "gameFinished" as const, card: gameFinishedCard, active: gameFinishedVisible, token: gameFinishToken }
+  ].filter((entry) => entry.active);
+
+  function renderMomentCard(entry: (typeof momentCards)[number], centreLineShown: boolean) {
+    const frame = resolveMomentFrame(entry.kind, theme, centreLineShown);
+    if (!frame) {
+      return null;
+    }
+    const { card } = entry;
+    const breakTime = theme.components.breakTime;
+    const surface = surfaceStyles(card, assets, theme, live);
+    return (
+      <div
+        key={`moment:${entry.kind}:${entry.token}`}
+        className="moment-card"
+        data-piece-id={`__moment:${entry.kind}`}
+        style={{
+          left: frame.x,
+          top: frame.y,
+          width: frame.width,
+          height: frame.height,
+          zIndex: frame.following ? breakTime.zIndex : freeMomentZIndex,
+          opacity: frame.following ? breakTime.opacity : 1,
+          border: `${card.borderWidth}px solid ${card.borderColor}`,
+          borderRadius: frame.borderRadius.map((v) => `${v}px`).join(" "),
+          boxShadow: card.shadow,
+          animation:
+            entry.kind === "timeout"
+              ? `center-secondary-timeout-flash ${(card as typeof timeoutCard).durationMs}ms ease-out both`
+              : "center-secondary-slide-up 220ms ease"
+        }}
+      >
+        <span className="component-surface" style={surface.background} />
+        {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+        <span
+          className="component-content text-content"
+          style={{
+            justifyContent: card.textAlign === "left" ? "flex-start" : card.textAlign === "right" ? "flex-end" : "center",
+            padding: frame.following ? resolveComponentPadding(breakTime) : resolveComponentPadding(card),
+            ...(frame.following ? resolveComponentOffset(breakTime) : {}),
+            color: card.color,
+            fontFamily: `"${card.fontFamily}", sans-serif`,
+            fontSize: card.fontSize,
+            fontWeight: card.fontWeight,
+            letterSpacing: card.letterSpacing,
+            lineHeight: frame.following ? breakTime.lineHeight : 1
+          }}
+        >
+          {card.text}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={editable ? "overlay-canvas editable" : "overlay-canvas"}
@@ -836,22 +872,18 @@ export function OverlayRenderer({
 
         const surface = surfaceStyles(component, assets, theme, live);
         const baseContent = componentId === "breakTime" ? centerSecondaryPresentation.content : resolveTextContent(theme, componentId, live);
-        const isGameFinishSecondaryOverlay = componentId === "breakTime" && Boolean(gameFinishToken);
-        
-        let content = isGameFinishSecondaryOverlay ? "GAME FINISHED" : baseContent;
+
+        let content = baseContent;
         let visible = component.visible && content !== null && content !== "";
 
         if (componentId === "breakTime" && centerSecondaryExitActive && previousCenterSecondaryPresentationRef.current) {
           content = previousCenterSecondaryPresentationRef.current.content;
           visible = component.visible && content !== null && content !== "";
         }
-
-        const showBreakTimeoutOverlay =
-          componentId === "breakTime" &&
-          Boolean(breakTimeoutToken) &&
-          theme.centerSecondary.timeout.enabled &&
-          live?.period === "BREAK" &&
-          !isGameFinishSecondaryOverlay;
+        if (componentId === "breakTime" && momentHoldsCentreLine) {
+          visible = component.visible;
+        }
+        const showContent = !(componentId === "breakTime" && hideCentreLineContent);
         const previousSwitchContent =
           teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.from) : null;
         const nextSwitchContent =
@@ -883,26 +915,20 @@ export function OverlayRenderer({
             : "none";
         const contentKey =
           componentId === "breakTime"
-            ? isGameFinishSecondaryOverlay
-              ? `game-finish:${gameFinishToken}`
-              : centerSecondaryExitActive
-                ? `exit:${centerSecondaryAnimationTick}`
-                : `${activeVariant}:${centerSecondaryAnimationTick}`
+            ? centerSecondaryExitActive
+              ? `exit:${centerSecondaryAnimationTick}`
+              : `${activeVariant}:${centerSecondaryAnimationTick}`
             : undefined;
         const contentAnimation =
-          isGameFinishSecondaryOverlay
-            ? "center-secondary-slide-up 220ms ease"
-            : componentId === "breakTime" && centerSecondaryExitActive && centerSecondaryAnimationName !== "none"
-              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease reverse`
-              : componentId === "breakTime" &&
-                  centerSecondaryAnimationTick > 0 &&
-                  centerSecondaryAnimationName !== "none"
-                ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
-                : undefined;
+          componentId === "breakTime" && centerSecondaryExitActive && centerSecondaryAnimationName !== "none"
+            ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease reverse`
+            : componentId === "breakTime" && centerSecondaryAnimationTick > 0 && centerSecondaryAnimationName !== "none"
+              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
+              : undefined;
 
         return (
+          <Fragment key={componentId}>
           <button
-            key={componentId}
             type="button"
             className={commonClass}
             style={{ ...frameStyles(component), display: visible ? "flex" : "none" }}
@@ -911,7 +937,7 @@ export function OverlayRenderer({
             <span className="component-body">
               <span className="component-surface" style={surface.background} />
               {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
-              {teamSwitchActive && teamSwitchPayload ? (
+              {!showContent ? null : teamSwitchActive && teamSwitchPayload ? (
                 <>
                   <span
                     className="component-content text-content"
@@ -983,31 +1009,11 @@ export function OverlayRenderer({
                   {content}
                 </span>
               )}
-              {showBreakTimeoutOverlay ? (
-                <span
-                  key={`break-timeout:${breakTimeoutToken}`}
-                  className="component-content text-content center-secondary-timeout-overlay"
-                  style={{
-                    justifyContent:
-                      component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                    padding: resolveComponentPadding(component),
-                    ...resolveComponentOffset(component),
-                    background: theme.centerSecondary.timeout.backgroundColor,
-                    color: theme.centerSecondary.timeout.color,
-                    fontFamily: `"${theme.centerSecondary.timeout.fontFamily}", sans-serif`,
-                    fontSize: theme.centerSecondary.timeout.fontSize,
-                    fontWeight: theme.centerSecondary.timeout.fontWeight,
-                    letterSpacing: theme.centerSecondary.timeout.letterSpacing,
-                    lineHeight: component.lineHeight,
-                    animation: `center-secondary-timeout-flash ${theme.centerSecondary.timeout.durationMs}ms ease-out both`,
-                    zIndex: 5
-                  }}
-                >
-                  {theme.centerSecondary.timeout.text}
-                </span>
-              ) : null}
             </span>
           </button>
+          {/* Cards on the centre line stack directly above it, exactly where its content used to be replaced. */}
+          {componentId === "breakTime" ? momentCards.map((entry) => entry.card.placement === "centreLine" ? renderMomentCard(entry, visible) : null) : null}
+          </Fragment>
         );
       })}
 
@@ -1089,6 +1095,8 @@ export function OverlayRenderer({
           </button>
         );
       })}
+
+      {momentCards.map((entry) => (entry.card.placement === "free" ? renderMomentCard(entry, false) : null))}
 
       {activeOverlayLabel ? (
         <div

@@ -198,6 +198,16 @@ function themeAssetRefs(theme: ThemeDefinition): Array<AssetRef<AssetThemeUsageL
       }
     });
   }
+  for (const which of ["timeout", "gameFinished"] as const) {
+    const card = theme.momentOverlays[which];
+    refs.push({
+      location: { type: "momentOverlay", which },
+      assetId: card.backgroundImageAssetId,
+      set: (assetId) => {
+        card.backgroundImageAssetId = assetId;
+      }
+    });
+  }
   return refs.filter((ref) => ref.assetId !== null);
 }
 

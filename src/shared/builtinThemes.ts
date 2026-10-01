@@ -1,5 +1,32 @@
 import type { ThemeDefinition } from "./theme.js";
 
+/** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
+function momentCard(x: number, y: number, width: number, height: number) {
+  return {
+    enabled: true,
+    placement: "centreLine" as const,
+    hideCentreLineContent: false,
+    x,
+    y,
+    width,
+    height,
+    fontFamily: "Barlow Condensed" as const,
+    fontWeight: 700,
+    textAlign: "center" as const,
+    backgroundImageAssetId: null,
+    backgroundImageFit: "cover" as const,
+    backgroundImagePosition: "center" as const,
+    backgroundOverlayColor: "#000000",
+    backgroundOverlayOpacity: 0,
+    borderColor: "#00000000",
+    borderWidth: 0,
+    borderRadius: [0, 0, 0, 0] as [number, number, number, number],
+    paddingX: 0,
+    paddingY: 0,
+    shadow: "none"
+  };
+}
+
 function textBox(
   x: number,
   y: number,
@@ -494,9 +521,6 @@ export const builtinThemes: ThemeDefinition[] = [
       "gameText": "SOUTHERNLEGION RACE SERIES",
       "breakMode": "timer",
       "breakText": "",
-      "gameFinished": {
-        "enabled": true
-      },
       "timerStyle": {
         "fontFamily": "Barlow Condensed",
         "fontSize": 28,
@@ -512,18 +536,27 @@ export const builtinThemes: ThemeDefinition[] = [
       "transition": {
         "animation": "fade",
         "durationMs": 250
-      },
+      }
+    },
+    "momentOverlays": {
       "timeout": {
-        "enabled": true,
+        ...momentCard(787, 344, 346, 35),
         "text": "TIMEOUT",
-        "durationMs": 1200,
-        "minIncreaseSeconds": 45,
-        "backgroundColor": "#b3261ecc",
-        "color": "#ffffff",
-        "fontFamily": "Barlow Condensed",
         "fontSize": 28,
-        "fontWeight": 700,
-        "letterSpacing": 1
+        "letterSpacing": 1,
+        "color": "#ffffff",
+        "backgroundColor": "#b3261ecc",
+        "durationMs": 1200,
+        "minIncreaseSeconds": 45
+      },
+      "gameFinished": {
+        ...momentCard(787, 344, 346, 35),
+        "text": "GAME FINISHED",
+        "hideCentreLineContent": true,
+        "fontSize": 28,
+        "letterSpacing": 0.4,
+        "color": "#66ff00",
+        "backgroundColor": "#00000000"
       }
     }
   },
@@ -862,9 +895,6 @@ export const builtinThemes: ThemeDefinition[] = [
       "gameText": "MAJOR LEAGUE PAINTBALL",
       "breakMode": "timer",
       "breakText": "",
-      "gameFinished": {
-        "enabled": true
-      },
       "timerStyle": {
         "fontFamily": "Barlow Condensed",
         "fontSize": 24,
@@ -880,18 +910,27 @@ export const builtinThemes: ThemeDefinition[] = [
       "transition": {
         "animation": "fade",
         "durationMs": 220
-      },
+      }
+    },
+    "momentOverlays": {
       "timeout": {
-        "enabled": true,
+        ...momentCard(835, 89, 246, 47),
         "text": "TIMEOUT",
-        "durationMs": 1200,
-        "minIncreaseSeconds": 45,
-        "backgroundColor": "#b3261ecc",
-        "color": "#ffffff",
-        "fontFamily": "Barlow Condensed",
         "fontSize": 24,
-        "fontWeight": 700,
-        "letterSpacing": 1
+        "letterSpacing": 1,
+        "color": "#ffffff",
+        "backgroundColor": "#b3261ecc",
+        "durationMs": 1200,
+        "minIncreaseSeconds": 45
+      },
+      "gameFinished": {
+        ...momentCard(835, 89, 246, 47),
+        "text": "GAME FINISHED",
+        "hideCentreLineContent": true,
+        "fontSize": 24,
+        "letterSpacing": 0.4,
+        "color": "#21e25b",
+        "backgroundColor": "#00000000"
       }
     }
   }

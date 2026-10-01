@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Centre Line and Moments</title>
+<style>
+  :root {
+    --ground: #131315; --dot: #2b2b30; --island: #1e1e22; --side: #19191c; --line: #2f2f35;
+    --field: #17171a; --hover: #28282d; --text: #ececea; --muted: #b1b1b8; --faint: #8f8f97;
+    --accent: #6f9bff; --accent-soft: #1d2945; --accent-ink: #a9c3ff; --on-accent: #0b1d36;
+    --tally: #ff5c50; --tally-soft: #3a1c1a; --draft: #f0cf7a; --draft-soft: #3d3216;
+    --live: #3ccf7f; --guide: #e0457b; --switch-off: #45454c; --checker: #1b1b1f;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --cond: "Barlow Condensed", "Oswald", "Arial Narrow", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--ground);
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 18px 18px;
+    color: var(--text); font: 13px/1.35 var(--font); font-feature-settings: "tnum";
+  }
+  button { font: inherit; color: inherit; }
+
+  /* Story tabs, outside the editor chrome */
+  .story { display: flex; align-items: center; gap: 12px; padding: 14px 16px 0; flex-wrap: wrap; }
+  .story h1 { font-size: 14px; font-weight: 650; margin: 0 8px 0 0; }
+  .story .tabs { display: flex; gap: 2px; background: var(--island); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .story .tabs button { border: 0; background: none; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); font-weight: 600; }
+  .story .tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .story p { margin: 0; color: var(--faint); flex-basis: 100%; }
+
+  .shell { display: grid; grid-template-columns: 284px 1fr; gap: 16px; padding: 14px 16px 16px; min-height: calc(100vh - 80px); }
+  .island { background: var(--island); border: 1px solid var(--line); border-radius: 12px; }
+
+  /* Properties */
+  .props { padding: 12px; align-self: start; max-height: calc(100vh - 110px); overflow: auto; }
+  .head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .head h2 { font-size: 14px; font-weight: 650; margin: 0; }
+  .head p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .group { border-top: 1px solid var(--line); padding: 10px 0; }
+  .group:first-of-type { border-top: 0; padding-top: 0; }
+  .gtitle { display: flex; justify-content: space-between; align-items: center; font-weight: 650; margin-bottom: 8px; }
+  .gtitle small { color: var(--faint); font-weight: 500; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+  .row.three { grid-template-columns: 1fr 70px; }
+  label.f { display: block; color: var(--muted); font-size: 12px; margin: 6px 0 4px; }
+  .in { background: var(--field); border: 1px solid var(--line); border-radius: 7px; height: 30px; display: flex; align-items: center; padding: 0 9px; gap: 6px; color: var(--text); }
+  .in .u { color: var(--faint); margin-left: auto; }
+  .in .pf { color: var(--faint); }
+  .in.sel::after { content: "▾"; margin-left: auto; color: var(--faint); font-size: 10px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; border: 1px solid #ffffff30; }
+  .seg { display: flex; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
+  .seg button { flex: 1; border: 0; background: none; height: 26px; border-radius: 6px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; }
+  .seg button[aria-pressed="true"] { background: var(--hover); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .switch { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 4px 0; }
+  .switch b { font-weight: 600; display: block; }
+  .switch span { color: var(--faint); font-size: 12px; }
+  .tog { flex: none; width: 32px; height: 18px; border-radius: 9px; background: var(--switch-off); position: relative; border: 0; cursor: pointer; }
+  .tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .tog[aria-pressed="true"] { background: var(--accent); }
+  .tog[aria-pressed="true"]::after { left: 16px; }
+  .note { color: var(--faint); font-size: 12px; margin: 4px 0 0; }
+  .hint { background: var(--draft-soft); color: var(--draft); border-radius: 8px; padding: 8px 10px; font-size: 12px; display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .hint button { border: 1px solid #f0cf7a55; background: none; color: var(--draft); border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+  .link { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+  .link:hover { background: var(--hover); }
+  .link .k { font-weight: 600; }
+  .link .s { color: var(--faint); font-size: 12px; }
+  .link .go { margin-left: auto; color: var(--accent-ink); }
+  .follow { display: flex; gap: 8px; align-items: center; color: var(--accent-ink); background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-top: 8px; }
+  .motion { display: flex; gap: 10px; align-items: center; background: var(--field); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; color: var(--muted); font-size: 12px; }
+  .motion svg { flex: none; }
+  details > summary { list-style: none; cursor: pointer; font-weight: 650; display: flex; gap: 6px; align-items: center; }
+  details > summary::before { content: "›"; color: var(--faint); transition: transform .15s; display: inline-block; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  .new { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+  .old { opacity: .55; }
+  .dead { text-decoration: line-through; text-decoration-color: var(--tally); }
+  .warn { color: var(--tally); font-size: 11px; font-weight: 600; }
+
+  /* Canvas column */
+  .stagecol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .frame-cap { color: var(--muted); font-size: 12px; }
+  .frame-cap b { color: var(--text); }
+  .stage-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 4px; overflow: hidden;
+    background-color: var(--checker);
+    background-image: linear-gradient(45deg, #222227 25%, transparent 25%), linear-gradient(-45deg, #222227 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222227 75%), linear-gradient(-45deg, transparent 75%, #222227 75%);
+    background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0; }
+  .stage { position: absolute; left: 0; top: 0; width: 960px; height: 540px; transform-origin: 0 0; }
+  .p { position: absolute; display: flex; align-items: center; justify-content: center; }
+  .name { background: #2e2e2e; color: #fff; font: 700 22px/1 var(--cond); letter-spacing: .02em; text-transform: uppercase; }
+  .name small { position: absolute; top: 3px; font: 600 8px var(--cond); letter-spacing: .06em; color: #f6f1e8cc; }
+  .score { background: #f6f1e8; color: #111; font: 800 30px/1 var(--cond); }
+  .crest { color: #fff; }
+  .logo { border-radius: 50%; }
+  .cline { background: #000; color: #f6f1e8; font: 700 13px/1 var(--cond); letter-spacing: .5px; }
+  .cline.sel, .card.sel { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+  .cline.ghost { background: transparent; color: var(--faint); outline: 1px dashed var(--faint); font: 600 8px var(--font); }
+  .cline.ghost.sel { outline: 1.5px dashed var(--accent); color: var(--accent-ink); }
+  .handles i { position: absolute; width: 7px; height: 7px; background: var(--accent); border: 1.5px solid #fff; border-radius: 50%; }
+  .card { overflow: hidden; }
+  .card .t { position: relative; z-index: 1; }
+  .badge { position: absolute; transform: translateY(-100%); margin-top: -4px; background: var(--accent); color: var(--on-accent); font: 600 9px/1 var(--font); padding: 3px 5px; border-radius: 4px; white-space: nowrap; }
+  .badge.follow-b { background: var(--accent-soft); color: var(--accent-ink); }
+  .guide { position: absolute; background: var(--guide); }
+  @keyframes flash { 0% { opacity: 0; transform: scale(.94) } 18% { opacity: 1; transform: scale(1) } 74% { opacity: 1; transform: scale(1) } 100% { opacity: 0; transform: scale(1.02) } }
+  @keyframes hold { from { opacity: 0; transform: scale(.94) } to { opacity: 1; transform: scale(1) } }
+  @keyframes slideup { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+
+  /* Preview bar */
+  .bar { align-self: center; display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; flex-wrap: wrap; justify-content: center; }
+  .bar .lab { color: var(--muted); margin-right: 4px; }
+  .bar .m { border: 0; background: none; padding: 6px 9px; border-radius: 7px; font-weight: 650; color: var(--text); cursor: default; }
+  .bar .m[aria-checked="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .bar .m.added { box-shadow: inset 0 -2px 0 var(--accent); }
+  .bar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+  .bar .dotl { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--live); margin-right: 6px; }
+  .bar .ib { width: 30px; height: 30px; border: 0; border-radius: 7px; background: none; display: grid; place-items: center; cursor: pointer; color: var(--muted); }
+  .bar .ib:hover { background: var(--hover); color: var(--text); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--faint); font-size: 12px; }
+  .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; background: var(--accent); }
+  .legend span.d::before { background: var(--tally); }
+
+  [hidden] { display: none !important; }
+  @media (max-width: 860px) { .shell { grid-template-columns: 1fr; } .props { max-height: none; } }
+</style>
+</head>
+<body>
+
+<div class="story">
+  <h1>Theme editor · centre line and moment cards</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="centre">1 · Centre line</button>
+    <button role="tab" aria-selected="false" data-tab="timeout">2 · Timeout card</button>
+    <button role="tab" aria-selected="false" data-tab="finished">3 · Game finished card</button>
+  </div>
+  <p id="story-copy"></p>
+</div>
+
+<div class="shell">
+  <!-- ============ PROPERTIES ============ -->
+  <aside class="island props" aria-label="Properties">
+
+    <!-- Centre line: after -->
+    <section data-panel="centre-after">
+      <div class="head">
+        <div><h2>Centre line</h2><p>Live: break clock, or text during play</p></div>
+        <div class="seg" style="width:auto;height:28px"><button aria-pressed="true" data-cmp="after" style="padding:0 8px">New</button><button aria-pressed="false" data-cmp="before" style="padding:0 8px">Today</button></div>
+      </div>
+      <div class="hint" id="ghost-hint" hidden><span>Hidden while previewing play.</span><button data-goto="break">Preview Break</button></div>
+
+      <div class="group">
+        <div class="gtitle">Break clock <small>shows during breaks</small></div>
+        <div class="row three"><div class="in sel">Barlow Condensed</div><div class="in">28<span class="u">px</span></div></div>
+        <div class="row"><div class="in sel">Bold</div><div class="seg"><button aria-pressed="false">L</button><button aria-pressed="true">C</button><button aria-pressed="false">R</button></div></div>
+        <label class="f">Colour</label>
+        <div class="in"><span class="sw" style="background:#f6f1e8"></span><span class="pf">#</span>f6f1e8</div>
+        <label class="f">Letter spacing</label>
+        <div class="in">0.5<span class="u">px</span></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">During play</div>
+        <div class="seg" id="play-mode"><button aria-pressed="true" data-v="hidden">Hidden</button><button aria-pressed="false" data-v="text">Text</button><button aria-pressed="false" data-v="clock">Break clock</button></div>
+        <div id="play-text" hidden>
+          <label class="f">Text during play</label>
+          <div class="in">LIVE</div>
+          <label class="f">Text style</label>
+          <div class="row three"><div class="in sel">Barlow Condensed</div><div class="in">24<span class="u">px</span></div></div>
+          <div class="row"><div class="in sel">Semibold</div><div class="in"><span class="sw" style="background:#f6f1e8"></span>f6f1e8</div></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Change animation</div>
+        <div class="row"><div class="in sel">Fade</div><div class="in">250<span class="u">ms</span></div></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Cards that cover this line <span class="new">new</span></div>
+        <button class="link" data-goto="timeout"><span><span class="k">Timeout card</span><br><span class="s">Follows this line · flashes on</span></span><span class="go">Edit →</span></button>
+        <button class="link" data-goto="finished"><span><span class="k">Game finished card</span><br><span class="s">Follows this line · replaces text</span></span><span class="go">Edit →</span></button>
+      </div>
+
+      <div class="group">
+        <details><summary>More</summary>
+          <label class="f">During breaks</label>
+          <div class="in sel">Break clock</div>
+          <p class="note">Most themes leave this on the clock.</p>
+        </details>
+      </div>
+      <div class="group"><details><summary>Position and size</summary></details></div>
+      <div class="group"><details><summary>Background image</summary></details></div>
+      <div class="group"><details><summary>Border</summary></details></div>
+    </section>
+
+    <!-- Centre line: today -->
+    <section data-panel="centre-before" hidden>
+      <div class="head">
+        <div><h2>Centre line</h2><p>Live: centre line (clock or text)</p></div>
+        <div class="seg" style="width:auto;height:28px"><button aria-pressed="false" data-cmp="after" style="padding:0 8px">New</button><button aria-pressed="true" data-cmp="before" style="padding:0 8px">Today</button></div>
+      </div>
+      <div class="group">
+        <div class="gtitle">Text <span class="warn">overridden at render</span></div>
+        <div class="row three dead"><div class="in sel">Barlow Condensed</div><div class="in">22<span class="u">px</span></div></div>
+        <div class="row dead"><div class="in sel">Bold</div><div class="in"><span class="sw" style="background:#fff"></span>ffffff</div></div>
+      </div>
+      <div class="group"><details><summary>Background image</summary></details></div>
+      <div class="group">
+        <details open><summary>Centre line <small style="color:var(--faint);font-weight:500">collapsed by default</small></summary>
+          <div style="padding-top:8px" class="old">
+            <div class="gtitle">What it shows</div>
+            <div class="row"><div><label class="f">During play</label><div class="in sel">Text</div></div><div><label class="f">During breaks</label><div class="in sel">Break timer</div></div></div>
+            <div class="gtitle" style="margin-top:10px">Timer style</div>
+            <div class="row three"><div class="in sel">Barlow Condensed</div><div class="in">28<span class="u">px</span></div></div>
+            <div class="gtitle" style="margin-top:10px">Text style</div>
+            <div class="row three"><div class="in sel">Barlow Condensed</div><div class="in">28<span class="u">px</span></div></div>
+            <div class="gtitle" style="margin-top:10px">Game finished</div>
+            <div class="switch"><div><b>Show GAME FINISHED</b><span>Replaces this line when a game ends.</span></div><button class="tog" aria-pressed="true"></button></div>
+            <div class="gtitle" style="margin-top:10px">Timeout</div>
+            <div class="switch"><div><b>Flash a timeout</b><span>Shows once over the break timer…</span></div><button class="tog" aria-pressed="true"></button></div>
+          </div>
+        </details>
+      </div>
+      <p class="note">Leads with play-time text and with controls that never reach the screen. The clock style is buried, and the two moments can't be placed.</p>
+    </section>
+
+    <!-- Moment card panel (shared by timeout + finished) -->
+    <section data-panel="moment" hidden>
+      <div class="head">
+        <div><h2 id="m-title">Timeout card</h2><p id="m-sub">Shown when break time jumps up during a break.</p></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle" id="m-only">Timeout only</div>
+        <div class="switch"><div><b id="m-show">Show the timeout card</b></div><button class="tog" aria-pressed="true"></button></div>
+        <label class="f">Text</label>
+        <div class="in" id="m-text">TIMEOUT</div>
+        <div id="m-trigger">
+          <div class="row" style="margin-top:6px">
+            <div><label class="f">Shows for</label><div class="in">1200<span class="u">ms</span></div></div>
+            <div><label class="f">When time jumps by</label><div class="in">45<span class="u">s</span></div></div>
+          </div>
+        </div>
+        <p class="note" id="m-trigger-note" hidden>Appears when the feed reports the game ended, and stays until the next game starts.</p>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Placement</div>
+        <label class="f">Card sits</label>
+        <div class="seg" id="m-place"><button aria-pressed="false" data-v="follow">On centre line</button><button aria-pressed="true" data-v="free">Free</button></div>
+        <div class="follow" id="m-follow" hidden>↗ Sits exactly on the centre line. Select it to move the card.</div>
+        <div id="m-free">
+          <label class="f">Position and size <span style="color:var(--faint)">· or drag on the canvas</span></label>
+          <div class="row"><div class="in"><span class="pf">X</span><span id="m-x">800</span></div><div class="in"><span class="pf">Y</span><span id="m-y">320</span></div></div>
+          <div class="row"><div class="in"><span class="pf">W</span><span id="m-w">320</span></div><div class="in"><span class="pf">H</span><span id="m-h">60</span></div></div>
+        </div>
+        <div class="switch" style="margin-top:6px"><div><b>Hide centre line text</b><span id="m-hide-copy">Off: the card covers the clock. On: the clock is cleared while it shows.</span></div><button class="tog" id="m-hide" aria-pressed="false"></button></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Type</div>
+        <div class="row three"><div class="in sel">Barlow Condensed</div><div class="in" id="m-size">34<span class="u">px</span></div></div>
+        <div class="row"><div class="in sel">Bold</div><div class="seg"><button aria-pressed="false">L</button><button aria-pressed="true">C</button><button aria-pressed="false">R</button></div></div>
+        <div class="row"><div><label class="f">Letter spacing</label><div class="in">2<span class="u">px</span></div></div><div><label class="f">Colour</label><div class="in"><span class="sw" style="background:#fff"></span>ffffff</div></div></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Card</div>
+        <label class="f">Fill</label>
+        <div class="in" id="m-fill"><span class="sw" style="background:#b3261e"></span><span class="pf">#</span>b3261ecc</div>
+        <label class="f">Background image</label>
+        <div class="row" style="grid-template-columns:1fr auto"><div class="in sel">None</div><div class="in">Upload</div></div>
+        <div class="row"><div><label class="f">Border</label><div class="in"><span class="sw" style="background:#ffffff"></span>2<span class="u">px</span></div></div><div><label class="f">Corner radius</label><div class="in">6<span class="u">px</span></div></div></div>
+        <div class="row"><div><label class="f">Padding</label><div class="in">12<span class="u">px</span></div></div><div><label class="f">Shadow</label><div class="in">none</div></div></div>
+      </div>
+
+      <div class="group">
+        <div class="gtitle">Motion <small>same as today</small></div>
+        <div class="motion" id="m-motion">
+          <svg width="44" height="16" viewBox="0 0 44 16" aria-hidden="true"><path d="M1 15 L8 2 L32 2 L43 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span id="m-motion-copy">Flashes in, holds, fades out over 1200 ms. Press ▶ to replay.</span>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ============ CANVAS ============ -->
+  <main class="stagecol">
+    <div class="frame-cap"><b>Broadcast frame</b> · 1920 × 1080 · transparent preview</div>
+    <div class="stage-wrap" id="wrap">
+      <div class="stage" id="stage">
+        <!-- left -->
+        <div class="p logo" style="left:200px;top:72px;width:48px;height:48px;background:#2f66d6"></div>
+        <div class="p name" style="left:250px;top:80px;width:158px;height:42px"><small>APM INVITATIONAL 2026</small>SAUSAGE$</div>
+        <div class="p score" style="left:410px;top:80px;width:34px;height:42px" id="ls">1</div>
+        <!-- crest -->
+        <div class="p crest" style="left:446px;top:66px;width:68px;height:68px">
+          <svg viewBox="0 0 68 68" width="68" height="68" aria-hidden="true"><path d="M34 3 L60 12 L56 44 L34 65 L12 44 L8 12 Z" fill="#c0281e" stroke="#fff" stroke-width="2"/><text x="34" y="34" text-anchor="middle" font-family="Oswald, Arial Narrow, sans-serif" font-weight="800" font-size="11" fill="#fff">INVITA</text><text x="34" y="46" text-anchor="middle" font-family="Oswald, Arial Narrow, sans-serif" font-weight="800" font-size="10" fill="#fff">2026</text></svg>
+        </div>
+        <div class="p score" style="left:516px;top:80px;width:34px;height:42px" id="rs">0</div>
+        <div class="p name" style="left:552px;top:80px;width:158px;height:42px"><small>UPDATE</small>CHAOS BANDITS</div>
+        <div class="p logo" style="left:712px;top:72px;width:48px;height:48px;background:#e0457b"></div>
+
+        <!-- centre line -->
+        <div class="p cline" id="cline" style="left:452px;top:136px;width:56px;height:18px">05:00</div>
+
+        <!-- moment cards -->
+        <div class="p card" id="card" hidden></div>
+        <div class="badge" id="card-badge" hidden></div>
+        <div class="handles" id="handles" hidden></div>
+
+        <!-- winner card (for finished state) -->
+        <div class="p card" id="winner" hidden style="left:252px;top:40px;width:128px;height:30px;background:#205838ee;border:2px solid #fff;border-radius:8px;color:#fff;font:700 15px/1 var(--cond);letter-spacing:1px">WINNER</div>
+
+        <div class="guide" id="guide" hidden style="left:480px;top:0;width:1px;height:540px;opacity:.6"></div>
+      </div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="island bar" role="group" aria-label="Preview the overlay as">
+      <span class="lab">Preview as</span>
+      <button class="m"><span class="dotl"></span>Live feed</button>
+      <button class="m" data-mode="game">Game</button>
+      <button class="m" data-mode="break">Break</button>
+      <button class="m added" data-mode="timeout">Timeout</button>
+      <button class="m added" data-mode="finished">Finished</button>
+      <span class="sep"></span>
+      <button class="m">Towel</button>
+      <button class="m">Base</button>
+      <button class="m">Winner</button>
+      <span class="sep"></span>
+      <button class="ib" id="replay" title="Play the entrance again" aria-label="Play the entrance again">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 2 L12 7 L3 12 Z" fill="currentColor"/></svg>
+      </button>
+      <button class="ib" title="Preview data" aria-label="Preview data">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="4" r="1.6" fill="var(--island)" stroke="currentColor"/><circle cx="10" cy="8" r="1.6" fill="var(--island)" stroke="currentColor"/><circle cx="6" cy="12" r="1.6" fill="var(--island)" stroke="currentColor"/></svg>
+      </button>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const stage = $("#stage"), wrap = $("#wrap");
+  const fit = () => { stage.style.transform = `scale(${wrap.clientWidth / 960})`; };
+  new ResizeObserver(fit).observe(wrap); fit();
+
+  const copy = {
+    centre: "The panel now leads with the break clock, which is what this piece is mostly for. Text or Hidden during play comes second. Dead Text controls are gone, and the line stays selectable as a ghost when hidden. Try Game ↔ Break below, or switch During play.",
+    timeout: "Timeout is its own card. It can follow the centre line (today's look) or sit Free anywhere, drag and resize included. Trigger and flash are unchanged; in the editor it is held on screen, and ▶ replays the real flash.",
+    finished: "Game finished is its own card, with editable text. Here it is Free, as a banner above the board, and Hide centre line text clears the clock underneath. The winner card still appears alongside, as it would on air."
+  };
+
+  const state = { tab: "centre", mode: "break", play: "hidden", place: { timeout: "free", finished: "free" }, hide: { timeout: false, finished: true } };
+
+  const cards = {
+    timeout: { free: { x: 400, y: 160, w: 160, h: 30, r: 6 }, text: "TIMEOUT", bg: "#b3261ecc", border: "2px solid #ffffff", font: "700 17px/1 var(--cond)", ls: "2px",
+      ui: { title: "Timeout card", sub: "Shown when break time jumps up during a break.", only: "Timeout only", show: "Show the timeout card", fill: '<span class="sw" style="background:#b3261e"></span><span class="pf">#</span>b3261ecc', size: "34", motion: "Flashes in, holds, fades out over 1200 ms. Press ▶ to replay.", hideCopy: "Off: the card covers the clock. On: the clock is cleared while it shows." } },
+    finished: { free: { x: 400, y: 26, w: 160, h: 30, r: 15 }, text: "GAME FINISHED", bg: "#111111ee", border: "1.5px solid #f6f1e8", font: "700 15px/1 var(--cond)", ls: "2.5px",
+      ui: { title: "Game finished card", sub: "Shown when the feed reports the game ended.", only: "Game finished only", show: "Show the game finished card", fill: '<span class="sw" style="background:#111"></span><span class="pf">#</span>111111ee', size: "30", motion: "Slides up as the game ends (220 ms) and stays until the next game.", hideCopy: "On: the break clock is cleared while the card shows, as today." } }
+  };
+  const clineRect = { x: 452, y: 136, w: 56, h: 18 };
+
+  function setPressed(group, v) { $$("button", group).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
+
+  function render(replay) {
+    const t = state.tab;
+    $$(".story .tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    $("#story-copy").textContent = copy[t];
+    $$(".bar .m[data-mode]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.mode === state.mode)));
+
+    const showBefore = t === "centre" && state.cmp === "before";
+    $('[data-panel="centre-after"]').hidden = !(t === "centre" && !showBefore);
+    $('[data-panel="centre-before"]').hidden = !showBefore;
+    $('[data-panel="moment"]').hidden = t === "centre";
+
+    // Scores and winner reflect the "finished" preview
+    const fin = state.mode === "finished";
+    $("#ls").textContent = fin ? "3" : "1";
+    $("#rs").textContent = fin ? "1" : "0";
+    $("#winner").hidden = !fin;
+
+    // Centre line
+    const cl = $("#cline");
+    cl.className = "p cline";
+    const inPlay = state.mode === "game";
+    let text = "05:00";
+    if (inPlay) text = state.play === "text" ? "LIVE" : state.play === "clock" ? "05:00" : "";
+    if (state.mode === "timeout") text = "01:00";
+    const kind = t === "centre" ? null : t;
+    const momentActive = (kind === "timeout" && state.mode === "timeout") || (kind === "finished" && state.mode === "finished");
+    if (momentActive && state.hide[kind]) text = "";
+    if (fin && !kind) text = "";
+    if (!text) {
+      cl.classList.add("ghost");
+      cl.textContent = inPlay ? "hidden during play" : "";
+      if (!inPlay && !cl.textContent) cl.style.background = "#000"; else cl.style.background = "";
+    } else { cl.textContent = text; cl.style.background = ""; }
+    if (t === "centre") cl.classList.add("sel");
+    $("#ghost-hint").hidden = !(t === "centre" && inPlay && state.play === "hidden");
+    setPressed($("#play-mode"), state.play);
+    $("#play-text").hidden = state.play !== "text";
+
+    // Moment card
+    const card = $("#card"), badge = $("#card-badge"), handles = $("#handles");
+    card.hidden = badge.hidden = handles.hidden = true;
+    $("#guide").hidden = true;
+    const legend = [];
+    if (kind) {
+      const c = cards[kind], ui = c.ui, place = state.place[kind];
+      $("#m-title").textContent = ui.title; $("#m-sub").textContent = ui.sub; $("#m-only").textContent = ui.only;
+      $("#m-show").textContent = ui.show; $("#m-text").textContent = c.text; $("#m-fill").innerHTML = ui.fill;
+      $("#m-size").innerHTML = ui.size + '<span class="u">px</span>';
+      $("#m-motion-copy").textContent = ui.motion; $("#m-hide-copy").textContent = ui.hideCopy;
+      $("#m-trigger").hidden = kind !== "timeout"; $("#m-trigger-note").hidden = kind === "timeout";
+      setPressed($("#m-place"), place);
+      $("#m-follow").hidden = place !== "follow"; $("#m-free").hidden = place === "follow";
+      $("#m-hide").setAttribute("aria-pressed", String(state.hide[kind]));
+      const r = place === "follow" ? { ...clineRect, r: 0 } : c.free;
+      $("#m-x").textContent = r.x * 2; $("#m-y").textContent = r.y * 2; $("#m-w").textContent = r.w * 2; $("#m-h").textContent = r.h * 2;
+
+      if (momentActive) {
+        card.hidden = false;
+        Object.assign(card.style, {
+          left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px", borderRadius: (r.r ?? 0) + "px",
+          background: kind === "finished" && place === "follow" ? "transparent" : c.bg,
+          border: place === "follow" ? "0" : c.border,
+          color: kind === "finished" && place === "follow" ? "#f6f1e8" : "#fff",
+          font: place === "follow" ? "700 11px/1 var(--cond)" : c.font, letterSpacing: c.ls
+        });
+        card.textContent = place === "follow" && kind === "finished" ? "GAME FINISHED" : c.text;
+        card.className = "p card sel";
+        card.style.animation = "none"; void card.offsetWidth;
+        card.style.animation = kind === "timeout" ? (replay ? "flash 1200ms ease-out both" : "hold 220ms ease-out forwards") : "slideup 220ms ease";
+        badge.hidden = false;
+        badge.className = place === "follow" ? "badge follow-b" : "badge";
+        badge.textContent = place === "follow" ? "Follows centre line" : ui.title;
+        Object.assign(badge.style, { left: r.x + "px", top: r.y + "px" });
+        if (place === "free") {
+          handles.hidden = false;
+          handles.innerHTML = [[0,0],[.5,0],[1,0],[0,.5],[1,.5],[0,1],[.5,1],[1,1]].map(([a,b]) => `<i style="left:${r.x + r.w*a - 3.5}px;top:${r.y + r.h*b - 3.5}px"></i>`).join("");
+          $("#guide").hidden = false;
+        }
+        if (replay && kind === "timeout") setTimeout(() => { if (state.tab === "timeout") render(false); }, 1300);
+      }
+      legend.push(place === "free" ? "Free: drag and resize like any piece; X/Y/W/H in the panel" : "Following: takes the centre line's box; select the line to move it");
+      if (state.mode !== (kind === "timeout" ? "timeout" : "finished")) legend.push(`Switch Preview as to ${kind === "timeout" ? "Timeout" : "Finished"} to see the card`);
+    } else {
+      legend.push("Ghost slot keeps the hidden line selectable in the editor (never on air)");
+    }
+    $("#legend").innerHTML = legend.map(s => `<span>${s}</span>`).join("");
+  }
+
+  $$(".story .tabs button").forEach(b => b.addEventListener("click", () => {
+    state.tab = b.dataset.tab;
+    state.mode = state.tab === "timeout" ? "timeout" : state.tab === "finished" ? "finished" : "break";
+    render(false);
+  }));
+  $$(".bar .m[data-mode]").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; render(false); }));
+  $$(".bar .m[data-mode]").forEach(b => b.style.cursor = "pointer");
+  $("#play-mode").addEventListener("click", e => { const v = e.target.dataset.v; if (v) { state.play = v; state.mode = "game"; render(false); } });
+  $("#m-place").addEventListener("click", e => { const v = e.target.dataset.v; if (v) { state.place[state.tab] = v; render(false); } });
+  $("#m-hide").addEventListener("click", () => { state.hide[state.tab] = !state.hide[state.tab]; render(false); });
+  $$("[data-cmp]").forEach(b => b.addEventListener("click", () => { state.cmp = b.dataset.cmp; render(false); }));
+  $$("[data-goto]").forEach(b => b.addEventListener("click", () => {
+    const g = b.dataset.goto;
+    if (g === "break") { state.mode = "break"; } else { state.tab = g; state.mode = g; }
+    render(false);
+  }));
+  $("#replay").addEventListener("click", () => render(true));
+  render(false);
+})();
+</script>
+</body>
+</html>

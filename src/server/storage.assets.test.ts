@@ -46,7 +46,7 @@ function fileOf(url: string) {
   return path.join(uploadsDir, path.basename(url));
 }
 
-function themeUsing(id: string, refs: { image?: string; surface?: string; free?: string; concede?: string; winner?: string }): ThemeDefinition {
+function themeUsing(id: string, refs: { image?: string; surface?: string; free?: string; concede?: string; winner?: string; timeout?: string; gameFinished?: string }): ThemeDefinition {
   const theme: ThemeDefinition = { ...structuredClone(builtinThemes[0]), id, name: `Theme ${id}`, builtin: false };
   if (refs.image) theme.components.eventLogo.assetId = refs.image;
   if (refs.surface) theme.components.homeScore.backgroundImageAssetId = refs.surface;
@@ -61,6 +61,8 @@ function themeUsing(id: string, refs: { image?: string; surface?: string; free?:
   }
   if (refs.concede) theme.teamEventOverlay.concede.backgroundImageAssetId = refs.concede;
   if (refs.winner) theme.teamEventOverlay.winner.backgroundImageAssetId = refs.winner;
+  if (refs.timeout) theme.momentOverlays.timeout.backgroundImageAssetId = refs.timeout;
+  if (refs.gameFinished) theme.momentOverlays.gameFinished.backgroundImageAssetId = refs.gameFinished;
   return theme;
 }
 
@@ -94,7 +96,15 @@ afterAll(() => {
 describe("asset usage index", () => {
   it("finds every kind of theme and team reference", async () => {
     const asset = await storePlain("everywhere.png", { r: 1, g: 2, b: 3 });
-    storage.saveTheme(themeUsing("theme-usage", { image: asset.id, surface: asset.id, free: asset.id, concede: asset.id, winner: asset.id }));
+    storage.saveTheme(themeUsing("theme-usage", {
+        image: asset.id,
+        surface: asset.id,
+        free: asset.id,
+        concede: asset.id,
+        winner: asset.id,
+        timeout: asset.id,
+        gameFinished: asset.id
+      }));
     const team = storage.createTeamRecord({ canonicalName: "Usage FC" });
     storage.attachExistingTeamLogo(team.id, asset.id, "primary");
     storage.attachExistingTeamLogo(team.id, asset.id, "alternate");
@@ -110,6 +120,8 @@ describe("asset usage index", () => {
         "free:free-sponsor",
         "eventOverlay:concede",
         "eventOverlay:winner",
+        "momentOverlay:timeout",
+        "momentOverlay:gameFinished",
         "team:primary",
         "team:alternate"
       ].sort()
@@ -232,7 +244,7 @@ describe("deleting", () => {
     });
     const originalId = asset.sourceAssetId!;
     const originalFile = fileOf(storage.getAsset(originalId)!.url);
-    storage.saveTheme(themeUsing("theme-force", { image: asset.id, concede: asset.id }));
+    storage.saveTheme(themeUsing("theme-force", { image: asset.id, concede: asset.id, timeout: asset.id }));
     const team = storage.createTeamRecord({ canonicalName: "Force FC" });
     storage.attachExistingTeamLogo(team.id, asset.id, "primary");
 
@@ -245,6 +257,7 @@ describe("deleting", () => {
     const theme = storage.getTheme("theme-force")!;
     expect(theme.components.eventLogo.assetId).toBeNull();
     expect(theme.teamEventOverlay.concede.backgroundImageAssetId).toBeNull();
+    expect(theme.momentOverlays.timeout.backgroundImageAssetId).toBeNull();
     expect(storage.getTeamRecord(team.id)?.logoAssetId).toBeNull();
     expect(fs.existsSync(fileOf(asset.url))).toBe(false);
     expect(fs.existsSync(originalFile)).toBe(false);
