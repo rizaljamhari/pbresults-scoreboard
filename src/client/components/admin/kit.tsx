@@ -28,7 +28,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
   }
 );
 
-export type Tone = "neutral" | "ok" | "warning" | "critical" | "air" | "blue" | "quiet";
+export type Tone = "neutral" | "ok" | "warning" | "critical" | "air" | "blue" | "quiet" | "rehearsal";
 
 export function Chip({ tone = "neutral", children, className, title }: { tone?: Tone; children: ReactNode; className?: string; title?: string }) {
   return (
@@ -38,7 +38,7 @@ export function Chip({ tone = "neutral", children, className, title }: { tone?: 
   );
 }
 
-export function Dot({ tone, flat = false }: { tone?: "live" | "tally" | "warning" | "critical"; flat?: boolean }) {
+export function Dot({ tone, flat = false }: { tone?: "live" | "tally" | "warning" | "critical" | "rehearsal"; flat?: boolean }) {
   return <span className={cn("ad-dot", tone && `ad-dot--${tone}`, flat && "ad-dot--flat")} aria-hidden />;
 }
 

@@ -12,6 +12,7 @@ import {
 } from "../shared/appEvents.js";
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js";
 import type { OverlayState } from "../shared/overlayHealth.js";
+import type { RehearsalStatus } from "../shared/rehearsal.js";
 
 type AppEventListener = (frame: string) => boolean;
 
@@ -59,7 +60,8 @@ export class AppEventHub {
     runtime: RuntimeIdentity,
     liveState?: NormalizedLiveState,
     operatorTextState?: OperatorTextState,
-    overlayState?: OverlayState
+    overlayState?: OverlayState,
+    rehearsal?: RehearsalStatus
   ): AppEventSnapshot {
     return {
       protocol: 1,
@@ -71,7 +73,8 @@ export class AppEventHub {
       runtime,
       ...(liveState ? { liveState } : {}),
       ...(operatorTextState ? { operatorTextState } : {}),
-      ...(overlayState ? { overlayState } : {})
+      ...(overlayState ? { overlayState } : {}),
+      ...(rehearsal ? { rehearsal } : {})
     };
   }
 
@@ -106,6 +109,10 @@ export class AppEventHub {
 
   publishOverlayState(state: OverlayState): AppRealtimeEvent {
     return this.publishRealtime({ type: "overlay.state", state });
+  }
+
+  publishRehearsalState(state: RehearsalStatus): AppRealtimeEvent {
+    return this.publishRealtime({ type: "rehearsal.state", state });
   }
 
   hasCapacity(): boolean {
@@ -167,6 +174,7 @@ export class AppEventHub {
       | { type: "live.state"; state: NormalizedLiveState }
       | { type: "operator-text.state"; state: OperatorTextState }
       | { type: "overlay.state"; state: OverlayState }
+      | { type: "rehearsal.state"; state: RehearsalStatus }
   ): AppRealtimeEvent {
     this.sequence += 1;
     const event = {

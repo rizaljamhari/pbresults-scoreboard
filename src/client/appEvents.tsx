@@ -25,6 +25,7 @@ import {
 } from "../shared/appEvents";
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme";
 import type { OverlayState } from "../shared/overlayHealth";
+import type { RehearsalStatus } from "../shared/rehearsal";
 import { eventStreamUrl } from "./overlayClient";
 
 export type AppEventConnectionState = "connecting" | "open" | "disconnected";
@@ -51,6 +52,9 @@ type AppEventsContextValue = {
   subscribeOverlay(listener: StoreListener): () => void;
   getOverlayState(): OverlayState | null;
   updateOverlayState(state: OverlayState): void;
+  subscribeRehearsal(listener: StoreListener): () => void;
+  getRehearsalStatus(): RehearsalStatus | null;
+  updateRehearsalStatus(state: RehearsalStatus): void;
 };
 
 const AppEventsContext = createContext<AppEventsContextValue | null>(null);
@@ -79,6 +83,10 @@ function getNullOverlayState() {
   return null;
 }
 
+function getNullRehearsalStatus() {
+  return null;
+}
+
 export function AppEventProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<AppEventConnectionState>("connecting");
   const listenersRef = useRef(new Map<AppResourceDomain, Set<ResourceInvalidationListener>>());
@@ -88,6 +96,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const operatorTextStateRef = useRef<OperatorTextState | null>(null);
   const overlayListenersRef = useRef(new Set<StoreListener>());
   const overlayStateRef = useRef<OverlayState | null>(null);
+  const rehearsalListenersRef = useRef(new Set<StoreListener>());
+  const rehearsalStatusRef = useRef<RehearsalStatus | null>(null);
   const instanceIdRef = useRef<string | null>(null);
   const revisionsRef = useRef<AppResourceRevisions | null>(null);
   const runtimeRef = useRef<RuntimeIdentity | null>(null);
@@ -132,6 +142,16 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const updateOverlayState = useCallback((state: OverlayState) => {
     overlayStateRef.current = state;
     for (const listener of [...overlayListenersRef.current]) listener();
+  }, []);
+
+  const subscribeRehearsal = useCallback((listener: StoreListener) => {
+    rehearsalListenersRef.current.add(listener);
+    return () => rehearsalListenersRef.current.delete(listener);
+  }, []);
+  const getRehearsalStatus = useCallback(() => rehearsalStatusRef.current, []);
+  const updateRehearsalStatus = useCallback((state: RehearsalStatus) => {
+    rehearsalStatusRef.current = state;
+    for (const listener of [...rehearsalListenersRef.current]) listener();
   }, []);
 
   const notify = useCallback((invalidation: ResourceInvalidation) => {
@@ -220,6 +240,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       if (snapshot.liveState) updateLiveState(snapshot.liveState);
       if (snapshot.operatorTextState) updateOperatorTextState(snapshot.operatorTextState);
       if (snapshot.overlayState) updateOverlayState(snapshot.overlayState);
+      if (snapshot.rehearsal) updateRehearsalStatus(snapshot.rehearsal);
 
       for (const domain of appResourceDomains) {
         notify({
@@ -246,6 +267,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       else if (event.type === "live.state") updateLiveState(event.state);
       else if (event.type === "operator-text.state") updateOperatorTextState(event.state);
       else if (event.type === "overlay.state") updateOverlayState(event.state);
+      else if (event.type === "rehearsal.state") updateRehearsalStatus(event.state);
       else handleChanged(event);
 
       if (forward && window.parent === window) {
@@ -333,7 +355,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
             runtime: runtimeRef.current,
             ...(liveStateRef.current ? { liveState: liveStateRef.current } : {}),
             ...(operatorTextStateRef.current ? { operatorTextState: operatorTextStateRef.current } : {}),
-            ...(overlayStateRef.current ? { overlayState: overlayStateRef.current } : {})
+            ...(overlayStateRef.current ? { overlayState: overlayStateRef.current } : {}),
+            ...(rehearsalStatusRef.current ? { rehearsal: rehearsalStatusRef.current } : {})
           }
         });
       }
@@ -368,7 +391,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       for (const port of childPorts) port.close();
       childPorts.clear();
     };
-  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState]);
+  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState, updateRehearsalStatus]);
 
   const value = useMemo(
     () => ({
@@ -382,7 +405,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       updateOperatorTextState,
       subscribeOverlay,
       getOverlayState,
-      updateOverlayState
+      updateOverlayState,
+      subscribeRehearsal,
+      getRehearsalStatus,
+      updateRehearsalStatus
     }),
     [
       connectionState,
@@ -395,7 +421,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       updateOperatorTextState,
       subscribeOverlay,
       getOverlayState,
-      updateOverlayState
+      updateOverlayState,
+      subscribeRehearsal,
+      getRehearsalStatus,
+      updateRehearsalStatus
     ]
   );
   return <AppEventsContext.Provider value={value}>{children}</AppEventsContext.Provider>;
@@ -422,4 +451,9 @@ export function useAppEventOperatorTextState() {
 export function useAppEventOverlayState() {
   const events = useAppEvents();
   return useSyncExternalStore(events?.subscribeOverlay ?? emptySubscribe, events?.getOverlayState ?? getNullOverlayState, getNullOverlayState);
+}
+
+export function useAppEventRehearsalStatus() {
+  const events = useAppEvents();
+  return useSyncExternalStore(events?.subscribeRehearsal ?? emptySubscribe, events?.getRehearsalStatus ?? getNullRehearsalStatus, getNullRehearsalStatus);
 }

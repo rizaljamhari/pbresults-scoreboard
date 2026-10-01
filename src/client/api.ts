@@ -21,6 +21,7 @@ import type {
 import type { UpdateStatus } from "../shared/update";
 import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/backup";
 import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
+import type { RehearsalStatus } from "../shared/rehearsal";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -201,6 +202,13 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ inputName })
     }).then(handle<TeamMatchResult>),
+  getRehearsal: (signal?: AbortSignal) => fetch("/api/rehearsal", { signal }).then(handle<RehearsalStatus>),
+  rehearsal: (action: "start" | "go" | "mark" | "autoplay" | "stop" | "dismiss", body: Record<string, unknown> = {}) =>
+    fetch(`/api/rehearsal/${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(handle<RehearsalStatus>),
   getOverlayClients: (signal?: AbortSignal) => fetch("/api/overlay/clients", { signal }).then(handle<OverlayState>),
   /** Fire and forget: an overlay's report must never affect what it renders. */
   reportOverlay: (report: OverlayReport) => {

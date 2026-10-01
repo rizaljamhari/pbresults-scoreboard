@@ -47,7 +47,8 @@ export function OnAirStrip({
   summary,
   overlayUrl,
   onCopyUrl,
-  overlayStatus = null
+  overlayStatus = null,
+  rehearsalLabel = null
 }: {
   theme: ThemeDefinition | null;
   live: NormalizedLiveState | null;
@@ -59,6 +60,8 @@ export function OnAirStrip({
   onCopyUrl: () => void;
   /** Whether the page vMix loads is connected and current; opens the overlay pages list. */
   overlayStatus?: { level: "ok" | "info" | "warning" | "critical"; label: string; onOpen: () => void } | null;
+  /** While rehearsing, what the strip (and vMix) shows is a test case, not the feed. */
+  rehearsalLabel?: string | null;
 }) {
   const [view, setView] = useState<View>(readView);
   const [backdrop, setBackdrop] = useState<Backdrop>(readBackdrop);
@@ -109,6 +112,12 @@ export function OnAirStrip({
         ) : (
           <Chip tone="critical">No theme on air</Chip>
         )}
+        {rehearsalLabel ? (
+          <Chip tone="rehearsal">
+            <Dot tone="rehearsal" flat />
+            {rehearsalLabel}
+          </Chip>
+        ) : null}
         {overlayStatus ? (
           <button type="button" className="ad-strip-overlay" onClick={overlayStatus.onOpen} title="Show the pages showing the overlay">
             <Chip tone={overlayStatus.level === "ok" ? "ok" : overlayStatus.level === "info" ? "quiet" : overlayStatus.level}>

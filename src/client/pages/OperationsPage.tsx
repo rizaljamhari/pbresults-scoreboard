@@ -26,7 +26,9 @@ import { formatClock } from "../../shared/normalize";
 import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
 import type { AppSettings, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ApiError, api } from "../api";
-import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRehearsal, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { feedShowsRunningMatch } from "../../shared/rehearsal";
+import { RehearsalPanel } from "../components/RehearsalPanel";
 import { formatAge as formatOverlayAge, summarizeOverlays, type OverlayClient, type OverlayState } from "../../shared/overlayHealth";
 import { showToast } from "../toast";
 import { Button, Chip, Dot, Grow, Toolbar, type Tone } from "../components/admin/kit";
@@ -1033,6 +1035,12 @@ export function OperationsPage() {
   }, [leftLogo, live.data, publishedTheme, rightLogo, settings.data]);
 
   const overlayState = useOverlayState();
+  const rehearsal = useRehearsal();
+  const rehearsalPhase = rehearsal.data?.phase ?? "idle";
+  const rehearsing = rehearsalPhase === "running";
+  const [rehearsalOpen, setRehearsalOpen] = useState(false);
+  // A running or just-ended rehearsal always shows its panel, in every tab.
+  const showRehearsal = rehearsalOpen || rehearsalPhase !== "idle";
   const now = useNow();
   const overlaySummary = summarizeOverlays(overlayState, now, publishedTheme?.name ?? null);
   const overlayCheck = overlaySummary.check;
@@ -1365,6 +1373,15 @@ export function OperationsPage() {
           </span>
         </span>
         <Grow />
+        <Button
+          variant="ghost"
+          disabled={rehearsing}
+          title={rehearsing ? "A rehearsal is running" : "Play test cases on the live overlay before a show"}
+          onClick={() => setRehearsalOpen(true)}
+        >
+          <Play aria-hidden />
+          {rehearsing ? "Rehearsing…" : "Rehearse"}
+        </Button>
         {goLiveIssues.length ? (
           <a className="ad-btn ad-btn--ghost ad-issues-link" href="#operator-status">
             <TriangleAlert aria-hidden />
@@ -1409,6 +1426,7 @@ export function OperationsPage() {
             overlayUrl={vmixLiveUrl}
             onCopyUrl={() => void handleCopyOverlayUrl(vmixLiveUrl)}
             overlayStatus={overlayState ? { level: overlaySummary.level, label: overlaySummary.chip, onOpen: openOverlayPages } : null}
+            rehearsalLabel={rehearsing && rehearsal.data ? `Rehearsal · case ${rehearsal.data.caseIndex + 1}` : null}
           />
           <div className="ad-ops2-grid">
             <div className="ad-ops-col">
@@ -1419,7 +1437,14 @@ export function OperationsPage() {
                   </h2>
                   <p className="ad-hint">A pick applies to this feed name only, unless you choose Remember.</p>
                 </div>
+                {rehearsing ? (
+                  <p className="ad-callout ad-callout--info ad-rh-callout ad-rh-picks">
+                    Team picks are paused during the rehearsal: these names are test data, and nothing here is saved.
+                  </p>
+                ) : null}
                 {live.data ? (
+                  // A disabled fieldset turns off every pick, create and remember control while rehearsing.
+                  <fieldset className="ad-resolve-fieldset" disabled={rehearsing}>
                   <div className="ad-resolve">
                     <TeamSide
                       side="left"
@@ -1448,6 +1473,7 @@ export function OperationsPage() {
                       onCreate={() => void handleCreateTeam("right", live.data!.displayRightTeamMatch)}
                     />
                   </div>
+                  </fieldset>
                 ) : (
                   <p className="ad-hint ad-section">{live.error ?? "Waiting for live data…"}</p>
                 )}
@@ -1543,6 +1569,21 @@ export function OperationsPage() {
             ) : null}
             </div>
             <div className="ad-ops-col">
+              {showRehearsal ? (
+                <RehearsalPanel
+                  status={rehearsal.data}
+                  themeName={publishedTheme?.name ?? null}
+                  blockedReason={
+                    !publishedTheme
+                      ? "No theme is on air. Put a theme on air first: rehearsal tests what vMix shows."
+                      : live.data && !rehearsing && feedShowsRunningMatch(live.data)
+                        ? "A match is running. Rehearsal takes over what vMix shows, so it only starts when the feed is stopped, paused or unreachable, or during a break."
+                        : null
+                  }
+                  onStatus={(status) => rehearsal.setData?.(status)}
+                  onClose={() => setRehearsalOpen(false)}
+                />
+              ) : (
               <section id="operator-status" className="ad-surface" aria-labelledby="checks-title">
                 <div className="ad-section-head ad-ops-head">
                   <h2 id="checks-title" className="ad-title">
@@ -1591,6 +1632,7 @@ export function OperationsPage() {
                   </ul>
                 )}
               </section>
+              )}
               <section className="ad-surface" aria-label="Setup and diagnostics">
                 <Disclosure icon={<Cable aria-hidden />} title="vMix setup" summary="URL, host, shortcuts">
                   <FactList

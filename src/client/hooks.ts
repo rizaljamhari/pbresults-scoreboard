@@ -5,7 +5,7 @@ import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, 
 import type { RuntimeInfo } from "./api";
 import type { UpdateStatus } from "../shared/update";
 import type { AppResourceDomain } from "../shared/appEvents";
-import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEvents } from "./appEvents";
+import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEventRehearsalStatus, useAppEvents } from "./appEvents";
 import { ResourceRefreshCoordinator } from "./resourceRefresh";
 
 let resourceRefreshToken = 0;
@@ -423,4 +423,40 @@ export function useNow(intervalMs = 1000) {
     return () => window.clearInterval(timer);
   }, [intervalMs]);
   return now;
+}
+
+/** The rehearsal on the live overlay, pushed by the server; read over REST only while the event stream is down. */
+export function useRehearsal() {
+  const data = useAppEventRehearsalStatus();
+  const appEvents = useAppEvents();
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+    const repeat = appEvents?.connectionState === "disconnected";
+
+    const load = async () => {
+      controller = new AbortController();
+      try {
+        const next = await api.getRehearsal(controller.signal);
+        if (active) appEvents?.updateRehearsalStatus(next);
+      } catch {
+        // The next push or poll fills it in.
+      } finally {
+        controller = null;
+        if (active && repeat) timer = window.setTimeout(() => void load(), 3000);
+      }
+    };
+
+    if (!data || repeat) void load();
+
+    return () => {
+      active = false;
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [appEvents?.connectionState, appEvents?.updateRehearsalStatus, Boolean(data)]);
+
+  return { data, setData: appEvents?.updateRehearsalStatus };
 }

@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
-import { useAssets, useLiveState, useNow, useOverlayState, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { api } from "../api";
 import { summarizeOverlays } from "../../shared/overlayHealth";
 import type { AppSettings } from "../../shared/theme";
 import { AppearanceContext, useAdminAppearance, type AppearancePreference } from "../appearance";
@@ -152,6 +153,7 @@ export function AppShell() {
         </aside>
         <main className="ad-main">
           {/* Teams and Assets keep one page while their side panel opens different records, so the list and filters stay put. */}
+          <RehearsalBanner />
           <Outlet key={outletKey(location.pathname)} />
         </main>
         <ToastViewport />
@@ -170,6 +172,8 @@ function SidebarLiveStatus({
 }) {
   const live = useLiveState(true, settings?.pollIntervalMs);
   const overlayState = useOverlayState();
+  const rehearsal = useRehearsal();
+  const rehearsing = rehearsal.data?.phase === "running";
   const now = useNow();
   const overlay = summarizeOverlays(overlayState, now, onAirTheme?.name ?? null);
   const overlayLine = overlayDot(overlayState ? overlay : null);
@@ -204,10 +208,17 @@ function SidebarLiveStatus({
             · {formatClock(state.gameTimer.value)}
           </div>
         ) : null}
-        <div className={`ad-live-state ad-live-state--${summary.tone}`}>
-          <StateIcon aria-hidden />
-          {summary.stateLabel}
-        </div>
+        {rehearsing && rehearsal.data ? (
+          <div className="ad-live-state ad-live-state--rehearsal">
+            <Dot tone="rehearsal" />
+            Rehearsing · case {rehearsal.data.caseIndex + 1} of {rehearsal.data.cases.length}
+          </div>
+        ) : (
+          <div className={`ad-live-state ad-live-state--${summary.tone}`}>
+            <StateIcon aria-hidden />
+            {summary.stateLabel}
+          </div>
+        )}
       </div>
       <div className="ad-live-mini" aria-hidden>
         <Dot tone={summary.feedTone} />
@@ -215,5 +226,35 @@ function SidebarLiveStatus({
         <Dot tone={overlayLine.tone} />
       </div>
     </Link>
+  );
+}
+
+/** On every admin page while a rehearsal runs: vMix is showing test data, and one click ends it. */
+function RehearsalBanner() {
+  const rehearsal = useRehearsal();
+  const status = rehearsal.data;
+  const location = useLocation();
+  if (!status || status.phase !== "running") return null;
+  return (
+    <div className="ad-rh-banner ad-scope" role="status">
+      <Dot tone="rehearsal" />
+      Rehearsing
+      <span>
+        · vMix is showing test data, case {status.caseIndex + 1} of {status.cases.length}
+      </span>
+      <span className="ad-grow" />
+      {location.pathname !== "/admin/operations" ? (
+        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/operations">
+          Open rehearsal
+        </Link>
+      ) : null}
+      <button
+        type="button"
+        className="ad-btn ad-btn--sm"
+        onClick={() => void api.rehearsal("stop").then((next) => rehearsal.setData?.(next)).catch(() => undefined)}
+      >
+        Stop rehearsal
+      </button>
+    </div>
   );
 }

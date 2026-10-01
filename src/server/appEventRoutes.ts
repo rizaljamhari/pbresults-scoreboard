@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { RuntimeIdentity } from "../shared/appEvents.js";
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js";
 import type { OverlayState } from "../shared/overlayHealth.js";
+import type { RehearsalStatus } from "../shared/rehearsal.js";
 import { AppEventHub, formatAppEventFrame } from "./appEventHub.js";
 import type { OverlayRegistry } from "./overlayRegistry.js";
 
@@ -15,6 +16,7 @@ type AppEventRouteOptions = {
   /** Overlay pages tag their stream so Operations knows when one closes. */
   overlays?: OverlayRegistry;
   getOverlayState?: () => OverlayState;
+  getRehearsalStatus?: () => RehearsalStatus;
 };
 
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -80,7 +82,7 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     }
     writeFrame(
       formatAppEventFrame(
-        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.()),
+        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.(), options.getRehearsalStatus?.()),
         2000
       )
     );

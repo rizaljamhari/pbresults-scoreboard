@@ -3,7 +3,7 @@ import { normalizeTeamName } from "./teamMatching.js";
 import type { NormalizedLiveState, TeamRecord, TeamMatchResult } from "./theme.js";
 
 type RawTimer = { value?: number; state?: number } | null | undefined;
-type RawTeam = {
+export type RawTeam = {
   name?: string;
   score?: number;
   playersAlive?: number;
@@ -12,7 +12,7 @@ type RawTeam = {
   image?: string;
 };
 
-type RawLiveState = {
+export type RawLiveState = {
   state?: string;
   period?: string;
   round?: number;

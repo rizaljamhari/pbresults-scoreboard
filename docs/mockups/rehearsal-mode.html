@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en" data-admin-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rehearsal Mode</title>
+<style>
+  :root {
+    --ad-ground: #f5f5f2; --ad-surface: #ffffff; --ad-side: #fbfbf9; --ad-line: #e4e4de; --ad-line-strong: #d6d6cf;
+    --ad-field: #f7f7f4; --ad-hover: #efefea; --ad-text: #1d1d1b; --ad-muted: #5f5f59; --ad-faint: #66665f;
+    --ad-accent: #2f66d6; --ad-accent-soft: #e7eefc; --ad-accent-ink: #1d4fb3; --ad-on-accent: #ffffff;
+    --ad-tally: #c0281e; --ad-tally-soft: #fde9e7; --ad-draft: #7a4b00; --ad-draft-soft: #fff3cf;
+    --ad-ok: #1f7a45; --ad-ok-soft: #e3f4ea; --ad-live: #1f9d55; --ad-crit: #b3261e; --ad-crit-soft: #fdecea;
+    --ad-checker-a: #ffffff; --ad-checker-b: #ecece6; --new: #2f66d6;
+    --rh: #8a5cf6; --rh-soft: #efe9ff; --rh-ink: #5b33c7;
+  }
+  :root[data-admin-theme="dark"] {
+    --ad-ground: #131315; --ad-surface: #1e1e22; --ad-side: #19191c; --ad-line: #2f2f35; --ad-line-strong: #3a3a41;
+    --ad-field: #17171a; --ad-hover: #2a2a30; --ad-text: #ececea; --ad-muted: #a8a8a2; --ad-faint: #8e8e88;
+    --ad-accent: #6f9bff; --ad-accent-soft: #1d2945; --ad-accent-ink: #a9c3ff; --ad-on-accent: #0b1d36;
+    --ad-tally: #ff5c50; --ad-tally-soft: #3a1c1a; --ad-draft: #f0cf7a; --ad-draft-soft: #3d3216;
+    --ad-ok: #7fd6a2; --ad-ok-soft: #173325; --ad-live: #3ccf7f; --ad-crit: #ff8a80; --ad-crit-soft: #3a1a18;
+    --ad-checker-a: #222226; --ad-checker-b: #2b2b30; --new: #6f9bff;
+    --rh: #a98bff; --rh-soft: #2a2245; --rh-ink: #cbb8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--ad-ground); color: var(--ad-text); font: 400 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-feature-settings: "tnum"; }
+  button, input { font: inherit; color: inherit; }
+  svg { flex: none; }
+
+  /* Mockup controls */
+  .mk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border-bottom: 1px solid var(--ad-line); background: var(--ad-side); }
+  .mk b { font-weight: 650; }
+  .grp { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--ad-line); border-radius: 9px; background: var(--ad-surface); }
+  .grp button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; color: var(--ad-muted); font-weight: 600; }
+  .grp button[aria-pressed="true"] { background: var(--ad-accent-soft); color: var(--ad-accent-ink); }
+  .mk p { flex-basis: 100%; margin: 0; color: var(--ad-faint); }
+
+  /* App frame */
+  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 880px; }
+  .side { display: flex; flex-direction: column; border-right: 1px solid var(--ad-line); background: var(--ad-side); padding: 10px 8px; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 6px 8px 14px; font-weight: 650; }
+  .brand span { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: var(--ad-text); color: var(--ad-ground); font-size: 11px; font-weight: 800; }
+  .nav a { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 7px; color: var(--ad-text); text-decoration: none; }
+  .nav a.on { background: var(--ad-accent-soft); color: var(--ad-accent-ink); font-weight: 600; }
+  .nav a small { color: var(--ad-faint); }
+  .grow { flex: 1; }
+  .livebox { margin: 8px 2px 4px; padding: 10px 12px; border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-surface); display: grid; gap: 5px; }
+  .row { display: grid; grid-template-columns: 52px 12px 1fr; align-items: center; gap: 4px; font-size: 12.5px; }
+  .row .k { color: var(--ad-faint); }
+  .row .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .headline { display: flex; align-items: center; gap: 6px; padding-top: 6px; border-top: 1px solid var(--ad-line); font-size: 12.5px; font-weight: 600; }
+  .headline.rh { color: var(--rh-ink); } .headline.ok { color: var(--ad-ok); } .headline.warning { color: var(--ad-draft); }
+
+  .dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ad-line-strong); }
+  .dot.live { background: var(--ad-live); } .dot.tally { background: var(--ad-tally); } .dot.warning { background: var(--ad-draft); } .dot.rh { background: var(--rh); }
+  .dot.rh.pulse { animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rh) 60%, transparent); } to { box-shadow: 0 0 0 7px transparent; } }
+
+  main { min-width: 0; display: flex; flex-direction: column; }
+  .banner { display: flex; align-items: center; gap: 10px; padding: 8px 18px; background: var(--rh-soft); color: var(--rh-ink); border-bottom: 1px solid color-mix(in srgb, var(--rh) 35%, transparent); font-weight: 600; }
+  .banner span { color: var(--ad-text); font-weight: 400; }
+  .toolbar { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 18px; border-bottom: 1px solid var(--ad-line); white-space: nowrap; }
+  .toolbar h1 { margin: 0; font-size: 14px; font-weight: 650; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--ad-hover); color: var(--ad-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .chip.text { color: var(--ad-text); }
+  .chip.ok { background: var(--ad-ok-soft); color: var(--ad-ok); } .chip.warning { background: var(--ad-draft-soft); color: var(--ad-draft); }
+  .chip.critical { background: var(--ad-crit-soft); color: var(--ad-crit); } .chip.rh { background: var(--rh-soft); color: var(--rh-ink); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-surface); font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--ad-hover); }
+  .btn.primary { background: var(--ad-accent); border-color: var(--ad-accent); color: var(--ad-on-accent); }
+  .btn.rh { background: var(--rh); border-color: var(--rh); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ok { border-color: color-mix(in srgb, var(--ad-ok) 45%, var(--ad-line)); color: var(--ad-ok); }
+  .btn.issue { border-color: color-mix(in srgb, var(--ad-draft) 45%, var(--ad-line)); color: var(--ad-draft); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .meta { color: var(--ad-muted); }
+
+  .body { padding: 16px 18px 24px; display: grid; gap: 14px; }
+  .surface { border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-surface); }
+  .strip-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--ad-line); white-space: nowrap; }
+  .strip-head h2 { margin: 0; font-size: 13px; font-weight: 650; }
+  .strip-head .meta { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+
+  /* Scoreboard (mock broadcast art) */
+  .stage { position: relative; display: grid; place-items: center; height: 236px; overflow: hidden; border-radius: 0 0 10px 10px; background-color: var(--ad-checker-a);
+    background-image: linear-gradient(45deg, var(--ad-checker-b) 25%, transparent 25%, transparent 75%, var(--ad-checker-b) 75%), linear-gradient(45deg, var(--ad-checker-b) 25%, transparent 25%, transparent 75%, var(--ad-checker-b) 75%);
+    background-position: 0 0, 8px 8px; background-size: 16px 16px; }
+  .sb { position: relative; display: grid; grid-template-columns: 48px 230px 40px 96px 40px 230px 48px; align-items: center; gap: 4px; margin-top: 18px; }
+  .logo { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 50%; color: #fff; font: 800 15px/1 "Arial Narrow", sans-serif; }
+  .logo.empty { background: transparent; outline: 1px dashed #8888; outline-offset: -1px; }
+  .logo.fallback { border-radius: 8px; background: #555; font-size: 10px; }
+  .logo.event { border-radius: 8px; background: #c0281e; font-size: 9px; }
+  .team { position: relative; height: 54px; display: grid; grid-template-rows: 16px 1fr; overflow: hidden; background: #2a2a2a; color: #fff; text-transform: uppercase; }
+  .team small { display: grid; place-items: center; font: 700 9px/1 "Arial Narrow", sans-serif; letter-spacing: .06em; }
+  .team b { display: block; padding: 0 8px; overflow: hidden; text-overflow: clip; white-space: nowrap; text-align: center; line-height: 38px; font: 800 22px/38px "Arial Narrow", sans-serif; }
+  .team.l b { background: #2f4fb3; } .team.r b { background: #e0422c; }
+  .num { display: grid; place-items: center; height: 54px; background: #f6f1e8; color: #111; font: 800 28px/1 "Arial Narrow", sans-serif; }
+  .crest { display: grid; place-items: center; }
+  .cline { position: absolute; left: 50%; top: 62px; transform: translateX(-50%); min-width: 74px; padding: 4px 8px; background: #000; color: #66ff00; text-align: center; font: 700 14px/1 "Arial Narrow", sans-serif; }
+  .card { position: absolute; display: grid; place-items: center; color: #fff; font: 800 15px/1 "Arial Narrow", sans-serif; letter-spacing: 1px; border: 2px solid #fff; border-radius: 8px; animation: rise .5s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .card { animation-fill-mode: both; }
+  .card.towel { background: #111111ee; } .card.base { background: #1b3b6f; color: #ffd54f; } .card.winner { background: #205838ee; }
+  .card.timeout { background: #b3261ecc; border: 0; border-radius: 0; animation: flash 1.2s ease-out infinite; }
+  @keyframes flash { 0% { opacity: 0; } 18%, 74% { opacity: 1; } 100% { opacity: 0; } }
+  .card.finished { background: transparent; border: 0; color: #66ff00; font-size: 13px; }
+  .frozen { position: absolute; right: 10px; top: 10px; }
+  .live-pill { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; background: var(--ad-surface); border: 1px solid var(--ad-line); font-size: 11.5px; font-weight: 600; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 14px; align-items: start; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--ad-line); }
+  .card-h b { font-weight: 650; }
+  .ph { padding: 14px; } .ph i { display: block; height: 10px; border-radius: 4px; background: var(--ad-hover); margin: 10px 0; }
+
+  /* Rehearsal panel */
+  .rp-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--ad-line); }
+  .rp-head b { font-weight: 650; }
+  .rp-progress { height: 3px; background: var(--ad-hover); }
+  .rp-progress i { display: block; height: 100%; background: var(--rh); transition: width .2s; }
+  .cases { max-height: 330px; overflow: auto; padding: 6px 6px 8px; }
+  .grp-h { padding: 8px 8px 4px; color: var(--ad-faint); font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
+  .case { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px; background: none; text-align: left; cursor: pointer; }
+  .case:hover { background: var(--ad-hover); }
+  .case.now { background: var(--rh-soft); }
+  .case .n { color: var(--ad-faint); font-size: 12px; }
+  .case.now .n { color: var(--rh-ink); font-weight: 700; }
+  .case .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .case .note { display: block; overflow: hidden; color: var(--ad-draft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .mark { font-size: 12px; font-weight: 700; }
+  .mark.pass { color: var(--ad-ok); } .mark.issue { color: var(--ad-draft); } .mark.now { color: var(--rh-ink); font-weight: 600; font-size: 11.5px; }
+  .expect { padding: 12px 14px; border-top: 1px solid var(--ad-line); background: var(--ad-field); }
+  .expect h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .expect .lbl { color: var(--ad-faint); font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
+  .expect p { margin: 4px 0 0; }
+  .expect .from { color: var(--ad-faint); font-size: 12px; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 14px; border-top: 1px solid var(--ad-line); }
+  .noteform { display: flex; gap: 6px; padding: 0 14px 12px; }
+  .noteform input { flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-field); }
+  .auto { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--ad-muted); font-size: 12px; }
+  .switch { width: 30px; height: 18px; border-radius: 9px; background: var(--ad-line-strong); position: relative; border: 0; cursor: pointer; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .switch[aria-pressed="true"] { background: var(--rh); } .switch[aria-pressed="true"]::after { left: 14px; }
+
+  .start { padding: 16px 14px; display: grid; gap: 10px; }
+  .start p { margin: 0; color: var(--ad-muted); }
+  .start ul { margin: 0; padding-left: 18px; color: var(--ad-muted); }
+  .callout { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; }
+  .callout.warning { background: var(--ad-draft-soft); color: var(--ad-draft); }
+  .callout.critical { background: var(--ad-crit-soft); color: var(--ad-crit); }
+  .callout b { font-weight: 650; }
+  .summary { padding: 16px 14px; display: grid; gap: 10px; }
+  .summary .big { font-size: 18px; font-weight: 650; }
+  .summary .big .ok { color: var(--ad-ok); } .summary .big .issue { color: var(--ad-draft); }
+  .issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .issues li { padding: 8px 10px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-field); }
+  .issues li b { font-weight: 650; }
+  .issues li span { display: block; color: var(--ad-draft); font-size: 12px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="mk" role="group" aria-label="Mockup controls">
+  <b>Rehearsal mode · mockup</b>
+  <div class="grp" id="states"></div>
+  <div class="grp" id="themes"><button data-theme="dark" aria-pressed="true">Dark</button><button data-theme="light" aria-pressed="false">Light</button></div>
+  <p id="story"></p>
+</div>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span>PB</span>PBResults Scoreboard</div>
+    <nav class="nav">
+      <a class="on" href="#">Operations</a><a href="#">Themes <small>13</small></a><a href="#">Teams <small>27</small></a><a href="#">Assets <small>36</small></a><a href="#">Settings</a>
+    </nav>
+    <div class="grow"></div>
+    <div class="livebox">
+      <div class="row"><span class="k">Feed</span><i class="dot live"></i><span class="v" id="side-feed">Live · stopped</span></div>
+      <div class="row"><span class="k">On air</span><i class="dot tally"></i><span class="v">MBPJ Impact v3</span></div>
+      <div class="row"><span class="k">Overlay</span><i class="dot live"></i><span class="v">Connected</span></div>
+      <div class="headline" id="side-headline"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="banner" id="banner"><i class="dot rh pulse"></i>Rehearsing <span id="banner-text">· vMix is showing test data, case 4 of 23</span><span class="grow"></span><button class="btn" data-act="stop">Stop rehearsal</button></div>
+    <div class="toolbar">
+      <h1>Operations</h1>
+      <span class="chip ok" id="tb-feed"><i class="dot live"></i>Feed live</span>
+      <span class="meta" id="tb-meta">Stopped game · checking every 500 ms</span>
+      <span class="grow"></span>
+      <button class="btn" id="tb-rehearse" data-act="open">▶ Rehearse</button>
+      <span class="btn ghost">Refresh now</span>
+      <span class="btn ghost">Stop polling</span>
+    </div>
+
+    <div class="body">
+      <section class="surface">
+        <div class="strip-head">
+          <h2>On air</h2>
+          <span class="chip text"><i class="dot tally"></i>MBPJ Impact v3</span>
+          <span class="chip ok"><i class="dot live"></i>Live overlay connected</span>
+          <span class="chip rh hidden" id="strip-rh"><i class="dot rh"></i>Rehearsal frame</span>
+          <span class="meta" id="strip-meta"></span>
+        </div>
+        <div class="stage" id="stage"></div>
+      </section>
+
+      <div class="cols">
+        <div style="display:grid;gap:14px">
+          <section class="surface"><div class="card-h"><b>Team names on air</b><span class="meta">unchanged</span></div><div class="ph"><i style="width:70%"></i><i style="width:45%"></i></div></section>
+          <section class="surface"><div class="card-h"><b>Operator text</b><span class="meta">unchanged</span></div><div class="ph"><i style="width:80%"></i></div></section>
+        </div>
+        <section class="surface" id="panel"></section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const T = {
+    typical: { l: { name: "KUDA", ini: "KD", color: "#2f4fb3" }, r: { name: "SAUSAGE$", ini: "S$", color: "#e0422c" } },
+    short: { l: { name: "SL", ini: "SL", color: "#5a8a3a" }, r: { name: "RT", ini: "RT", color: "#7a3ab0" } },
+    long: { l: { name: "BERUANG X PAINTBALL", ini: "BX", color: "#2f4fb3" }, r: { name: "COMRADES OF DARKNESS", ini: "CD", color: "#e0422c" } },
+    stress: { l: { name: "EDMONTON IMPACT CHAMPIONSHIP TEAM", ini: "EI", color: "#2f4fb3" }, r: { name: "EDMONTON IMPACT CHAMPIONSHIP TEAM", ini: "EI", color: "#e0422c" } },
+    unknown: { l: { name: "XYZ PAINTBALL", logo: "fallback" }, r: { name: "ABC SQUAD", logo: "fallback" } },
+    nologo: { l: { name: "ANARKI LEGION", logo: "fallback" }, r: { name: "GPT PROJECT", logo: "fallback" } },
+    mixed: { l: { name: "KUDA", ini: "KD", color: "#2f4fb3" }, r: { name: "GPT PROJECT", logo: "fallback" } },
+    next: { l: { name: "ANARKI LEGION", ini: "AL", color: "#3a7a8a" }, r: { name: "BERUANG X", ini: "BX", color: "#8a6a3a" } }
+  };
+  const cases = [
+    { g: "Baseline", t: "Normal game", teams: "typical", s: [2, 1], clock: "05:00", line: "", exp: "Names, scores, logos and clock as designed. Centre line during play: Hidden.", from: "Centre line → During play: Hidden" },
+    { g: "Names", t: "Short names", teams: "short", s: [2, 1], clock: "05:00", exp: "Names fit and stay aligned.", from: "Shortest scoreboard names in Teams (SL, RT)" },
+    { g: "Names", t: "Long names", teams: "long", s: [2, 1], clock: "05:00", exp: "Names fit their box without overlapping the score, or are clipped neatly.", from: "Longest scoreboard names in Teams" },
+    { g: "Names", t: "Stress name", teams: "stress", s: [2, 1], clock: "05:00", exp: "Same as long names — this is the worst case (32 characters).", from: "Synthetic name, never saved" },
+    { g: "Names", t: "Unknown team", teams: "unknown", s: [0, 0], clock: "05:00", exp: "Names show exactly as the feed sends them. Logos: the slot's fallback image (left and right slots: Slot fallback).", from: "Feed names that match no team" },
+    { g: "Logos", t: "Both teams have logos", teams: "typical", s: [1, 1], clock: "04:12", exp: "Registry logos on both sides.", from: "Kuda, Sausage$ — both have logos in Teams" },
+    { g: "Logos", t: "Team without logo", teams: "nologo", s: [1, 1], clock: "04:12", exp: "Left slot: Slot fallback → the slot's fallback image. Right slot: Slot fallback → the slot's fallback image.", from: "Left and right logo slots: Fallback = Slot fallback" },
+    { g: "Logos", t: "Mixed", teams: "mixed", s: [1, 1], clock: "04:12", exp: "Left: Kuda's registry logo. Right: the slot's fallback image.", from: "GPT Project has no logo in Teams" },
+    { g: "Scores & clocks", t: "Start", teams: "typical", s: [0, 0], clock: "10:00", exp: "0–0, clock at full length.", from: "" },
+    { g: "Scores & clocks", t: "Double digits", teams: "typical", s: [12, 10], clock: "02:31", exp: "Two-digit scores fit their box.", from: "" },
+    { g: "Scores & clocks", t: "Clock at zero", teams: "typical", s: [3, 2], clock: "00:00", exp: "Game clock reads 00:00.", from: "" },
+    { g: "Centre line", t: "Break", teams: "typical", s: [3, 2], clock: "00:00", line: "01:30", exp: "Centre line shows the break clock counting down from 1:30.", from: "Centre line → During breaks: Break clock" },
+    { g: "Events", t: "Towel, left", teams: "typical", s: [3, 2], clock: "03:10", card: { k: "towel", side: "l", text: "CONCEDED" }, exp: "“CONCEDED” card over the LEFT team, on the logo, sliding up and down.", from: "Event cards on · Towel on · Card sits: On logo · Motion: Slide up" },
+    { g: "Events", t: "Towel, right", teams: "typical", s: [3, 2], clock: "03:10", card: { k: "towel", side: "r", text: "CONCEDED" }, exp: "Same card over the RIGHT team.", from: "" },
+    { g: "Events", t: "Base, left", teams: "typical", s: [3, 2], clock: "03:10", card: { k: "base", side: "l", text: "BASE" }, exp: "“BASE” card over the LEFT team.", from: "Base on" },
+    { g: "Events", t: "Base, right", teams: "typical", s: [3, 2], clock: "03:10", card: { k: "base", side: "r", text: "BASE" }, exp: "“BASE” card over the RIGHT team.", from: "" },
+    { g: "Events", t: "Sides switched", teams: "typical", s: [3, 2], clock: "03:10", card: { k: "towel", side: "r", text: "CONCEDED" }, exp: "Towel for the HOME team with sides switched: the card appears over the RIGHT team.", from: "Feed: TOWEL1, sidesSwitched = 1" },
+    { g: "Moments", t: "Timeout", teams: "typical", s: [3, 2], clock: "00:00", line: "02:00", timeout: true, exp: "TIMEOUT flashes on the centre line for 1200 ms when the break clock jumps 0:30 → 2:00.", from: "Timeout card on · On centre line · Shows for 1200 ms · Jump ≥ 45 s" },
+    { g: "Moments", t: "Game finished, left wins", teams: "typical", s: [3, 1], clock: "00:00", finished: true, card: { k: "winner", side: "l", text: "WINNER" }, exp: "“GAME FINISHED” on the centre line, plus the WINNER card over the LEFT team.", from: "Game finished card on · Winner card on" },
+    { g: "Moments", t: "Game finished, right wins", teams: "typical", s: [1, 3], clock: "00:00", finished: true, card: { k: "winner", side: "r", text: "WINNER" }, exp: "Game finished, WINNER over the RIGHT team.", from: "" },
+    { g: "Moments", t: "Game finished, tie", teams: "typical", s: [2, 2], clock: "00:00", finished: true, exp: "Game finished, and NO winner card.", from: "A tie has no winner" },
+    { g: "Transitions", t: "Team switch", teams: "next", s: [0, 0], clock: "10:00", exp: "Next match's teams slide in with the team-switch animation.", from: "Event cards → Animate team switches: on" },
+    { g: "Resilience", t: "Feed lost", teams: "next", s: [0, 0], clock: "10:00", frozen: true, exp: "The overlay keeps showing the last frame — never blank.", from: "Feed status set to error, data unchanged" }
+  ];
+
+  const states = {
+    ready: { label: "Ready to start", story: "Feed is stopped between matches, so Rehearse is available. The panel replaces Checks and explains what will happen before anything reaches vMix." },
+    running: { label: "Running", story: "Step through cases while watching vMix. Pass / Issue marks the case and moves on; the list fills with ✓ and ⚠. The strip shows the same frame vMix shows. Try Pass, Issue, Next and clicking cases." },
+    summary: { label: "Summary", story: "End of the run: totals, the issues with their notes, Copy report and Run again." },
+    refused: { label: "Refused · match running", story: "Rehearse is disabled while the real feed reports a running match, with the reason on hover and in the panel." },
+    stopped: { label: "Auto-stopped", story: "A real match started mid-rehearsal: the real scoreboard is back on vMix within one update, and the panel says why it stopped. Marks so far are kept." }
+  };
+
+  const $ = (s) => document.querySelector(s);
+  let state = "running";
+  let index = 3;
+  let auto = false;
+  let noteOpen = false;
+  const marks = { 0: { r: "pass" }, 1: { r: "pass" }, 2: { r: "issue", note: "Right name clips the score box" } };
+
+  function logoHtml(team, fallbackLeft) {
+    if (team.logo === "fallback") return `<span class="logo fallback">SLOT</span>`;
+    return `<span class="logo" style="background:${team.color}">${team.ini}</span>`;
+  }
+
+  function renderStage() {
+    const showReal = state !== "running";
+    const c = showReal ? cases[0] : cases[index];
+    const teams = showReal ? (state === "refused" || state === "stopped" ? { l: { name: "ANARKI LEGION", ini: "AL", color: "#3a7a8a" }, r: { name: "KUDA", ini: "KD", color: "#2f4fb3" } } : T.typical) : T[c.teams];
+    const s = showReal ? (state === "refused" || state === "stopped" ? [1, 0] : [0, 0]) : c.s;
+    const clock = showReal ? (state === "refused" || state === "stopped" ? "07:42" : "10:00") : c.clock;
+    let html = `<div class="sb">
+      ${logoHtml(teams.l)}
+      <div class="team l"><small>MBPJ Impact 2026 | 9–11 October</small><b>${teams.l.name}</b></div>
+      <div class="num">${s[0]}</div>
+      <div class="crest"><svg width="74" height="74" viewBox="0 0 80 80" aria-hidden="true"><path d="M40 4 L70 14 L66 50 L40 76 L14 50 L10 14 Z" fill="#c0281e" stroke="#fff" stroke-width="3"/><text x="40" y="44" text-anchor="middle" font-family="Arial Narrow, sans-serif" font-weight="800" font-size="13" fill="#fff">IMPACT</text></svg></div>
+      <div class="num">${s[1]}</div>
+      <div class="team r"><small>Day 1 | Rookie | Prelims</small><b>${teams.r.name}</b></div>
+      ${logoHtml(teams.r)}`;
+    const line = !showReal && (c.finished ? "" : c.line);
+    if (!showReal && c.finished) html += `<div class="cline" style="color:#66ff00">GAME FINISHED</div>`;
+    else if (line) html += `<div class="cline">${line}</div>`;
+    if (!showReal && c.timeout) html += `<div class="cline card timeout" style="color:#fff">TIMEOUT</div>`;
+    if (!showReal && c.card) {
+      const left = c.card.side === "l";
+      html += `<div class="card ${c.card.k}" style="${left ? "left:-2px" : "right:-2px"};top:-40px;width:${c.card.k === "winner" ? 170 : 150}px;height:32px">${c.card.text}</div>`;
+    }
+    html += `</div>`;
+    html += `<span class="live-pill"><i class="dot ${showReal ? "live" : "rh"}"></i>${showReal ? "Live" : "Rehearsal · case " + (index + 1)}</span>`;
+    if (!showReal && c.frozen) html += `<span class="chip warning frozen">Feed status: error (simulated)</span>`;
+    $("#stage").innerHTML = html;
+    $("#strip-rh").classList.toggle("hidden", showReal);
+    $("#strip-meta").innerHTML = showReal
+      ? (state === "refused" || state === "stopped" ? "<b>Anarki Legion 1–0 Kuda</b> · 07:42 · RUNNING / GAME" : "<b>Kuda 0–0 Sausage$</b> · 10:00 · STOPPED / GAME")
+      : `<b>Case ${index + 1}:</b> ${c.t}`;
+  }
+
+  function caseList() {
+    let html = "", group = "";
+    cases.forEach((c, i) => {
+      if (c.g !== group) { group = c.g; html += `<div class="grp-h">${group}</div>`; }
+      const m = marks[i];
+      const now = state === "running" && i === index;
+      const mark = now ? `<span class="mark now">on vMix</span>` : m ? `<span class="mark ${m.r}">${m.r === "pass" ? "✓" : "⚠"}</span>` : "";
+      html += `<button class="case ${now ? "now" : ""}" data-case="${i}"><span class="n">${i + 1}</span><span class="t">${c.t}${m && m.note ? `<span class="note">${m.note}</span>` : ""}</span>${mark}</button>`;
+    });
+    return html;
+  }
+
+  function counts() {
+    const v = Object.values(marks);
+    return { pass: v.filter((m) => m.r === "pass").length, issue: v.filter((m) => m.r === "issue").length };
+  }
+
+  function renderPanel() {
+    const p = $("#panel");
+    const k = counts();
+    if (state === "ready" || state === "refused") {
+      const refused = state === "refused";
+      p.innerHTML = `<div class="rp-head"><b>Rehearsal</b><span class="chip text"><i class="dot tally"></i>MBPJ Impact v3</span><span class="grow"></span><button class="btn ghost" data-act="close">Back to checks</button></div>
+        <div class="start">
+          ${refused ? `<p class="callout critical"><b>Not now — a match is running.</b> Rehearsal takes over what vMix shows, so it only starts when the feed is stopped, paused or unreachable, or during a break.</p>` : ""}
+          <p>Plays <b>23 test cases</b> through the real live overlay — the page vMix shows — so you can check this theme before doors open. Each case says what should appear, based on the theme's own settings.</p>
+          <ul><li>Names: short, long, a 32-character worst case, an unknown team</li><li>Logos: with, without (fallback per slot), mixed</li><li>Every event, timeout, game finished and winner, team switch, feed lost</li></ul>
+          <p class="callout warning">vMix shows test data until you stop. It stops by itself if a match starts, after the last case in auto-play, or after 10 minutes idle. Nothing is saved.</p>
+          <div class="acts"><button class="btn rh" data-act="start" ${refused ? "disabled title='A match is running'" : ""}>▶ Start rehearsal</button><button class="btn" data-act="start-auto" ${refused ? "disabled" : ""}>Start in auto-play</button></div>
+        </div>`;
+      return;
+    }
+    if (state === "summary" || state === "stopped") {
+      const issues = Object.entries(marks).filter(([, m]) => m.r === "issue");
+      p.innerHTML = `<div class="rp-head"><b>Rehearsal ${state === "stopped" ? "stopped" : "finished"}</b><span class="chip text"><i class="dot tally"></i>MBPJ Impact v3</span><span class="grow"></span><button class="btn ghost" data-act="close">Back to checks</button></div>
+        <div class="summary">
+          ${state === "stopped" ? `<p class="callout critical"><b>Stopped: a match started.</b> The real scoreboard is back on vMix. Marks so far are kept.</p>` : ""}
+          <div class="big"><span class="ok">${k.pass} passed</span> · <span class="issue">${k.issue} issue${k.issue === 1 ? "" : "s"}</span>${state === "stopped" ? ` · ${23 - k.pass - k.issue} not run` : ""}</div>
+          ${issues.length ? `<ul class="issues">${issues.map(([i, m]) => `<li><b>${+i + 1}. ${cases[i].t}</b><span>${m.note || "No note"}</span></li>`).join("")}</ul>` : `<p class="meta">No issues — the theme is ready.</p>`}
+          <div class="acts"><button class="btn primary" data-act="copy">Copy report</button><button class="btn" data-act="again" ${state === "stopped" ? "disabled title='Wait until the match ends'" : ""}>Run again</button></div>
+        </div>`;
+      return;
+    }
+    const c = cases[index];
+    p.innerHTML = `<div class="rp-head"><b>Rehearsal</b><span class="chip rh"><i class="dot rh"></i>Case ${index + 1} of 23</span><span class="meta">${k.pass} ✓ · ${k.issue} ⚠</span><span class="grow"></span><button class="btn" data-act="stop">Stop</button></div>
+      <div class="rp-progress"><i style="width:${((index) / 23) * 100}%"></i></div>
+      <div class="cases" id="cases">${caseList()}</div>
+      <div class="expect"><div class="lbl">Now on vMix · ${c.g}</div><h4>${index + 1}. ${c.t}</h4><p><b>Expect:</b> ${c.exp}</p>${c.from ? `<p class="from">From: ${c.from}</p>` : ""}</div>
+      <div class="controls">
+        <button class="btn" data-act="prev" ${index === 0 ? "disabled" : ""}>◀ Back</button>
+        <button class="btn ok" data-act="pass">✓ Pass</button>
+        <button class="btn issue" data-act="issue">⚠ Issue</button>
+        <button class="btn" data-act="next">${index === 22 ? "Finish" : "Next ▶"}</button>
+        <label class="auto">Auto-play every 6 s <button class="switch" data-act="auto" aria-pressed="${auto}"></button></label>
+      </div>
+      ${noteOpen ? `<div class="noteform"><input id="note" placeholder="What's wrong? e.g. right name clips the score" autofocus /><button class="btn issue" data-act="save-issue">Mark issue</button></div>` : ""}`;
+    // Keep the current case in view inside the list only; never scroll the page.
+    const list = document.getElementById("cases");
+    const now = document.querySelector(".case.now");
+    if (list && now) {
+      const top = now.offsetTop - list.offsetTop;
+      if (top < list.scrollTop || top + now.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top - 40;
+    }
+  }
+
+  function renderChrome() {
+    const running = state === "running";
+    $("#banner").classList.toggle("hidden", !running);
+    $("#banner-text").textContent = `· vMix is showing test data, case ${index + 1} of 23`;
+    const hl = $("#side-headline");
+    if (running) { hl.className = "headline rh"; hl.innerHTML = `<i class="dot rh pulse"></i>Rehearsing · case ${index + 1} of 23`; }
+    else if (state === "stopped") { hl.className = "headline warning"; hl.textContent = "⚠ Rehearsal stopped: match started"; }
+    else { hl.className = "headline ok"; hl.textContent = "✓ All checks clear"; }
+    const matchRunning = state === "refused" || state === "stopped";
+    $("#side-feed").textContent = matchRunning ? "Live · just now" : "Live · stopped";
+    $("#tb-meta").textContent = matchRunning ? "Running game · checking every 500 ms" : "Stopped game · checking every 500 ms";
+    const rb = $("#tb-rehearse");
+    rb.disabled = matchRunning || running;
+    rb.title = matchRunning ? "Not during a running match" : running ? "Rehearsal is running" : "Play test cases on the live overlay";
+    rb.textContent = running ? "Rehearsing…" : "▶ Rehearse";
+  }
+
+  function render() {
+    document.querySelectorAll("#states button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === state)));
+    $("#story").textContent = states[state].story;
+    renderChrome(); renderStage(); renderPanel();
+  }
+
+  let timer = null;
+  function setAuto(on) {
+    auto = on;
+    clearInterval(timer);
+    if (on) timer = setInterval(() => { if (state !== "running") return setAuto(false); go(index + 1); }, 2500);
+    render();
+  }
+  function go(i) {
+    noteOpen = false;
+    if (i >= cases.length) { state = "summary"; setAuto(false); return render(); }
+    index = Math.max(0, i);
+    render();
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-act], [data-case]");
+    if (!t) return;
+    if (t.dataset.case !== undefined) return go(+t.dataset.case);
+    const a = t.dataset.act;
+    if (a === "pass") { marks[index] = { r: "pass" }; go(index + 1); }
+    else if (a === "issue") { noteOpen = true; render(); $("#note")?.focus(); }
+    else if (a === "save-issue") { marks[index] = { r: "issue", note: $("#note").value.trim() }; go(index + 1); }
+    else if (a === "next") go(index + 1);
+    else if (a === "prev") go(index - 1);
+    else if (a === "auto") setAuto(!auto);
+    else if (a === "stop") { state = "summary"; setAuto(false); render(); }
+    else if (a === "start" || a === "again") { state = "running"; index = 0; if (a === "again") for (const key of Object.keys(marks)) delete marks[key]; render(); }
+    else if (a === "start-auto") { state = "running"; index = 0; setAuto(true); }
+    else if (a === "open") { state = "ready"; render(); }
+    else if (a === "close") { state = "ready"; render(); }
+    else if (a === "copy") { t.textContent = "Copied ✓"; }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.id === "note") document.querySelector('[data-act="save-issue"]').click();
+  });
+
+  const wrap = $("#states");
+  Object.entries(states).forEach(([key, s]) => {
+    const b = document.createElement("button");
+    b.dataset.s = key; b.textContent = s.label;
+    b.addEventListener("click", () => { setAuto(false); state = key; if (key === "running") index = 3; render(); });
+    wrap.appendChild(b);
+  });
+  document.querySelectorAll("#themes button").forEach((b) => b.addEventListener("click", () => {
+    document.documentElement.dataset.adminTheme = b.dataset.theme;
+    document.querySelectorAll("#themes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+  render();
+})();
+</script>
+</body>
+</html>

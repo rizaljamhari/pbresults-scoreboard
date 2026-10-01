@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { normalizedLiveStateSchema, operatorTextStateSchema } from "./theme.js";
 import { overlayStateSchema } from "./overlayHealth.js";
+import { rehearsalStatusSchema } from "./rehearsal.js";
 
 export const appResourceDomains = ["settings", "themes", "assets", "teams", "backups"] as const;
 export type AppResourceDomain = (typeof appResourceDomains)[number];
@@ -15,7 +16,7 @@ export const appChangedEventTypes = [
 ] as const;
 export type AppChangedEventType = (typeof appChangedEventTypes)[number];
 
-export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state"] as const;
+export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state", "rehearsal.state"] as const;
 export type AppRealtimeEventType = (typeof appRealtimeEventTypes)[number];
 
 export const appEventTypeToDomain: Record<AppChangedEventType, AppResourceDomain> = {
@@ -51,7 +52,8 @@ export const appEventSnapshotSchema = appEventCommonSchema.extend({
   }),
   liveState: normalizedLiveStateSchema.optional(),
   operatorTextState: operatorTextStateSchema.optional(),
-  overlayState: overlayStateSchema.optional()
+  overlayState: overlayStateSchema.optional(),
+  rehearsal: rehearsalStatusSchema.optional()
 });
 
 const changedEventFields = {
@@ -80,6 +82,10 @@ export const appRealtimeEventSchema = z.discriminatedUnion("type", [
   appEventCommonSchema.extend({
     type: z.literal("overlay.state"),
     state: overlayStateSchema
+  }),
+  appEventCommonSchema.extend({
+    type: z.literal("rehearsal.state"),
+    state: rehearsalStatusSchema
   })
 ]);
 

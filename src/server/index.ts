@@ -28,6 +28,7 @@ import {
   importTeamRegistryPackage,
   importThemePackage,
   listTeamRecords,
+  listAssets,
   listThemes,
   matchTeamInput,
   publishTheme,
@@ -54,6 +55,8 @@ import { UpdateFailure, updateService } from "./updateService.js";
 import { AppEventHub } from "./appEventHub.js";
 import { registerAppEventRoutes } from "./appEventRoutes.js";
 import { OverlayRegistry } from "./overlayRegistry.js";
+import { LiveGate } from "./liveGate.js";
+import { RehearsalRefusedError, RehearsalRunner } from "./rehearsalRunner.js";
 import { behindThreshold, overlayReportSchema } from "../shared/overlayHealth.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
@@ -72,8 +75,24 @@ const appEventHub = new AppEventHub({
     }
   }
 });
+// What the overlay and admin see: the real feed, or rehearsal frames while a rehearsal runs.
+const liveGate = new LiveGate(
+  () => livePoller.getState().normalized,
+  (state) => appEventHub.publishLiveState(state)
+);
+const rehearsal = new RehearsalRunner({
+  gate: liveGate,
+  getFeedState: () => livePoller.getState().normalized,
+  getContext: () => {
+    const publishedId = getSettings().publishedThemeId;
+    const theme = publishedId ? getTheme(publishedId) : null;
+    return theme ? { theme, teams: listTeamRecords(), assets: listAssets() } : null;
+  },
+  onChange: (status) => appEventHub.publishRehearsalState(status)
+});
 const unsubscribeLiveEventBridge = livePoller.subscribe(({ normalized }) => {
-  appEventHub.publishLiveState(normalized);
+  liveGate.feedChanged(normalized);
+  rehearsal.onFeed(normalized);
 });
 const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state) => {
   appEventHub.publishOperatorTextState(state);
@@ -90,7 +109,7 @@ const overlayRegistry = new OverlayRegistry({
       behindThresholdMs: behindThreshold(settings.pollIntervalMs)
     };
   },
-  getServerLiveFetchedAt: () => livePoller.getState().normalized.fetchedAt,
+  getServerLiveFetchedAt: () => liveGate.current().fetchedAt,
   getThemeName: (themeId) => getTheme(themeId)?.name ?? null,
   onChange: (state) => appEventHub.publishOverlayState(state)
 });
@@ -148,6 +167,7 @@ async function gracefulShutdown() {
   livePoller.stop();
   await runShutdownBackup();
   overlayRegistry.stop();
+  rehearsal.dispose();
   appEventHub.close();
   for (const stream of openStreams) {
     if (!stream.destroyed) {
@@ -271,11 +291,43 @@ registerAppEventRoutes(app, {
     appVersion: runtimeBuild.info.appVersion,
     releaseTag: runtimeBuild.info.releaseTag
   }),
-  getLiveState: () => livePoller.getState().normalized,
+  getLiveState: () => liveGate.current(),
   getOperatorTextState: () => operatorTextRuntime.getState(),
   overlays: overlayRegistry,
-  getOverlayState: () => overlayRegistry.getState()
+  getOverlayState: () => overlayRegistry.getState(),
+  getRehearsalStatus: () => rehearsal.getStatus()
 });
+
+// Rehearsal: test cases on the real overlay before a show. Refused during a match; never saves anything.
+app.get("/api/rehearsal", async () => rehearsal.getStatus());
+app.post("/api/rehearsal/start", async (request, reply) => {
+  const body = (request.body as { autoPlay?: unknown } | undefined) ?? {};
+  try {
+    return rehearsal.start({ autoPlay: body.autoPlay === true });
+  } catch (error) {
+    if (error instanceof RehearsalRefusedError) return reply.code(409).send({ message: error.message });
+    throw error;
+  }
+});
+app.post("/api/rehearsal/go", async (request, reply) => {
+  const to = (request.body as { to?: unknown } | undefined)?.to;
+  if (typeof to !== "string" || !to) return reply.code(400).send({ message: "to must be next, prev or a case id" });
+  return rehearsal.go(to);
+});
+app.post("/api/rehearsal/mark", async (request, reply) => {
+  const body = (request.body as { caseId?: unknown; result?: unknown; note?: unknown } | undefined) ?? {};
+  if (typeof body.caseId !== "string" || (body.result !== "pass" && body.result !== "issue")) {
+    return reply.code(400).send({ message: "caseId and result (pass or issue) are required" });
+  }
+  return rehearsal.mark(body.caseId, body.result, typeof body.note === "string" ? body.note : "");
+});
+app.post("/api/rehearsal/autoplay", async (request, reply) => {
+  const on = (request.body as { on?: unknown } | undefined)?.on;
+  if (typeof on !== "boolean") return reply.code(400).send({ message: "on must be true or false" });
+  return rehearsal.setAutoPlay(on);
+});
+app.post("/api/rehearsal/stop", async () => rehearsal.stop("operator"));
+app.post("/api/rehearsal/dismiss", async () => rehearsal.dismiss());
 
 function safeJson(text: string): unknown {
   try {
@@ -350,7 +402,7 @@ app.post("/api/update/result/dismiss", async (request, reply) => {
   return updateService.dismissResult();
 });
 
-app.get("/api/live", async () => livePoller.getState().normalized);
+app.get("/api/live", async () => liveGate.current());
 app.get("/api/live/raw", async () => livePoller.getState().raw);
 
 app.get("/api/settings", async () => getSettings());
@@ -426,7 +478,14 @@ app.post("/api/operations/text/:themeId/reset", async (request, reply) => {
     return reply.code(message.startsWith("Published theme changed") ? 409 : 400).send({ message });
   }
 });
+// During a rehearsal the names on screen are test data: a pick would save a test name as a real team's name.
+const REHEARSAL_PICK_REFUSAL = {
+  message: "Team picks are paused during a rehearsal: the names on screen are test data. Stop the rehearsal to pick real teams.",
+  code: "REHEARSAL_RUNNING"
+};
+
 app.post("/api/operations/resolve", async (request, reply) => {
+  if (rehearsal.running) return reply.code(409).send(REHEARSAL_PICK_REFUSAL);
   const body = ((request.body as { teamId?: string; rawInputName?: string; remember?: boolean; forceReassign?: boolean } | undefined) ?? {});
   if (!body.teamId?.trim() || !body.rawInputName?.trim()) {
     return reply.code(400).send({ message: "teamId and rawInputName are required" });
@@ -471,6 +530,7 @@ app.post("/api/operations/resolve", async (request, reply) => {
   }
 });
 app.delete("/api/operations/resolve/:side", async (request, reply) => {
+  if (rehearsal.running) return reply.code(409).send(REHEARSAL_PICK_REFUSAL);
   const rawInputName = typeof (request.query as { rawInputName?: string } | undefined)?.rawInputName === "string"
     ? ((request.query as { rawInputName?: string }).rawInputName ?? "")
     : "";
@@ -654,6 +714,8 @@ app.post("/api/themes/:id/archive", async (request, reply) => {
 app.post("/api/themes/:id/publish", async (request, reply) => {
   try {
     const theme = publishTheme((request.params as { id: string }).id);
+    // A rehearsal tests the theme that was on air; its expectations no longer apply to a different one.
+    if (rehearsal.running && rehearsal.getStatus().themeId !== theme.id) rehearsal.stop("theme-changed");
     operatorTextRuntime.emitCurrent();
     appEventHub.publish("theme.published", [theme.id]);
     return theme;
