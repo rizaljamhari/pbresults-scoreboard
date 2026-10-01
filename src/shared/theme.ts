@@ -516,8 +516,14 @@ export function migrateMomentOverlays(input: unknown): unknown {
 const themeObjectSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
+  /** Short tag shown in front of the name in the theme list, e.g. "SL"; optional. */
+  acronym: z.string().max(6).default(""),
   description: z.string(),
   builtin: z.boolean(),
+  /** Last time the theme was saved or created; null for themes saved before this was tracked. */
+  updatedAt: z.string().nullable().default(null),
+  /** Hidden from the main theme list; nothing else changes. */
+  archived: z.boolean().default(false),
   canvas: z.object({
     width: z.number().positive(),
     height: z.number().positive(),

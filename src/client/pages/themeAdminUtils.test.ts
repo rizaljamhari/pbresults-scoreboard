@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
 import type { ThemeDefinition } from "../../shared/theme";
-import { filterAndSortThemes, fitContent, themeContentBounds } from "./themeAdminUtils";
+import { fitContent, formatEdited, organizeThemes, themeContentBounds } from "./themeAdminUtils";
 
 function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   return {
@@ -14,37 +14,68 @@ function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   };
 }
 
-describe("filterAndSortThemes", () => {
+describe("organizeThemes", () => {
   const themes: ThemeDefinition[] = [
     makeTheme({ id: "builtin-classic", name: "Classic", description: "Built in theme", builtin: true }),
-    makeTheme({ id: "custom-alpha", name: "Alpha Custom", description: "Custom competitive", builtin: false }),
-    makeTheme({ id: "custom-bravo", name: "Bravo Custom", description: "Second custom", builtin: false })
+    makeTheme({ id: "custom-alpha", name: "Alpha Custom", description: "Custom competitive", updatedAt: "2026-09-01T10:00:00.000Z" }),
+    makeTheme({ id: "custom-bravo", name: "Bravo Custom", description: "Second custom", updatedAt: "2026-09-20T10:00:00.000Z" }),
+    makeTheme({ id: "custom-old", name: "Old Event", description: "", archived: true }),
+    makeTheme({ id: "custom-legacy", name: "Legacy", description: "", updatedAt: null })
   ];
 
-  it("filters by kind", () => {
-    expect(filterAndSortThemes(themes, "", "builtin", "nameAsc").map((theme) => theme.id)).toEqual(["builtin-classic"]);
-    expect(filterAndSortThemes(themes, "", "custom", "nameAsc").map((theme) => theme.id)).toEqual([
-      "custom-alpha",
-      "custom-bravo"
-    ]);
+  it("keeps built-ins out of the list as templates", () => {
+    const sections = organizeThemes(themes, "", "nameAsc", null);
+    expect(sections.templates.map((theme) => theme.id)).toEqual(["builtin-classic"]);
+    expect(sections.active.some((theme) => theme.builtin)).toBe(false);
   });
 
-  it("filters by search over name and description", () => {
-    expect(filterAndSortThemes(themes, "competitive", "all", "nameAsc").map((theme) => theme.id)).toEqual(["custom-alpha"]);
-    expect(filterAndSortThemes(themes, "classic", "all", "nameAsc").map((theme) => theme.id)).toEqual(["builtin-classic"]);
+  it("shows the theme on air on its own, even a built-in", () => {
+    const sections = organizeThemes(themes, "", "nameAsc", "builtin-classic");
+    expect(sections.onAir?.id).toBe("builtin-classic");
+    const custom = organizeThemes(themes, "", "nameAsc", "custom-alpha");
+    expect(custom.onAir?.id).toBe("custom-alpha");
+    expect(custom.active.map((theme) => theme.id)).not.toContain("custom-alpha");
   });
 
-  it("sorts by name direction", () => {
-    expect(filterAndSortThemes(themes, "", "all", "nameAsc").map((theme) => theme.name)).toEqual([
-      "Alpha Custom",
-      "Bravo Custom",
-      "Classic"
-    ]);
-    expect(filterAndSortThemes(themes, "", "all", "nameDesc").map((theme) => theme.name)).toEqual([
-      "Classic",
-      "Bravo Custom",
-      "Alpha Custom"
-    ]);
+  it("puts archived themes in their own section", () => {
+    const sections = organizeThemes(themes, "", "nameAsc", null);
+    expect(sections.archived.map((theme) => theme.id)).toEqual(["custom-old"]);
+    expect(sections.active.map((theme) => theme.id)).not.toContain("custom-old");
+  });
+
+  it("sorts by most recent edit, unknown times last", () => {
+    expect(organizeThemes(themes, "", "recent", null).active.map((theme) => theme.id)).toEqual(["custom-bravo", "custom-alpha", "custom-legacy"]);
+  });
+
+  it("sorts by name either way", () => {
+    expect(organizeThemes(themes, "", "nameAsc", null).active.map((theme) => theme.name)).toEqual(["Alpha Custom", "Bravo Custom", "Legacy"]);
+    expect(organizeThemes(themes, "", "nameDesc", null).active.map((theme) => theme.name)).toEqual(["Legacy", "Bravo Custom", "Alpha Custom"]);
+  });
+
+  it("searches name and description across every section", () => {
+    const sections = organizeThemes(themes, "competitive", "nameAsc", "custom-bravo");
+    expect(sections.active.map((theme) => theme.id)).toEqual(["custom-alpha"]);
+    expect(sections.onAir).toBeNull();
+    expect(organizeThemes(themes, "old", "nameAsc", null).archived.map((theme) => theme.id)).toEqual(["custom-old"]);
+  });
+});
+
+describe("formatEdited", () => {
+  const now = Date.parse("2026-10-01T12:00:00.000Z");
+  it.each([
+    ["2026-10-01T11:59:40.000Z", "Edited just now"],
+    ["2026-10-01T11:45:00.000Z", "Edited 15 min ago"],
+    ["2026-10-01T11:00:00.000Z", "Edited 1 hour ago"],
+    ["2026-10-01T07:00:00.000Z", "Edited 5 hours ago"],
+    ["2026-09-30T10:00:00.000Z", "Edited yesterday"],
+    ["2026-09-27T10:00:00.000Z", "Edited 4 days ago"]
+  ])("formats %s as %s", (value, expected) => {
+    expect(formatEdited(value, now)).toBe(expected);
+  });
+
+  it("gives a date for older edits and nothing for unknown ones", () => {
+    expect(formatEdited("2026-08-01T10:00:00.000Z", now)).toMatch(/^Edited .*2026$/);
+    expect(formatEdited(null, now)).toBeNull();
   });
 });
 

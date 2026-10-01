@@ -218,6 +218,12 @@ export const api = {
     fetch(`/api/themes/${id}`, {
       method: "DELETE"
     }).then(handle<void>),
+  archiveTheme: (id: string, archived: boolean) =>
+    fetch(`/api/themes/${id}/archive`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ archived })
+    }).then(handle<ThemeDefinition>),
   publishTheme: (id: string) =>
     fetch(`/api/themes/${id}/publish`, {
       method: "POST"

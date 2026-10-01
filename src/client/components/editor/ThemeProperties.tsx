@@ -36,6 +36,16 @@ export function ThemeProperties({
 
       <Group title="Theme">
         <TextInput label="Name" value={theme.name} maxLength={80} onChange={(value) => patchTheme((draft) => (draft.name = value))} />
+        <Field label="Acronym" hint="Up to 6 letters, shown in front of the name in the theme list, e.g. SL.">
+          <input
+            className="te-input"
+            aria-label="Acronym"
+            value={theme.acronym}
+            maxLength={6}
+            placeholder="SL"
+            onChange={(event) => patchTheme((draft) => (draft.acronym = event.target.value.replace(/\s+/g, "").toUpperCase().slice(0, 6)))}
+          />
+        </Field>
         <TextInput label="Description" value={theme.description} onChange={(value) => patchTheme((draft) => (draft.description = value))} />
       </Group>
 

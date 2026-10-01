@@ -191,6 +191,9 @@ export const builtinThemes: ThemeDefinition[] = [
     "name": "Broadcast Logos",
     "description": "Reference-style broadcast bar with full-width team logo panels and compact stacked center timing.",
     "builtin": true,
+    "updatedAt": null,
+    "acronym": "",
+    "archived": false,
     "canvas": {
       "width": 1920,
       "height": 1080,
@@ -565,6 +568,9 @@ export const builtinThemes: ThemeDefinition[] = [
     "name": "Broadcast Clean",
     "description": "Reference-style broadcast bar without logo artwork, keeping the same geometry and center stack.",
     "builtin": true,
+    "updatedAt": null,
+    "acronym": "",
+    "archived": false,
     "canvas": {
       "width": 1920,
       "height": 1080,

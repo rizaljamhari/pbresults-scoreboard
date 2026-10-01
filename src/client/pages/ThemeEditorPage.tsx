@@ -1427,10 +1427,12 @@ export function ThemeEditorPage() {
     }
     setSaving(true);
     try {
-      const clone = await api.createTheme(themeResource.data.id, `${themeResource.data.name} Copy`);
+      // The server numbers the copy ("… 2") so it never repeats an existing name.
+      const clone = await api.createTheme(themeResource.data.id, themeResource.data.name);
       const draft = structuredClone(themeResource.data);
       draft.id = clone.id;
       draft.builtin = false;
+      draft.archived = false;
       draft.name = clone.name;
       const saved = await api.saveTheme(draft);
       themeResource.setData(saved);

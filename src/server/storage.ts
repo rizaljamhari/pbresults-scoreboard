@@ -845,17 +845,38 @@ export function getTheme(id: string): ThemeDefinition | null {
   return listThemes().find((theme) => theme.id === id) ?? null;
 }
 
+/**
+ * A name no other theme uses: "Broadcast Logos" becomes "Broadcast Logos 2", then 3, and a copy of a copy
+ * counts on from the same stem instead of piling up "Copy Copy".
+ */
+export function uniqueThemeName(wanted: string, takenNames: string[]): string {
+  const taken = new Set(takenNames.map((name) => name.trim().toLowerCase()));
+  const trimmed = wanted.trim();
+  if (!taken.has(trimmed.toLowerCase())) {
+    return trimmed;
+  }
+  const stem = trimmed.replace(/(\s+copy)+$/i, "").replace(/\s+\d+$/, "").trim() || trimmed;
+  for (let number = 2; ; number += 1) {
+    const candidate = `${stem} ${number}`;
+    if (!taken.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+}
+
 export function createThemeFromClone(cloneFromId?: string, name?: string): ThemeDefinition {
   const source = cloneFromId ? getTheme(cloneFromId) : null;
   const base = source ?? listThemes()[0];
+  const themes = listThemes();
   const theme: ThemeDefinition = {
     ...base,
     id: createThemeId("theme"),
     builtin: false,
-    name: name?.trim() || `${base.name} Copy`,
+    archived: false,
+    updatedAt: new Date().toISOString(),
+    name: uniqueThemeName(name?.trim() || base.name, themes.map((item) => item.name)),
     description: base.description
   };
-  const themes = listThemes();
   themes.push(themeSchema.parse(theme));
   writeJson(themesPath, themes);
   return theme;
@@ -869,7 +890,7 @@ export function saveTheme(theme: ThemeDefinition): ThemeDefinition {
   if (!existing && next.builtin) {
     throw new Error("Built-in themes must originate from predefined templates");
   }
-  const toSave = existing?.builtin ? { ...next, builtin: true } : next;
+  const toSave = { ...(existing?.builtin ? { ...next, builtin: true } : next), updatedAt: new Date().toISOString() };
   if (index > -1) {
     themes[index] = toSave;
   } else {
@@ -878,6 +899,24 @@ export function saveTheme(theme: ThemeDefinition): ThemeDefinition {
   writeJson(themesPath, themes);
   pruneOperatorTextOverridesForTheme(toSave);
   return toSave;
+}
+
+/** Hides or restores a theme in the list. Not an edit, so the theme's last-edited time stays as it was. */
+export function setThemeArchived(id: string, archived: boolean): ThemeDefinition {
+  const themes = listThemes();
+  const index = themes.findIndex((theme) => theme.id === id);
+  if (index === -1) {
+    throw new Error("Theme not found");
+  }
+  if (archived && themes[index].builtin) {
+    throw new Error("Built-in themes cannot be archived");
+  }
+  if (archived && getSettings().publishedThemeId === id) {
+    throw new Error("The theme on air cannot be archived");
+  }
+  themes[index] = { ...themes[index], archived };
+  writeJson(themesPath, themes);
+  return themes[index];
 }
 
 export function deleteTheme(id: string): void {
@@ -910,9 +949,11 @@ export function publishTheme(id: string): ThemeDefinition {
   if (!theme) {
     throw new Error("Theme not found");
   }
+  // A theme going on air is in use again, so it comes back from the archive.
+  const onAir = theme.archived ? setThemeArchived(id, false) : theme;
   const settings = getSettings();
   updateSettings({ ...settings, publishedThemeId: id });
-  return theme;
+  return onAir;
 }
 
 export function listAssets(): StoredAsset[] {

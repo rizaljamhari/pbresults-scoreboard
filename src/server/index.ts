@@ -15,6 +15,7 @@ import {
   clearOperatorTextOverride,
   createTeamRecord,
   deleteTheme,
+  setThemeArchived,
   deleteTeamRecord,
   exportAppPackage,
   exportTeamRegistryPackage,
@@ -588,6 +589,22 @@ app.delete("/api/themes/:id", async (request, reply) => {
     appEventHub.publish("settings.changed");
   }
   return reply.code(204).send();
+});
+
+app.post("/api/themes/:id/archive", async (request, reply) => {
+  const themeId = (request.params as { id: string }).id;
+  const archived = (request.body as { archived?: unknown } | undefined)?.archived;
+  if (typeof archived !== "boolean") {
+    return reply.code(400).send({ message: "archived must be true or false" });
+  }
+  try {
+    const theme = setThemeArchived(themeId, archived);
+    appEventHub.publish("themes.changed", [theme.id]);
+    return theme;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not archive the theme";
+    return reply.code(message === "Theme not found" ? 404 : 409).send({ message });
+  }
 });
 
 app.post("/api/themes/:id/publish", async (request, reply) => {

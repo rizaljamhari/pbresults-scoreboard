@@ -1,36 +1,63 @@
 import type { ThemeDefinition } from "../../shared/theme";
 import { listThemeComponentEntries } from "../../shared/themeComponents";
 
-export type ThemeKindFilter = "all" | "builtin" | "custom";
-export type ThemeSort = "nameAsc" | "nameDesc";
+export type ThemeSort = "recent" | "nameAsc" | "nameDesc";
 
-export function filterAndSortThemes(
-  themes: ThemeDefinition[],
-  search: string,
-  kindFilter: ThemeKindFilter,
-  sortBy: ThemeSort
-): ThemeDefinition[] {
+export type ThemeSections = {
+  /** The theme on air, shown on its own; a built-in only appears here. */
+  onAir: ThemeDefinition | null;
+  /** The event's own themes, archived ones excluded. */
+  active: ThemeDefinition[];
+  archived: ThemeDefinition[];
+  /** Built-in themes: starting points for new themes, not listed. */
+  templates: ThemeDefinition[];
+};
+
+function compareThemes(left: ThemeDefinition, right: ThemeDefinition, sortBy: ThemeSort) {
+  if (sortBy === "recent") {
+    // Newest edit first; themes never saved since edit times were tracked go last, by name.
+    const leftTime = left.updatedAt ? Date.parse(left.updatedAt) : -Infinity;
+    const rightTime = right.updatedAt ? Date.parse(right.updatedAt) : -Infinity;
+    if (leftTime !== rightTime) {
+      return rightTime - leftTime;
+    }
+    return left.name.localeCompare(right.name);
+  }
+  return sortBy === "nameAsc" ? left.name.localeCompare(right.name) : right.name.localeCompare(left.name);
+}
+
+/** Splits themes into what the theme list shows: on air, the event's themes, the archive, and the templates. */
+export function organizeThemes(themes: ThemeDefinition[], search: string, sortBy: ThemeSort, onAirId: string | null): ThemeSections {
   const query = search.trim().toLowerCase();
-  const base = [...themes].filter((theme) => {
-    if (kindFilter === "builtin" && !theme.builtin) {
-      return false;
-    }
-    if (kindFilter === "custom" && theme.builtin) {
-      return false;
-    }
-    if (!query) {
-      return true;
-    }
-    return [theme.name, theme.description, theme.id].some((value) => value.toLowerCase().includes(query));
-  });
+  const matches = (theme: ThemeDefinition) => !query || [theme.acronym, theme.name, theme.description].some((value) => value.toLowerCase().includes(query));
+  const sorted = [...themes].sort((left, right) => compareThemes(left, right, sortBy));
+  const onAirTheme = sorted.find((theme) => theme.id === onAirId) ?? null;
+  const listed = sorted.filter((theme) => !theme.builtin && theme.id !== onAirId && matches(theme));
+  return {
+    onAir: onAirTheme && matches(onAirTheme) ? onAirTheme : null,
+    active: listed.filter((theme) => !theme.archived),
+    archived: listed.filter((theme) => theme.archived),
+    templates: sorted.filter((theme) => theme.builtin).sort((left, right) => left.name.localeCompare(right.name))
+  };
+}
 
-  base.sort((left, right) => {
-    return sortBy === "nameAsc"
-      ? left.name.localeCompare(right.name)
-      : right.name.localeCompare(left.name);
-  });
-
-  return base;
+/** "Edited 3 days ago", short and in the product's words; null when the time is unknown. */
+export function formatEdited(updatedAt: string | null, now = Date.now()): string | null {
+  if (!updatedAt) {
+    return null;
+  }
+  const time = Date.parse(updatedAt);
+  if (Number.isNaN(time)) {
+    return null;
+  }
+  const minutes = Math.floor(Math.max(0, now - time) / 60_000);
+  if (minutes < 1) return "Edited just now";
+  if (minutes < 60) return `Edited ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Edited ${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return days === 1 ? "Edited yesterday" : `Edited ${days} days ago`;
+  return `Edited ${new Date(time).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`;
 }
 
 export type Box = { x: number; y: number; width: number; height: number };

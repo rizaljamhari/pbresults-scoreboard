@@ -1,15 +1,35 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CopyPlus, Download, Ellipsis, Eye, PenLine, Plus, Radio, Trash2, Upload } from "lucide-react";
+import { Archive, ArchiveRestore, CopyPlus, Download, Ellipsis, Eye, LayoutGrid, List, PenLine, Plus, Radio, Trash2, Upload } from "lucide-react";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../shared/theme";
 import { OverlayRenderer } from "../components/OverlayRenderer";
-import { Button, Chip, Dot, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus } from "../components/admin/kit";
-import { filterAndSortThemes, fitContent, themeContentBounds, type ThemeKindFilter, type ThemeSort } from "./themeAdminUtils";
+import { Button, Chip, Dot, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus, type MenuItem } from "../components/admin/kit";
+import { fitContent, formatEdited, organizeThemes, themeContentBounds, type ThemeSort } from "./themeAdminUtils";
 
-const PREFERRED_BUILTIN_THEME_ID = "theme-7ad8adb8-e017-4853-93b1-fb608a750253";
+type ThemeView = "grid" | "list";
+
+const VIEW_KEY = "pbresults.themes.view";
+const SORT_KEY = "pbresults.themes.sort";
+
+function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const value = window.localStorage.getItem(key);
+    return allowed.includes(value as T) ? (value as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStored(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // The choice still holds for this visit.
+  }
+}
 
 const THUMB_PADDING = 14;
 
@@ -63,6 +83,137 @@ const ThemeThumb = memo(function ThemeThumb({
   );
 });
 
+type CardActions = {
+  publishingId: string | null;
+  onPublish: (theme: ThemeDefinition) => void;
+  onDuplicate: (theme: ThemeDefinition) => void;
+  onExport: (theme: ThemeDefinition) => void;
+  onArchive: (theme: ThemeDefinition, archived: boolean) => void;
+  onDelete: (theme: ThemeDefinition) => void;
+};
+
+function themeMenu(theme: ThemeDefinition, onAir: boolean, actions: CardActions): MenuItem[] {
+  const items: MenuItem[] = [];
+  if (!onAir) {
+    items.push({
+      label: actions.publishingId === theme.id ? "Putting on air…" : "Put on air…",
+      icon: <Radio />,
+      disabled: actions.publishingId !== null,
+      onSelect: () => actions.onPublish(theme)
+    });
+  }
+  items.push(
+    { label: "Preview", icon: <Eye />, onSelect: () => window.open(`/overlay/preview/${theme.id}`, "_blank", "noreferrer") },
+    { label: "Duplicate", icon: <CopyPlus />, onSelect: () => actions.onDuplicate(theme) },
+    { label: "Export", icon: <Download />, onSelect: () => actions.onExport(theme) }
+  );
+  if (!theme.builtin && !onAir) {
+    items.push(
+      { kind: "separator" },
+      theme.archived
+        ? { label: "Restore", icon: <ArchiveRestore />, onSelect: () => actions.onArchive(theme, false) }
+        : { label: "Archive", icon: <Archive />, onSelect: () => actions.onArchive(theme, true) },
+      { label: "Delete…", icon: <Trash2 />, danger: true, onSelect: () => actions.onDelete(theme) }
+    );
+  }
+  return items;
+}
+
+/** The theme's name, led by its acronym in bold so a long list can be skimmed. */
+function ThemeName({ theme }: { theme: ThemeDefinition }) {
+  return (
+    <b className="ad-theme-name" title={theme.acronym ? `${theme.acronym} · ${theme.name}` : theme.name}>
+      {theme.acronym ? <abbr className="ad-theme-acronym" title={theme.name}>{theme.acronym}</abbr> : null}
+      <span>{theme.name}</span>
+    </b>
+  );
+}
+
+/** One theme, as a card in the grid or a row in the list. Edit is the one visible action; the rest sit in ⋯. */
+function ThemeItem({
+  theme,
+  view,
+  onAir,
+  live,
+  assets,
+  actions
+}: {
+  theme: ThemeDefinition;
+  view: ThemeView;
+  onAir: boolean;
+  live: NormalizedLiveState | null;
+  assets: StoredAsset[];
+  actions: CardActions;
+}) {
+  const edited = formatEdited(theme.updatedAt);
+  const size = theme.canvas.width !== 1920 || theme.canvas.height !== 1080 ? `${theme.canvas.width}×${theme.canvas.height}` : null;
+  const meta = [edited, size].filter(Boolean).join(" · ");
+  const chip = onAir ? (
+    <Chip tone="air">
+      <Dot tone="tally" flat />
+      On air
+    </Chip>
+  ) : null;
+  const builtinChip = theme.builtin ? <Chip>Built-in</Chip> : null;
+  const menu = (
+    <Menu
+      trigger={
+        <IconButton label={`More for ${theme.name}`}>
+          <Ellipsis />
+        </IconButton>
+      }
+      items={themeMenu(theme, onAir, actions)}
+    />
+  );
+  const edit = (
+    <Link className="ad-btn" to={`/admin/themes/${theme.id}`}>
+      <PenLine aria-hidden />
+      Edit
+    </Link>
+  );
+  const classes = ["ad-surface", view === "grid" ? "ad-theme" : "ad-theme-row", onAir ? "is-air" : "", theme.archived ? "is-archived" : ""].join(" ");
+
+  return (
+    <article className={classes}>
+      <Link to={`/admin/themes/${theme.id}`} className="ad-theme-link" aria-label={`Edit ${theme.name}`} tabIndex={-1}>
+        <ThemeThumb theme={theme} live={live} assets={assets} />
+      </Link>
+      {view === "grid" ? (
+        <div className="ad-theme-body">
+          <div className="ad-theme-title">
+            <ThemeName theme={theme} />
+            {chip ?? builtinChip}
+          </div>
+          {theme.description ? (
+            <p className="ad-theme-desc" title={theme.description}>
+              {theme.description}
+            </p>
+          ) : null}
+          {meta ? <p className="ad-theme-meta">{meta}</p> : null}
+          <div className="ad-theme-actions">
+            {edit}
+            <Grow />
+            {menu}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="ad-theme-row-text">
+            <ThemeName theme={theme} />
+            {theme.description ? <span title={theme.description}>{theme.description}</span> : null}
+          </div>
+          <span className="ad-theme-meta">{meta}</span>
+          <span className="ad-theme-row-chip">{chip ?? builtinChip}</span>
+          <div className="ad-theme-actions">
+            {edit}
+            {menu}
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
 export function ThemesPage() {
   const navigate = useNavigate();
   const themes = useThemes();
@@ -70,12 +221,16 @@ export function ThemesPage() {
   const assets = useAssets();
   const live = useLiveState(false);
   const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<ThemeKindFilter>("all");
-  const [sortBy, setSortBy] = useState<ThemeSort>("nameAsc");
+  const [sortBy, setSortBy] = useState<ThemeSort>(() => readStored(SORT_KEY, ["recent", "nameAsc", "nameDesc"] as const, "recent"));
+  const [view, setView] = useState<ThemeView>(() => readStored(VIEW_KEY, ["grid", "list"] as const, "grid"));
+  const [showArchived, setShowArchived] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
+
+  useEffect(() => writeStored(SORT_KEY, sortBy), [sortBy]);
+  useEffect(() => writeStored(VIEW_KEY, view), [view]);
 
   // Previews use the scores from when the page opened, so ten renderers do not redraw on every feed tick.
   const snapshotRef = useRef<NormalizedLiveState | null>(null);
@@ -85,21 +240,20 @@ export function ThemesPage() {
 
   const onAirId = settings.data?.publishedThemeId ?? null;
   const allThemes = themes.data ?? [];
-  const visibleThemes = useMemo(() => {
-    const sorted = filterAndSortThemes(allThemes, search, kindFilter, sortBy);
-    const onAir = sorted.find((theme) => theme.id === onAirId);
-    return onAir ? [onAir, ...sorted.filter((theme) => theme.id !== onAirId)] : sorted;
-  }, [allThemes, search, kindFilter, sortBy, onAirId]);
-  const customCount = allThemes.filter((theme) => !theme.builtin).length;
+  const sections = useMemo(() => organizeThemes(allThemes, search, sortBy, onAirId), [allThemes, search, sortBy, onAirId]);
+  const searching = search.trim() !== "";
+  const archivedOpen = showArchived || (searching && sections.archived.length > 0);
+  const eventThemeCount = allThemes.filter((theme) => !theme.builtin && !theme.archived).length;
+  const nothingMatches = searching && !sections.onAir && !sections.active.length && !sections.archived.length;
 
   async function refresh() {
     themes.setData(await api.getThemes());
     settings.setData(await api.getSettings());
   }
 
-  async function createFrom(sourceId: string, message: string) {
+  async function createFrom(source: ThemeDefinition, message: string) {
     try {
-      const theme = await api.createTheme(sourceId);
+      const theme = await api.createTheme(source.id, source.name);
       await refresh();
       showToast({ kind: "success", message });
       navigate(`/admin/themes/${theme.id}`);
@@ -127,6 +281,16 @@ export function ThemesPage() {
       });
     } finally {
       setPublishingId(null);
+    }
+  }
+
+  async function handleArchive(theme: ThemeDefinition, archived: boolean) {
+    try {
+      await api.archiveTheme(theme.id, archived);
+      await refresh();
+      showToast({ kind: "success", message: archived ? `“${theme.name}” archived. It is under Archived at the bottom.` : `“${theme.name}” restored.` });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update the theme." });
     }
   }
 
@@ -164,29 +328,60 @@ export function ThemesPage() {
     }
   }
 
+  const actions: CardActions = {
+    publishingId,
+    onPublish: (theme) => void handlePublish(theme),
+    onDuplicate: (theme) => void createFrom(theme, "Theme duplicated."),
+    onExport: (theme) => void handleExport(theme),
+    onArchive: (theme, archived) => void handleArchive(theme, archived),
+    onDelete: (theme) => void handleDelete(theme)
+  };
+
+  const newThemeItems: MenuItem[] = [
+    ...sections.templates.map((template) => ({
+      label: `Start from ${template.name}`,
+      icon: <Plus />,
+      onSelect: () => void createFrom(template, "Theme created.")
+    })),
+    { kind: "separator" as const },
+    { label: "Import a theme file…", icon: <Upload />, onSelect: () => importRef.current?.click() }
+  ];
+
+  const renderItems = (list: ThemeDefinition[]) => (
+    <div className={view === "grid" ? "ad-gallery" : "ad-theme-list"}>
+      {list.map((theme) => (
+        <ThemeItem
+          key={theme.id}
+          theme={theme}
+          view={view}
+          onAir={theme.id === onAirId}
+          live={snapshotRef.current}
+          assets={assets.data ?? []}
+          actions={actions}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div className="ad-page ad-scope">
-      <Toolbar title="Themes" count={themes.data ? allThemes.length : undefined}>
+      <Toolbar title="Themes" count={themes.data ? eventThemeCount : undefined}>
         <SearchField ref={searchRef} label="Search themes" placeholder="Search themes" shortcut="/" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <Segmented
-          label="Kind"
-          value={kindFilter}
-          onChange={setKindFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "custom", label: "Custom", count: customCount },
-            { value: "builtin", label: "Built-in", count: allThemes.length - customCount }
-          ]}
-        />
         <select className="ad-select" style={{ width: "auto" }} aria-label="Sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as ThemeSort)}>
+          <option value="recent">Recently edited</option>
           <option value="nameAsc">Name A–Z</option>
           <option value="nameDesc">Name Z–A</option>
         </select>
+        <Segmented
+          label="Layout"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "grid", label: <LayoutGrid aria-label="Grid" />, title: "Grid" },
+            { value: "list", label: <List aria-label="List" />, title: "List" }
+          ]}
+        />
         <Grow />
-        <Button variant="ghost" onClick={() => importRef.current?.click()}>
-          <Upload aria-hidden />
-          Import
-        </Button>
         <input
           ref={importRef}
           type="file"
@@ -200,10 +395,15 @@ export function ThemesPage() {
             event.currentTarget.value = "";
           }}
         />
-        <Button variant="primary" onClick={() => void createFrom(PREFERRED_BUILTIN_THEME_ID, "Theme created.")}>
-          <Plus aria-hidden />
-          New theme
-        </Button>
+        <Menu
+          trigger={
+            <Button variant="primary">
+              <Plus aria-hidden />
+              New theme
+            </Button>
+          }
+          items={newThemeItems}
+        />
       </Toolbar>
 
       <div className="ad-body">
@@ -211,101 +411,58 @@ export function ThemesPage() {
           <p className="ad-hint" style={{ padding: 20 }}>
             Loading themes…
           </p>
-        ) : visibleThemes.length === 0 ? (
+        ) : nothingMatches ? (
           <div className="ad-empty">
-            <b>{allThemes.length ? "No themes match" : "No themes yet"}</b>
-            <p className="ad-hint">{allThemes.length ? "Try another search or show all kinds." : "Start from the broadcast layout, then make it yours."}</p>
-            {allThemes.length ? (
-              <Button
-                onClick={() => {
-                  setSearch("");
-                  setKindFilter("all");
-                }}
-              >
-                Clear filters
-              </Button>
-            ) : null}
+            <b>No themes match</b>
+            <p className="ad-hint">Try another name, or clear the search.</p>
+            <Button onClick={() => setSearch("")}>Clear search</Button>
           </div>
         ) : (
-          <div className="ad-gallery">
-            {visibleThemes.map((theme) => {
-              const onAir = theme.id === onAirId;
-              return (
-                <article key={theme.id} className={onAir ? "ad-surface ad-theme is-air" : "ad-surface ad-theme"}>
-                  <Link to={`/admin/themes/${theme.id}`} className="ad-theme-link" aria-label={`Edit ${theme.name}`} tabIndex={-1}>
-                    <ThemeThumb theme={theme} live={snapshotRef.current} assets={assets.data ?? []} />
-                  </Link>
-                  <div className="ad-theme-body">
-                    <div className="ad-theme-title">
-                      <b title={theme.name}>{theme.name}</b>
-                      {onAir ? (
-                        <Chip tone="air">
-                          <Dot tone="tally" flat />
-                          On air
-                        </Chip>
-                      ) : theme.builtin ? (
-                        <Chip>Built-in</Chip>
-                      ) : (
-                        <Chip>Custom</Chip>
-                      )}
-                    </div>
-                    <p className="ad-theme-desc" title={theme.description}>
-                      {theme.description || "No description"}
-                      {theme.canvas.width !== 1920 || theme.canvas.height !== 1080 ? ` · ${theme.canvas.width}×${theme.canvas.height}` : ""}
-                    </p>
-                    <div className="ad-theme-actions">
-                      <Link className="ad-btn" to={`/admin/themes/${theme.id}`}>
-                        <PenLine aria-hidden />
-                        Edit
-                      </Link>
-                      {onAir ? (
-                        <a className="ad-btn ad-btn--ghost" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer">
-                          <Eye aria-hidden />
-                          Preview
-                        </a>
-                      ) : (
-                        <Button variant="ghost" onClick={() => void handlePublish(theme)} disabled={publishingId !== null}>
-                          <Radio aria-hidden />
-                          {publishingId === theme.id ? "Putting on air…" : "Put on air"}
-                        </Button>
-                      )}
-                      <Grow />
-                      <Menu
-                        trigger={
-                          <IconButton label={`More for ${theme.name}`}>
-                            <Ellipsis />
-                          </IconButton>
-                        }
-                        items={[
-                          ...(!onAir
-                            ? [{ label: "Preview", icon: <Eye />, onSelect: () => window.open(`/overlay/preview/${theme.id}`, "_blank", "noreferrer") }]
-                            : []),
-                          { label: "Duplicate", icon: <CopyPlus />, onSelect: () => void createFrom(theme.id, "Theme duplicated.") },
-                          { label: "Export", icon: <Download />, onSelect: () => void handleExport(theme) },
-                          ...(!theme.builtin
-                            ? [
-                                { kind: "separator" as const },
-                                {
-                                  label: "Delete…",
-                                  icon: <Trash2 />,
-                                  danger: true,
-                                  disabled: onAir,
-                                  onSelect: () => void handleDelete(theme)
-                                }
-                              ]
-                            : [])
-                        ]}
-                      />
-                    </div>
+          <>
+            {sections.onAir ? (
+              <section className="ad-theme-section" aria-labelledby="themes-on-air">
+                <h2 id="themes-on-air" className="ad-theme-section-title">
+                  On air
+                </h2>
+                {renderItems([sections.onAir])}
+              </section>
+            ) : null}
+
+            <section className="ad-theme-section" aria-labelledby="themes-yours">
+              <h2 id="themes-yours" className="ad-theme-section-title">
+                Your themes
+                {sections.active.length ? <span className="ad-theme-section-count">{sections.active.length}</span> : null}
+              </h2>
+              {sections.active.length ? (
+                renderItems(sections.active)
+              ) : searching ? (
+                <p className="ad-hint ad-theme-section-empty">No other themes match.</p>
+              ) : (
+                <div className="ad-empty ad-theme-section-empty">
+                  <b>No themes of your own yet</b>
+                  <p className="ad-hint">Start from a built-in layout, then make it yours.</p>
+                  <div className="ad-theme-starters">
+                    {sections.templates.map((template) => (
+                      <Button key={template.id} onClick={() => void createFrom(template, "Theme created.")}>
+                        <Plus aria-hidden />
+                        Start from {template.name}
+                      </Button>
+                    ))}
                   </div>
-                </article>
-              );
-            })}
-            <button type="button" className="ad-surface ad-theme ad-theme-new" onClick={() => void createFrom(PREFERRED_BUILTIN_THEME_ID, "Theme created.")}>
-              <Plus aria-hidden />
-              New theme
-            </button>
-          </div>
+                </div>
+              )}
+            </section>
+
+            {sections.archived.length ? (
+              <section className="ad-theme-section ad-theme-archive" aria-label="Archived themes">
+                <button type="button" className="ad-btn ad-btn--text" aria-expanded={archivedOpen} onClick={() => setShowArchived((open) => !open)}>
+                  <Archive aria-hidden />
+                  {archivedOpen ? "Hide archived" : `Show archived (${sections.archived.length})`}
+                </button>
+                {archivedOpen ? renderItems(sections.archived) : null}
+              </section>
+            ) : null}
+          </>
         )}
       </div>
     </div>
