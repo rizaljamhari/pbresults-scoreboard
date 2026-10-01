@@ -442,13 +442,27 @@ export function createDataSnapshot(ctx, transaction) {
   }
 }
 
+/**
+ * Recursive copy built from plain file operations. fs.cpSync is avoided on purpose: its native implementation in
+ * Node 22 can abort the whole process on Windows for some paths, which would kill the coordinator mid-rollback.
+ */
+export function copyDirectory(source, destination) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(destination, entry.name);
+    if (entry.isDirectory()) copyDirectory(from, to);
+    else if (entry.isFile()) retryFs(() => fs.copyFileSync(from, to));
+  }
+}
+
 export function restoreSnapshot(ctx, transaction) {
   const snapshotData = path.join(resolveRootChild(ctx, transaction.snapshotPath), "data");
   const data = path.join(ctx.root, "data");
   const quarantine = path.join(ctx.updates, "quarantine", `failed-data-${transaction.id}-${randomUUID().slice(0, 8)}`);
   fs.mkdirSync(path.dirname(quarantine), { recursive: true });
   if (fs.existsSync(data)) retryFs(() => fs.renameSync(data, quarantine));
-  fs.cpSync(snapshotData, data, { recursive: true });
+  copyDirectory(snapshotData, data);
   log(ctx, `Restored data from ${transaction.snapshotPath}.`);
 }
 
