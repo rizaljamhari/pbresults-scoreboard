@@ -2528,6 +2528,52 @@ tr[aria-selected="true"] .ad-row-open {
   font-size: 11.5px;
 }
 
+/* List view: the Teams table pattern, with a checkered preview so transparent images read. */
+.ad-asset-table td {
+  height: 48px;
+}
+
+.ad-asset-row-thumb {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 6px;
+  color: var(--ad-faint);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+
+.ad-asset-row-thumb img {
+  max-width: 30px;
+  max-height: 30px;
+  object-fit: contain;
+}
+
+.ad-asset-row-thumb svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ad-asset-row-name {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-asset-row-usage {
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--ad-muted);
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
 .ad-asset-preview {
   display: grid;
   height: 200px;

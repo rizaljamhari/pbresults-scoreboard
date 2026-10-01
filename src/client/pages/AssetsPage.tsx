@@ -8,6 +8,8 @@ import {
   ImageOff,
   ImageUp,
   Images,
+  LayoutGrid,
+  List,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -36,6 +38,22 @@ import {
 } from "./assetAdminUtils";
 
 const ACCEPTED_IMAGES = "image/png,image/jpeg,image/webp,image/gif";
+const VIEW_KEY = "pbresults.assets.view";
+
+type AssetView = "grid" | "list";
+
+function readView(): AssetView {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+}
+
+function formatAdded(createdAt: string): string {
+  const time = Date.parse(createdAt);
+  return Number.isNaN(time) ? "—" : new Date(time).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
 
 function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -61,6 +79,7 @@ export function AssetsPage() {
   const [uploading, setUploading] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [view, setView] = useState<AssetView>(readView);
   const searchRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
@@ -71,6 +90,14 @@ export function AssetsPage() {
   const processedCount = all.filter((asset) => asset.backgroundRemoved).length;
   const openAsset = openAssetId ? all.find((asset) => asset.id === openAssetId) ?? null : null;
   const panelOpen = cleanupOpen || Boolean(openAssetId);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // The choice still holds for this visit.
+    }
+  }, [view]);
 
   function openPanel(id: string | null) {
     setCleanupOpen(false);
@@ -174,6 +201,15 @@ export function AssetsPage() {
             { value: "size", label: "Size" }
           ]}
         />
+        <Segmented
+          label="Layout"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "grid", label: <LayoutGrid aria-label="Grid" />, title: "Grid" },
+            { value: "list", label: <List aria-label="List" />, title: "List" }
+          ]}
+        />
         <Grow />
         <Button variant="ghost" onClick={() => setCleanupOpen(true)}>
           <Brush aria-hidden />
@@ -227,6 +263,64 @@ export function AssetsPage() {
                 </Button>
               )}
             </div>
+          ) : view === "list" ? (
+            <table className="ad-table ad-asset-table" aria-label="Assets">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Used in</th>
+                  <th className="ad-col-2nd">Type</th>
+                  <th className="ad-col-2nd">Dimensions</th>
+                  <th className="ad-num">Size</th>
+                  <th className="ad-col-2nd">Added</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((asset) => {
+                  const open = asset.id === openAssetId;
+                  return (
+                    <tr key={asset.id} data-asset-id={asset.id} aria-selected={open} onClick={() => openPanel(asset.id)}>
+                      <td className="ad-cell-name">
+                        <button
+                          type="button"
+                          className="ad-row-open"
+                          aria-pressed={open}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openPanel(asset.id);
+                          }}
+                        >
+                          <span className="ad-asset-row-thumb ad-checker">
+                            {asset.fileMissing ? <ImageOff aria-label="File missing" /> : <img src={asset.url} alt="" loading="lazy" />}
+                          </span>
+                          <span className="ad-asset-row-name" title={assetName(asset)}>
+                            {assetName(asset)}
+                          </span>
+                        </button>
+                      </td>
+                      <td>
+                        {asset.fileMissing ? (
+                          <Chip tone="critical">File missing</Chip>
+                        ) : asset.usages.length ? (
+                          <span className="ad-asset-row-usage" title={groupUsages(asset.usages).map(({ usage }) => usageOwnerName(usage)).join(", ")}>
+                            {usageSummary(asset.usages).replace(/^Used in /, "")}
+                          </span>
+                        ) : (
+                          <Chip tone="quiet">Unused</Chip>
+                        )}
+                      </td>
+                      <td className="ad-col-2nd">
+                        {assetTypeLabel(asset.mimeType)}
+                        {asset.backgroundRemoved ? <span className="ad-faint"> · cut out</span> : null}
+                      </td>
+                      <td className="ad-col-2nd">{assetDimensions(asset) ?? <span className="ad-faint">—</span>}</td>
+                      <td className="ad-num">{formatBytes(asset.byteSize)}</td>
+                      <td className="ad-col-2nd">{formatAdded(asset.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           ) : (
             <ul className="ad-asset-grid" aria-label="Assets">
               {shown.map((asset) => (
