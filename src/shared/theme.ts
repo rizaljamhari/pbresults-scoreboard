@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { randomUuid } from "./randomId.js";
 
 export const componentIds = [
   "homeName",
@@ -941,5 +942,5 @@ export const defaultSettings: AppSettings = {
 };
 
 export function createThemeId(prefix = "theme"): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+  return `${prefix}-${randomUuid()}`;
 }

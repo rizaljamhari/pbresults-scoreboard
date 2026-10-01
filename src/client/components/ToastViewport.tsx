@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toastEventName, type ToastKind, type ToastPayload } from "../toast";
+import { randomUuid } from "../../shared/randomId";
 
 type ToastMessage = {
   id: string;
@@ -20,7 +21,7 @@ export function ToastViewport() {
       }
 
       const next: ToastMessage = {
-        id: detail.id ?? `toast-${crypto.randomUUID()}`,
+        id: detail.id ?? `toast-${randomUuid()}`,
         message: detail.message,
         kind: detail.kind ?? "info",
         durationMs: detail.durationMs ?? 2600

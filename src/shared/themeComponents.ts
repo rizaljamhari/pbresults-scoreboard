@@ -1,4 +1,5 @@
 import { componentIds, type ComponentId, type FreeComponent, type FreeTextComponent, type ThemeDefinition } from "./theme.js";
+import { randomUuid } from "./randomId.js";
 
 export type ThemeComponent = ThemeDefinition["components"][ComponentId] | FreeComponent;
 export type ThemeComponentEntry = {
@@ -77,5 +78,5 @@ export function getNextComponentZIndex(theme: ThemeDefinition): number {
 }
 
 export function createFreeComponentId(): string {
-  return `free-${crypto.randomUUID()}`;
+  return `free-${randomUuid()}`;
 }
