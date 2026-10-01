@@ -45,6 +45,22 @@ export function useAssets() {
   });
 }
 
+const assetLibraryExtraDomains: AppResourceDomain[] = ["themes", "teams", "settings"];
+
+export function useAssetLibrary() {
+  return useResource(api.getAssetLibrary, [], {
+    domain: "assets",
+    refreshOnEvents: true,
+    alsoRefreshOn: assetLibraryExtraDomains,
+    transform: (assets, token) =>
+      assets.map((asset) => ({
+        ...asset,
+        url: versionAssetUrl(asset.url, token),
+        original: asset.original ? { ...asset.original, url: versionAssetUrl(asset.original.url, token) } : null
+      }))
+  });
+}
+
 export function useRuntimeInfo() {
   return useResource<RuntimeInfo>(api.getRuntimeInfo, []);
 }
@@ -258,6 +274,8 @@ type ResourceOptions<T> = {
   domain?: AppResourceDomain;
   resourceId?: string;
   refreshOnEvents?: boolean;
+  /** Extra domains whose changes should also refresh this resource. */
+  alsoRefreshOn?: AppResourceDomain[];
   transform?: (value: T, refreshToken: string) => T;
 };
 
@@ -329,15 +347,24 @@ function useResource<T>(loader: () => Promise<T>, deps: unknown[], options: Reso
           coordinator.invalidate(invalidation.cacheToken);
         })
       : undefined;
+    const extraUnsubscribes = options.refreshOnEvents
+      ? (options.alsoRefreshOn ?? []).map((domain) =>
+          appEvents?.subscribe(domain, (invalidation) => {
+            setStale(true);
+            coordinator.invalidate(invalidation.cacheToken);
+          })
+        )
+      : [];
 
     return () => {
       active = false;
       unsubscribe?.();
+      extraUnsubscribes.forEach((unsubscribeExtra) => unsubscribeExtra?.());
       coordinator.dispose();
       if (retryTimer) window.clearTimeout(retryTimer);
       if (coordinatorRef.current === coordinator) coordinatorRef.current = null;
     };
-  }, [appEvents?.subscribe, options.domain, options.refreshOnEvents, options.resourceId, ...deps]);
+  }, [appEvents?.subscribe, options.domain, options.refreshOnEvents, options.resourceId, options.alsoRefreshOn?.join(","), ...deps]);
 
   return { data, loading, refreshing, stale, error, setData, refresh };
 }

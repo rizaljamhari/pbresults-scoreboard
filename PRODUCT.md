@@ -27,7 +27,7 @@ An independent, onsite-first control layer for PBResults feeds: it normalizes th
 - Onsite LAN; event internet is unreliable or absent. The local overlay and operator controls must keep working offline.
 - Operator on a single laptop or second monitor next to vMix, glancing between it and production.
 - Overlay runs at `/overlay/live` as a vMix browser source; operators land on `/admin/operations`.
-- Pre-event: theme building (`/admin/themes`), team registry and logos (`/admin/teams`), settings, backups, and software updates (`/admin/settings`).
+- Pre-event: theme building (`/admin/themes`), team registry and logos (`/admin/teams`), the asset library (`/admin/assets`), settings, backups, and software updates (`/admin/settings`).
 - Remote staff may configure the app from elsewhere; onsite controls stay authoritative.
 
 ## Capabilities and Constraints
@@ -36,6 +36,7 @@ An independent, onsite-first control layer for PBResults feeds: it normalizes th
 - Normalized live state, team matching, and operator overrides feed both overlay and Operations page.
 - Theme editor with free text and image layers; operator-controlled text with explicit Take and Reset.
 - Team registry, logos (with background removal), aliases, learned live match names.
+- Asset library (`/admin/assets`): see where each image is used, rename, replace in place, revert or redo background removal, guarded delete, and cleanup of unused files.
 - Full state, team, and theme export/import; local JSON data under `data/`.
 - Windows x64 portable build with verified, confirmed, rollback-capable updates; updates never install silently during an event.
 - Single multiplexed SSE stream (`/api/events`) keeps admin tabs and overlay in sync.

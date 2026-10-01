@@ -1705,6 +1705,48 @@ details[open]:not(.editor-section-card) > summary::after {
 }
 
 /* Images */
+.asset-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-picker-trigger-thumb {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line, rgb(0 0 0 / 0.12));
+  border-radius: 5px;
+  background: repeating-conic-gradient(rgb(0 0 0 / 0.06) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+}
+
+.asset-picker-trigger-thumb img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.asset-picker-trigger-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-picker-trigger-chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.6;
+}
+
 .te-asset-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

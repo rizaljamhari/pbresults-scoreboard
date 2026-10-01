@@ -10,7 +10,6 @@ import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { clientDistDir, uploadsDir } from "./runtimePaths.js";
 import {
-  attachTeamLogo,
   backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
   clearOperatorTextOverride,
@@ -28,7 +27,6 @@ import {
   importAppPackage,
   importTeamRegistryPackage,
   importThemePackage,
-  listAssets,
   listTeamRecords,
   listThemes,
   matchTeamInput,
@@ -38,7 +36,6 @@ import {
   saveOperatorTextOverride,
   saveTeamResolutionOverride,
   saveTheme,
-  storeAsset,
   updateSettings,
   createThemeFromClone,
   clearTeamResolutionOverride
@@ -56,6 +53,7 @@ import { isLoopbackRequest } from "./updateSecurity.js";
 import { UpdateFailure, updateService } from "./updateService.js";
 import { AppEventHub } from "./appEventHub.js";
 import { registerAppEventRoutes } from "./appEventRoutes.js";
+import { registerAssetRoutes } from "./assetRoutes.js";
 
 const app = Fastify({
   logger: true,
@@ -186,7 +184,7 @@ function findPreferredLanAddress() {
 }
 
 await app.register(cors, { origin: true });
-await app.register(multipart);
+await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 await app.register(fastifyStatic, {
   root: uploadsDir,
   prefix: "/uploads/"
@@ -466,23 +464,6 @@ app.delete("/api/teams/:id", async (request, reply) => {
   appEventHub.publish("teams.changed", [teamId]);
   return reply.code(204).send();
 });
-app.post("/api/teams/:id/logo", async (request, reply) => {
-  const file = await request.file();
-  if (!file) {
-    return reply.code(400).send({ message: "Missing file" });
-  }
-  const slot = ((request.query as { slot?: string } | undefined)?.slot ?? "primary") === "alternate" ? "alternate" : "primary";
-  try {
-    const result = await attachTeamLogo((request.params as { id: string }).id, await file.toBuffer(), file.filename, file.mimetype, slot);
-    livePoller.reconfigure();
-    appEventHub.publish("teams.changed", [result.team.id]);
-    appEventHub.publish("assets.changed", [result.asset.id]);
-    return reply.code(201).send(result);
-  } catch (error) {
-    return reply.code(404).send({ message: error instanceof Error ? error.message : "Team not found" });
-  }
-});
-
 app.get("/api/themes", async () => listThemes());
 app.post("/api/themes", async (request, reply) => {
   const body = (request.body as { cloneFromId?: string; name?: string } | undefined) ?? {};
@@ -553,16 +534,9 @@ app.post("/api/themes/import", async (request, reply) => {
   return reply.code(201).send(imported);
 });
 
-app.get("/api/assets", async () => listAssets());
-app.post("/api/assets", async (request, reply) => {
-  const file = await request.file();
-  if (!file) {
-    return reply.code(400).send({ message: "Missing file" });
-  }
-  const buffer = await file.toBuffer();
-  const result = await storeAsset(buffer, file.filename, file.mimetype);
-  appEventHub.publish("assets.changed", [result.asset.id]);
-  return reply.code(201).send(result);
+registerAssetRoutes(app, {
+  hub: appEventHub,
+  onTeamsChanged: () => livePoller.reconfigure()
 });
 
 const clientRoot = clientDistDir;

@@ -6,6 +6,7 @@ import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/teamMatching";
 import { Button, Field, IconButton, Menu, SAVE_SHORTCUT, Switch } from "../components/admin/kit";
+import { AssetLibraryPicker } from "../components/AssetLibraryPicker";
 import { formatUpdatedAtFull, hasTeamUnsavedChanges } from "./teamAdminUtils";
 
 export function splitNames(value: string) {
@@ -181,15 +182,7 @@ export function TeamPanel({
     }
     try {
       const result = await api.uploadTeamLogo(selectedTeam.id, file, slot);
-      teams.setData((teams.data ?? []).map((team) => (team.id === result.team.id ? result.team : team)));
-      setSavedTeam((current) =>
-        current ? { ...current, logoAssetId: result.team.logoAssetId, alternateLogoAssetId: result.team.alternateLogoAssetId, updatedAt: result.team.updatedAt } : current
-      );
-      setDraft((current) =>
-        current
-          ? { ...current, logoAssetId: result.team.logoAssetId, alternateLogoAssetId: result.team.alternateLogoAssetId, updatedAt: result.team.updatedAt }
-          : structuredClone(result.team)
-      );
+      applyLogoIds(result.team);
       assets.setData([result.asset, ...(assets.data ?? []).filter((asset) => asset.id !== result.asset.id)]);
       const note =
         result.processing.status === "processed"
@@ -198,6 +191,24 @@ export function TeamPanel({
       showToast({ kind: "success", message: `${slot === "primary" ? "Logo" : "Alternate logo"} updated.${note}` });
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to upload the logo." });
+    }
+  }
+
+  function applyLogoIds(saved: TeamRecord) {
+    teams.setData((teams.data ?? []).map((team) => (team.id === saved.id ? saved : team)));
+    const logoFields = { logoAssetId: saved.logoAssetId, alternateLogoAssetId: saved.alternateLogoAssetId, updatedAt: saved.updatedAt };
+    setSavedTeam((current) => (current ? { ...current, ...logoFields } : current));
+    setDraft((current) => (current ? { ...current, ...logoFields } : structuredClone(saved)));
+  }
+
+  async function handleLinkLogo(slot: "primary" | "alternate", assetId: string | null) {
+    if (!selectedTeam) return;
+    try {
+      applyLogoIds(await api.linkTeamLogo(selectedTeam.id, assetId, slot));
+      const label = slot === "primary" ? "Logo" : "Alternate logo";
+      showToast({ kind: "success", message: assetId ? `${label} updated.` : `${label} removed.` });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to change the logo." });
     }
   }
 
@@ -383,16 +394,26 @@ export function TeamPanel({
                     {asset ? <img src={asset.url} alt="" /> : `No ${label.toLowerCase()}`}
                   </button>
                   <div className="ad-logo-meta">
-                    <span title={asset?.originalName}>{asset ? `${label} · ${asset.originalName}` : "PNG, JPG or GIF"}</span>
+                    <span title={asset ? asset.displayName ?? asset.originalName : undefined}>
+                      {asset ? `${label} · ${asset.displayName ?? asset.originalName}` : "PNG, JPG, WebP or GIF"}
+                    </span>
                     <Button variant="text" onClick={() => uploadRefs[slot].current?.click()}>
                       {asset ? "Replace" : "Upload"}
                     </Button>
+                    <AssetLibraryPicker
+                      label={`${label} from library`}
+                      value={assetId}
+                      assets={assets.data ?? []}
+                      onChange={(next) => void handleLinkLogo(slot, next)}
+                      align="end"
+                      trigger={<Button variant="text">Library</Button>}
+                    />
                   </div>
                   <input
                     ref={uploadRefs[slot]}
                     hidden
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) {

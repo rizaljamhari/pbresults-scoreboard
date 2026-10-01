@@ -131,7 +131,39 @@ type StoredAsset = {
   sourceAssetId: string | null;
   hiddenFromPicker: boolean;
   contentHash: string | null;
+  visibleContent: VisibleContentAnalysis | null;
+  displayName: string | null; // set by rename; UI shows displayName ?? originalName
+  updatedAt: string | null;   // set by rename, replace, revert and reprocess
+  byteSize: number | null;
 }
+```
+
+### AssetLibraryEntry
+
+Returned by `GET /api/assets/library`.
+
+```ts
+type AssetLibraryEntry = StoredAsset & {
+  usages: AssetUsage[];
+  original: { id: string; url: string; byteSize: number | null } | null; // hidden source kept by background removal
+  backgroundRemoved: boolean;
+  fileMissing: boolean;
+}
+
+type AssetUsage =
+  | {
+      kind: "theme";
+      themeId: string;
+      themeName: string;
+      builtin: boolean;
+      published: boolean;
+      location:
+        | { type: "component"; key: ComponentId }
+        | { type: "free"; id: string; label: string }
+        | { type: "surface"; key: string; label: string } // a layer's background image
+        | { type: "eventOverlay"; which: "concede" | "base" | "winner" };
+    }
+  | { kind: "team"; teamId: string; teamName: string; slot: "primary" | "alternate" };
 ```
 
 ### NormalizedLiveState
@@ -715,7 +747,10 @@ Returns:
 ### `POST /api/teams/:id/logo?slot=primary|alternate`
 
 Multipart form-data:
-- `file`
+- `file` (PNG, JPG, WebP or GIF; anything else returns `415`)
+
+Errors:
+- `404` when the team does not exist
 
 Returns:
 
@@ -831,7 +866,7 @@ Important:
 ### `POST /api/assets`
 
 Multipart form-data:
-- `file`
+- `file` (PNG, JPG, WebP or GIF, up to 25 MB; anything else returns `415 unsupported_media_type`)
 
 Returns:
 
@@ -844,6 +879,92 @@ Returns:
   }
 }
 ```
+
+### `GET /api/assets/library`
+
+Returns:
+- `AssetLibraryEntry[]` (visible assets only, newest first)
+
+### `PATCH /api/assets/:id`
+
+Body:
+
+```json
+{ "displayName": "Main sponsor" }
+```
+
+`null` or an empty string clears the display name. Returns the updated `StoredAsset`.
+
+### `PUT /api/assets/:id/file?removeBackground=true|false`
+
+Multipart form-data:
+- `file`
+
+Replaces the file behind an asset and keeps its id, so every theme and team using it switches over. The url keeps the id; only the extension follows the new type. `removeBackground` defaults to the `autoRemoveBackgroundUploads` setting. Returns `{ asset, processing }`.
+
+### `POST /api/assets/:id/revert`
+
+Copies the hidden original (kept by background removal) back into the asset. `400` when there is no original. Returns the updated `StoredAsset`.
+
+### `POST /api/assets/:id/reprocess`
+
+Runs background removal again, from the original when one exists, otherwise from the current file (which then becomes the stored original). Returns `{ asset, processing }`; the asset is unchanged unless `processing.status` is `processed`.
+
+### `DELETE /api/assets/:id?force=true`
+
+Without `force`, an asset that is still used returns:
+
+```json
+{ "code": "asset_in_use", "message": "...", "usages": [ "...AssetUsage..." ] }
+```
+
+with status `409`. With `force=true`, every reference to it is cleared first. The hidden original goes too when nothing else derives from it.
+
+Returns:
+
+```json
+{ "deletedIds": ["..."], "clearedThemeIds": ["..."], "clearedTeamIds": ["..."], "freedBytes": 1234 }
+```
+
+### `GET /api/assets/cleanup`
+
+Returns a scan of what can be removed:
+
+```ts
+type AssetCleanupReport = {
+  unusedAssets: CleanupItem[];    // visible, not referenced; `recent` = added in the last 24 h
+  orphanOriginals: CleanupItem[]; // hidden originals nothing derives from any more
+  strayFiles: Array<{ fileName: string; byteSize: number }>; // files in uploads with no record
+  brokenRecords: CleanupItem[];   // unused records whose file is missing
+  reclaimableBytes: number;
+}
+```
+
+### `POST /api/assets/cleanup`
+
+Body (every list optional):
+
+```json
+{ "assetIds": [], "originalIds": [], "strayFiles": [], "brokenRecordIds": [] }
+```
+
+Deletes only what is listed, after checking each item again against a fresh scan; anything that changed is returned in `skipped`.
+
+Returns:
+
+```json
+{ "deleted": 3, "skipped": [{ "id": "...", "reason": "No longer unused" }], "freedBytes": 1234 }
+```
+
+### `PUT /api/teams/:id/logo/asset`
+
+Body:
+
+```json
+{ "assetId": "asset-..." | null, "slot": "primary" | "alternate" }
+```
+
+Points a team logo slot at an existing library asset (or clears it). Returns the saved `TeamRecord`.
 
 ## Non-API behavior
 

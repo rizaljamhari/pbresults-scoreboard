@@ -1509,14 +1509,15 @@ tr[aria-selected="true"] .ad-row-open {
 
 .ad-logo-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 10px;
   color: var(--ad-muted);
   font-size: 12px;
 }
 
 .ad-logo-meta span {
-  flex: 1;
+  flex: 1 0 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2321,4 +2322,341 @@ tr[aria-selected="true"] .ad-row-open {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- Assets ---------- */
+.ad-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 16px 20px 24px;
+  list-style: none;
+}
+
+.ad-asset-card {
+  display: grid;
+  width: 100%;
+  gap: 6px;
+  padding: 6px 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.ad-asset-card:hover {
+  background: var(--ad-hover);
+}
+
+.ad-asset-card[aria-pressed="true"] {
+  border-color: var(--ad-accent);
+  background: var(--ad-accent-soft);
+}
+
+.ad-asset-card:focus-visible {
+  outline: 2px solid var(--ad-accent);
+  outline-offset: 1px;
+}
+
+.ad-asset-thumb {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 8px;
+  color: var(--ad-faint);
+}
+
+.ad-asset-thumb img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+.ad-asset-name {
+  overflow: hidden;
+  padding: 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-asset-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 11.5px;
+}
+
+.ad-asset-preview {
+  display: grid;
+  height: 200px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 8px;
+}
+
+.ad-asset-preview img {
+  max-width: 88%;
+  max-height: 88%;
+  object-fit: contain;
+}
+
+.ad-asset-preview .ad-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  text-align: center;
+}
+
+.ad-asset-preview-toggle {
+  margin-top: 8px;
+}
+
+.ad-asset-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.ad-asset-facts dt {
+  color: var(--ad-faint);
+}
+
+.ad-asset-facts dd {
+  margin: 0;
+}
+
+.ad-asset-actions {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.ad-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ad-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ad-usage-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ad-usage-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12.5px;
+}
+
+.ad-usage-owner {
+  color: var(--ad-accent-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ad-usage-owner:hover {
+  text-decoration: underline;
+}
+
+.ad-usage-kind {
+  color: var(--ad-faint);
+  font-size: 11.5px;
+}
+
+.ad-usage-places {
+  flex-basis: 100%;
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.ad-callout--stack {
+  display: grid;
+  gap: 8px;
+}
+
+.ad-callout--stack p {
+  margin: 0;
+}
+
+.ad-callout-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-callout--stack .ad-usage-list {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ad-surface);
+  color: var(--ad-text);
+}
+
+.ad-callout-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ad-cleanup-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ad-cleanup-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ad-cleanup-list label:hover {
+  background: var(--ad-hover);
+}
+
+.ad-cleanup-thumb {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 6px;
+  color: var(--ad-faint);
+}
+
+.ad-cleanup-thumb img {
+  max-width: 28px;
+  max-height: 28px;
+  object-fit: contain;
+}
+
+.ad-cleanup-thumb svg.lucide {
+  width: 14px;
+  height: 14px;
+}
+
+.ad-cleanup-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-page.is-dropping .ad-table-wrap {
+  outline: 2px dashed var(--ad-accent);
+  outline-offset: -8px;
+}
+
+.ad-drop-hint {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ad-accent);
+  color: var(--ad-on-accent);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translateX(-50%);
+  box-shadow: var(--ad-shadow-pop);
+}
+
+/* ---------- Asset picker (portalled popover) ---------- */
+.ad-asset-picker {
+  display: grid;
+  width: 340px;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ad-asset-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.ad-asset-picker-item {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--ad-line);
+  border-radius: 7px;
+  color: var(--ad-faint);
+  font-size: 11px;
+}
+
+.ad-asset-picker-item:hover {
+  border-color: var(--ad-line-strong);
+}
+
+.ad-asset-picker-item[aria-selected="true"] {
+  border-color: var(--ad-accent);
+  box-shadow: 0 0 0 1px var(--ad-accent);
+}
+
+.ad-asset-picker-item img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.ad-asset-picker-item svg.lucide {
+  width: 16px;
+  height: 16px;
+}
+
+.ad-asset-picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ad-asset-picker-foot a {
+  margin-left: auto;
+  color: var(--ad-accent-ink);
+  text-decoration: none;
+}
+
+.ad-asset-picker-foot a:hover {
+  text-decoration: underline;
 }
