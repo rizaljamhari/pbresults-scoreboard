@@ -14,6 +14,7 @@ import {
   ImageOff,
   Info,
   Layers,
+  MonitorPlay,
   Pause,
   Play,
   Plus,
@@ -25,7 +26,8 @@ import { formatClock } from "../../shared/normalize";
 import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
 import type { AppSettings, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ApiError, api } from "../api";
-import { useAssets, useLiveState, useOperatorTextState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { formatAge as formatOverlayAge, summarizeOverlays, type OverlayClient, type OverlayState } from "../../shared/overlayHealth";
 import { showToast } from "../toast";
 import { Button, Chip, Dot, Grow, Toolbar, type Tone } from "../components/admin/kit";
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
@@ -112,6 +114,8 @@ type GoLiveIssue = {
   detail: string;
   cause: string;
   fix: string;
+  /** One button that does the fix, e.g. copy the live URL. */
+  action?: { label: string; onClick: () => void };
 };
 
 const ISSUE_SEVERITY_RANK: Record<GoLiveIssue["severity"], number> = {
@@ -544,9 +548,21 @@ function FactList({ items }: { items: Array<[string, React.ReactNode]> }) {
   );
 }
 
-function Disclosure({ icon, title, summary, children }: { icon: React.ReactNode; title: string; summary: string; children: React.ReactNode }) {
+function Disclosure({
+  icon,
+  title,
+  summary,
+  children,
+  id
+}: {
+  icon: React.ReactNode;
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+  id?: string;
+}) {
   return (
-    <details className="ad-disclose">
+    <details className="ad-disclose" id={id}>
       <summary>
         {icon}
         <b>{title}</b>
@@ -555,6 +571,89 @@ function Disclosure({ icon, title, summary, children }: { icon: React.ReactNode;
       </summary>
       <div className="ad-disclose-body">{children}</div>
     </details>
+  );
+}
+
+function ago(value: string, now: number) {
+  return formatOverlayAge(now - Date.parse(value));
+}
+
+const CONNECTION_COPY: Record<OverlayClient["connection"], string> = {
+  connected: "connected",
+  stale: "not responding",
+  lost: "lost",
+  closed: "closed"
+};
+
+/** Every page showing the overlay: what it renders and when it last reported. */
+function OverlayPages({ state, now }: { state: OverlayState | null; now: number }) {
+  if (!state) {
+    return <p className="ad-hint">Checking…</p>;
+  }
+  if (!state.clients.length) {
+    return <p className="ad-hint">No page has loaded the overlay since the server started.</p>;
+  }
+  return (
+    <>
+      <ul className="ad-overlay-pages">
+        {state.clients.map((client) => {
+          const tone =
+            client.connection === "lost" || client.connection === "stale"
+              ? "critical"
+              : client.connection === "closed"
+                ? undefined
+                : client.issues.length
+                  ? "warning"
+                  : client.page === "live"
+                    ? "live"
+                    : undefined;
+          const issues = new Set(client.issues.map((issue) => issue.code));
+          const report = client.report;
+          const status =
+            client.connection === "connected"
+              ? report?.visibility === "hidden"
+                ? "in background"
+                : `connected ${ago(client.firstSeenAt, now)}`
+              : `${CONNECTION_COPY[client.connection]} ${ago(client.lastSeenAt, now)} ago`;
+          return (
+            <li key={client.clientId} className={`ad-overlay-page is-${client.connection}`}>
+              <Dot tone={tone} flat />
+              <div>
+                <div className="ad-overlay-page-head">
+                  <b>
+                    {client.page === "live" ? "Live" : "Preview"} · {client.local ? "This computer" : client.remoteAddress}
+                  </b>
+                  <span className="ad-hint">{status}</span>
+                </div>
+                <dl className="ad-overlay-page-facts">
+                  <dt>Browser</dt>
+                  <dd>{client.browser}</dd>
+                  <dt>Theme</dt>
+                  <dd className={issues.has("wrong-theme") || issues.has("outdated-theme") ? "is-warn" : undefined}>
+                    {client.themeName ?? report?.themeId ?? "—"}
+                    {issues.has("outdated-theme") ? " · older save" : ""}
+                  </dd>
+                  <dt>Live data</dt>
+                  <dd className={issues.has("behind") ? "is-warn" : undefined}>
+                    {client.lagMs === null ? (report?.liveSourceStatus === "ok" ? "—" : "feed not live") : `${Math.round(client.lagMs / 1000)} s behind the server`}
+                    {report?.transport === "fallback" ? " · polling" : ""}
+                  </dd>
+                  <dt>Size</dt>
+                  <dd>{report ? `${report.viewport.width} × ${report.viewport.height}` : "—"}</dd>
+                  {issues.has("old-version") ? (
+                    <>
+                      <dt>Version</dt>
+                      <dd className="is-warn">{report?.appVersion} (older)</dd>
+                    </>
+                  ) : null}
+                </dl>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="ad-hint">Shows what each page renders and when it last reported. Whether vMix has the input on Program is not visible from here.</p>
+    </>
   );
 }
 
@@ -933,6 +1032,12 @@ export function OperationsPage() {
     ];
   }, [leftLogo, live.data, publishedTheme, rightLogo, settings.data]);
 
+  const overlayState = useOverlayState();
+  const now = useNow();
+  const overlaySummary = summarizeOverlays(overlayState, now, publishedTheme?.name ?? null);
+  const overlayCheck = overlaySummary.check;
+  const overlayLevel = overlaySummary.level;
+
   const goLiveIssues = useMemo<GoLiveIssue[]>(() => {
     const issuesFromWarnings: GoLiveIssue[] = warnings.map((warning) => ({
       severity: warning.severity,
@@ -951,8 +1056,22 @@ export function OperationsPage() {
         };
       });
 
+    const issuesFromOverlay: GoLiveIssue[] =
+      overlayCheck && (overlayLevel === "critical" || overlayLevel === "warning")
+        ? [
+            {
+              severity: overlayLevel,
+              title: overlayCheck.title,
+              detail: overlayCheck.detail,
+              cause: overlayCheck.detail,
+              fix: overlayCheck.fix,
+              action: overlayCheck.showUrl ? { label: "Copy live URL", onClick: () => void handleCopyOverlayUrl(vmixLiveUrl) } : undefined
+            }
+          ]
+        : [];
+
     const deduped = new Map<string, GoLiveIssue>();
-    [...issuesFromWarnings, ...issuesFromReadiness].forEach((issue) => {
+    [...issuesFromOverlay, ...issuesFromWarnings, ...issuesFromReadiness].forEach((issue) => {
       const current = deduped.get(issue.title);
       if (!current) {
         deduped.set(issue.title, issue);
@@ -964,7 +1083,7 @@ export function OperationsPage() {
     });
 
     return groupIssuesByCause(Array.from(deduped.values()));
-  }, [readinessChecks, warnings]);
+  }, [readinessChecks, warnings, overlayCheck?.title, overlayCheck?.detail, overlayLevel, vmixLiveUrl]);
 
   const goLiveStatus = useMemo(() => {
     if (goLiveIssues.some((issue) => issue.severity === "critical")) {
@@ -1221,8 +1340,16 @@ export function OperationsPage() {
     { label: "Polling on", detail: `every ${settings.data.pollIntervalMs} ms` },
     { label: "Theme on air", detail: publishedTheme?.name ?? "—" },
     { label: "Both teams matched", detail: live.data?.displayLeftTeamMatch.inputName ? "left and right" : "waiting for names" },
-    { label: "Team logos", detail: leftLogo.key === "registry" && rightLogo.key === "registry" ? "from Teams" : "fallback in use" }
+    { label: "Team logos", detail: leftLogo.key === "registry" && rightLogo.key === "registry" ? "from Teams" : "fallback in use" },
+    { label: "Live overlay connected", detail: overlaySummary.code === "connected" ? overlaySummary.label.toLowerCase() : overlaySummary.label }
   ];
+
+  const openOverlayPages = () => {
+    const details = document.getElementById("overlay-pages") as HTMLDetailsElement | null;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
 
   return (
     <div className="ad-page ad-scope">
@@ -1281,6 +1408,7 @@ export function OperationsPage() {
             }
             overlayUrl={vmixLiveUrl}
             onCopyUrl={() => void handleCopyOverlayUrl(vmixLiveUrl)}
+            overlayStatus={overlayState ? { level: overlaySummary.level, label: overlaySummary.chip, onOpen: openOverlayPages } : null}
           />
           <div className="ad-ops2-grid">
             <div className="ad-ops-col">
@@ -1439,6 +1567,14 @@ export function OperationsPage() {
                           <p>
                             <b>Fix:</b> {issue.fix}
                           </p>
+                          {issue.action ? (
+                            <div className="ad-actions">
+                              <Button size="sm" onClick={issue.action.onClick}>
+                                <Copy aria-hidden />
+                                {issue.action.label}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       </li>
                     ))}
@@ -1502,6 +1638,14 @@ export function OperationsPage() {
                   ) : (
                     <p className="ad-hint">{live.error ?? "Waiting for live data…"}</p>
                   )}
+                </Disclosure>
+                <Disclosure
+                  id="overlay-pages"
+                  icon={<MonitorPlay aria-hidden />}
+                  title="Overlay pages"
+                  summary={overlayState ? overlaySummary.chip : "Checking…"}
+                >
+                  <OverlayPages state={overlayState} now={now} />
                 </Disclosure>
                 <Disclosure icon={<Layers aria-hidden />} title="Overlay details" summary="Logo sources, modes">
                   <FactList

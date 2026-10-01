@@ -53,6 +53,8 @@ import { isLoopbackRequest } from "./updateSecurity.js";
 import { UpdateFailure, updateService } from "./updateService.js";
 import { AppEventHub } from "./appEventHub.js";
 import { registerAppEventRoutes } from "./appEventRoutes.js";
+import { OverlayRegistry } from "./overlayRegistry.js";
+import { behindThreshold, overlayReportSchema } from "../shared/overlayHealth.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
 
@@ -77,6 +79,22 @@ const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state)
   appEventHub.publishOperatorTextState(state);
 });
 backupService.onChange(() => appEventHub.publish("backups.changed"));
+const overlayRegistry = new OverlayRegistry({
+  getServerView: () => {
+    const settings = getSettings();
+    const published = settings.publishedThemeId ? getTheme(settings.publishedThemeId) : null;
+    return {
+      publishedThemeId: settings.publishedThemeId,
+      publishedThemeUpdatedAt: published?.updatedAt ?? null,
+      appVersion: runtimeBuild.info.appVersion,
+      behindThresholdMs: behindThreshold(settings.pollIntervalMs)
+    };
+  },
+  getServerLiveFetchedAt: () => livePoller.getState().normalized.fetchedAt,
+  getThemeName: (themeId) => getTheme(themeId)?.name ?? null,
+  onChange: (state) => appEventHub.publishOverlayState(state)
+});
+overlayRegistry.startTicking();
 let shuttingDown = false;
 let visibleContentBackfillRunning = false;
 let visibleContentBackfillRequested = false;
@@ -129,6 +147,7 @@ async function gracefulShutdown() {
   unsubscribeOperatorTextEventBridge();
   livePoller.stop();
   await runShutdownBackup();
+  overlayRegistry.stop();
   appEventHub.close();
   for (const stream of openStreams) {
     if (!stream.destroyed) {
@@ -253,8 +272,33 @@ registerAppEventRoutes(app, {
     releaseTag: runtimeBuild.info.releaseTag
   }),
   getLiveState: () => livePoller.getState().normalized,
-  getOperatorTextState: () => operatorTextRuntime.getState()
+  getOperatorTextState: () => operatorTextRuntime.getState(),
+  overlays: overlayRegistry,
+  getOverlayState: () => overlayRegistry.getState()
 });
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// Overlay pages report what they render; a bad or oversized report is dropped, never an error on air.
+app.post("/api/overlay/report", { bodyLimit: 4 * 1024 }, async (request, reply) => {
+  const body = typeof request.body === "string" ? safeJson(request.body) : request.body;
+  const parsed = overlayReportSchema.safeParse(body);
+  if (!parsed.success) {
+    return reply.code(400).send({ message: "Invalid overlay report" });
+  }
+  overlayRegistry.report(parsed.data, {
+    remoteAddress: request.ip,
+    userAgent: String(request.headers["user-agent"] ?? "").slice(0, 300)
+  });
+  return reply.code(204).send();
+});
+app.get("/api/overlay/clients", async () => overlayRegistry.getState());
 
 app.get("/api/update/status", async () => updateService.getStatus());
 app.post("/api/update/check", async (request, reply) => {

@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en" data-admin-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overlay Health</title>
+<style>
+  :root {
+    --ad-ground: #f5f5f2; --ad-surface: #ffffff; --ad-side: #fbfbf9; --ad-line: #e4e4de; --ad-line-strong: #d6d6cf;
+    --ad-field: #f7f7f4; --ad-hover: #efefea; --ad-text: #1d1d1b; --ad-muted: #5f5f59; --ad-faint: #66665f;
+    --ad-accent: #2f66d6; --ad-accent-soft: #e7eefc; --ad-accent-ink: #1d4fb3; --ad-on-accent: #ffffff;
+    --ad-tally: #c0281e; --ad-tally-soft: #fde9e7; --ad-draft: #7a4b00; --ad-draft-soft: #fff3cf;
+    --ad-ok: #1f7a45; --ad-ok-soft: #e3f4ea; --ad-live: #1f9d55; --ad-crit: #b3261e; --ad-crit-soft: #fdecea;
+    --ad-checker-a: #ffffff; --ad-checker-b: #ecece6; --new: #2f66d6;
+  }
+  :root[data-admin-theme="dark"] {
+    --ad-ground: #131315; --ad-surface: #1e1e22; --ad-side: #19191c; --ad-line: #2f2f35; --ad-line-strong: #3a3a41;
+    --ad-field: #17171a; --ad-hover: #2a2a30; --ad-text: #ececea; --ad-muted: #a8a8a2; --ad-faint: #8e8e88;
+    --ad-accent: #6f9bff; --ad-accent-soft: #1d2945; --ad-accent-ink: #a9c3ff; --ad-on-accent: #0b1d36;
+    --ad-tally: #ff5c50; --ad-tally-soft: #3a1c1a; --ad-draft: #f0cf7a; --ad-draft-soft: #3d3216;
+    --ad-ok: #7fd6a2; --ad-ok-soft: #173325; --ad-live: #3ccf7f; --ad-crit: #ff8a80; --ad-crit-soft: #3a1a18;
+    --ad-checker-a: #222226; --ad-checker-b: #2b2b30; --new: #6f9bff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--ad-ground); color: var(--ad-text); font: 400 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-feature-settings: "tnum"; }
+  button { font: inherit; color: inherit; }
+  svg { flex: none; }
+
+  /* Mockup controls (outside the product) */
+  .mk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border-bottom: 1px solid var(--ad-line); background: var(--ad-side); }
+  .mk b { font-weight: 650; }
+  .mk .grp { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--ad-line); border-radius: 9px; background: var(--ad-surface); }
+  .mk .grp button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; color: var(--ad-muted); font-weight: 600; }
+  .mk .grp button[aria-pressed="true"] { background: var(--ad-accent-soft); color: var(--ad-accent-ink); }
+  .mk p { flex-basis: 100%; margin: 0; color: var(--ad-faint); }
+  .legend { display: inline-flex; align-items: center; gap: 6px; color: var(--ad-faint); font-size: 12px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; outline: 2px dashed var(--new); outline-offset: 1px; }
+
+  /* App frame */
+  .app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 860px; }
+  .side { display: flex; flex-direction: column; border-right: 1px solid var(--ad-line); background: var(--ad-side); padding: 10px 8px; }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 6px 8px 14px; font-weight: 650; }
+  .brand span { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: var(--ad-text); color: var(--ad-ground); font-size: 11px; font-weight: 800; }
+  .nav a { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 7px; color: var(--ad-text); text-decoration: none; }
+  .nav a.on { background: var(--ad-accent-soft); color: var(--ad-accent-ink); font-weight: 600; }
+  .nav a small { color: var(--ad-faint); }
+  .grow { flex: 1; }
+
+  .livebox { margin: 8px 2px 4px; padding: 10px 12px; border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-surface); display: grid; gap: 5px; }
+  .row { display: grid; grid-template-columns: 52px 12px 1fr; align-items: center; gap: 4px; font-size: 12.5px; }
+  .row .k { color: var(--ad-faint); }
+  .row .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score { padding-top: 6px; border-top: 1px solid var(--ad-line); font-size: 12.5px; }
+  .score b { font-weight: 650; }
+  .headline { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+  .headline.ok { color: var(--ad-ok); } .headline.warning { color: var(--ad-draft); } .headline.critical { color: var(--ad-crit); }
+
+  .dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ad-switch-off, #888); }
+  .dot.live { background: var(--ad-live); } .dot.tally { background: var(--ad-tally); }
+  .dot.warning { background: #d99a17; } .dot.critical { background: var(--ad-crit); } .dot.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ad-faint); }
+  .dot.pulse { box-shadow: 0 0 0 0 currentColor; animation: pulse 1.6s ease-out infinite; color: var(--ad-crit); }
+  @keyframes pulse { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ad-crit) 60%, transparent); } to { box-shadow: 0 0 0 7px transparent; } }
+
+  .is-new { outline: 2px dashed var(--new); outline-offset: 3px; border-radius: 6px; }
+
+  /* Main */
+  main { min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 10px; min-height: 52px; white-space: nowrap; padding: 0 18px; border-bottom: 1px solid var(--ad-line); }
+  .toolbar h1 { margin: 0; font-size: 14px; font-weight: 650; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--ad-hover); color: var(--ad-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .chip.air { background: var(--ad-tally-soft); color: var(--ad-tally); }
+  .chip.ok { background: var(--ad-ok-soft); color: var(--ad-ok); }
+  .chip.warning { background: var(--ad-draft-soft); color: var(--ad-draft); }
+  .chip.critical { background: var(--ad-crit-soft); color: var(--ad-crit); }
+  button.chip { border: 0; cursor: pointer; }
+  button.chip:hover { filter: brightness(1.08); }
+  .tb-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-surface); font-weight: 600; cursor: default; }
+  .meta { color: var(--ad-muted); }
+
+  .body { padding: 16px 18px 24px; display: grid; gap: 14px; }
+  .surface { border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-surface); }
+
+  .strip-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--ad-line); }
+  .strip-head h2 { margin: 0; font-size: 13px; font-weight: 650; }
+  .stage { position: relative; display: grid; place-items: center; height: 214px; background-color: var(--ad-checker-a);
+    background-image: linear-gradient(45deg, var(--ad-checker-b) 25%, transparent 25%, transparent 75%, var(--ad-checker-b) 75%), linear-gradient(45deg, var(--ad-checker-b) 25%, transparent 25%, transparent 75%, var(--ad-checker-b) 75%);
+    background-position: 0 0, 8px 8px; background-size: 16px 16px; border-radius: 0 0 10px 10px; }
+  .board { display: grid; grid-template-columns: 300px 40px 92px 40px 300px; align-items: center; gap: 4px; transform: scale(0.82); }
+  .team { height: 62px; display: grid; grid-template-rows: 18px 1fr; background: #2a2a2a; color: #fff; text-transform: uppercase; }
+  .team small { display: grid; place-items: center; font: 700 10px/1 "Arial Narrow", sans-serif; letter-spacing: .06em; }
+  .team b { display: grid; place-items: center; font: 800 28px/1 "Arial Narrow", sans-serif; }
+  .team.l b { background: #2f4fb3; } .team.r b { background: #e0422c; }
+  .num { display: grid; place-items: center; height: 62px; background: #f6f1e8; color: #111; font: 800 34px/1 "Arial Narrow", sans-serif; }
+  .crest { display: grid; place-items: center; }
+  .clock { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); padding: 3px 8px; background: #000; color: #fff; font: 700 14px/1 "Arial Narrow", sans-serif; }
+  .live-pill { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; background: var(--ad-surface); border: 1px solid var(--ad-line); font-size: 11.5px; font-weight: 600; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--ad-line); }
+  .card-h b { font-weight: 650; }
+  .placeholder { padding: 14px; color: var(--ad-faint); }
+  .ph-line { height: 10px; border-radius: 4px; background: var(--ad-hover); margin: 10px 0; }
+
+  .check { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--ad-line); }
+  .check:last-child { border-bottom: 0; }
+  .check b { font-weight: 650; }
+  .check p { margin: 3px 0 0; color: var(--ad-muted); font-size: 12.5px; }
+  .check .fix { color: var(--ad-text); }
+  .check .fix strong { font-weight: 650; }
+  .check .acts { display: flex; gap: 6px; margin-top: 8px; }
+  .ic-warning { color: var(--ad-draft); } .ic-critical { color: var(--ad-crit); } .ic-ok { color: var(--ad-ok); }
+  .mini { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 1px solid var(--ad-line); border-radius: 7px; background: var(--ad-surface); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .mini.primary { background: var(--ad-accent); border-color: var(--ad-accent); color: var(--ad-on-accent); }
+  .allclear { display: flex; align-items: center; gap: 8px; padding: 12px 14px; color: var(--ad-ok); font-weight: 600; }
+
+  details { border-top: 1px solid var(--ad-line); }
+  details:first-of-type { border-top: 0; }
+  summary { display: flex; align-items: center; gap: 8px; padding: 11px 14px; cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary b { font-weight: 650; }
+  summary span { color: var(--ad-faint); }
+  summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--ad-faint); border-bottom: 1.5px solid var(--ad-faint); transform: rotate(45deg); }
+  details[open] summary::after { transform: rotate(225deg); }
+
+  .od { padding: 0 14px 14px; display: grid; gap: 8px; }
+  .od h4 { margin: 4px 0 0; color: var(--ad-faint); font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
+  .client { display: grid; grid-template-columns: 10px 1fr; gap: 8px; padding: 9px 10px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-field); }
+  .client .dot { margin-top: 4px; }
+  .client .t { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .client .t b { font-weight: 650; }
+  .client .t span { color: var(--ad-faint); font-size: 12px; white-space: nowrap; }
+  .client dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; font-size: 12px; }
+  .client dt { color: var(--ad-faint); }
+  .client dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .client dd.bad { color: var(--ad-crit); font-weight: 600; }
+  .client dd.warn { color: var(--ad-draft); font-weight: 600; }
+  .od .note { color: var(--ad-faint); font-size: 12px; margin: 0; }
+
+  .callout { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--ad-draft-soft); color: var(--ad-draft); font-size: 12.5px; }
+
+  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } .board { transform: scale(0.6); } }
+</style>
+</head>
+<body>
+
+<div class="mk" role="group" aria-label="Mockup controls">
+  <b>Overlay health · mockup</b>
+  <div class="grp" id="scenarios"></div>
+  <div class="grp" id="themes">
+    <button data-theme="dark" aria-pressed="true">Dark</button>
+    <button data-theme="light" aria-pressed="false">Light</button>
+  </div>
+  <span class="legend"><i></i>new on this page</span>
+  <p id="story"></p>
+</div>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span>PB</span>PBResults Scoreboard</div>
+    <nav class="nav">
+      <a class="on" href="#">Operations</a>
+      <a href="#">Themes <small>13</small></a>
+      <a href="#">Teams <small>27</small></a>
+      <a href="#">Assets <small>36</small></a>
+      <a href="#">Settings</a>
+    </nav>
+    <div class="grow"></div>
+    <div class="livebox">
+      <div class="row"><span class="k">Feed</span><i class="dot live"></i><span class="v">Live · just now</span></div>
+      <div class="row"><span class="k">On air</span><i class="dot tally"></i><span class="v">MBPJ Impact v3</span></div>
+      <div class="row is-new" id="side-overlay"><span class="k">Overlay</span><i class="dot"></i><span class="v"></span></div>
+      <div class="score"><b>KUDA 4–2 AWAY</b> · 05:40</div>
+      <div class="headline" id="side-headline"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <h1>Operations</h1>
+      <span class="chip ok"><i class="dot live"></i>Feed live</span>
+      <span class="meta">Updated just now · checking every 500 ms</span>
+      <span class="grow"></span>
+      <span class="chip" id="tb-issues"></span>
+      <span class="tb-btn">Refresh now</span>
+      <span class="tb-btn">Stop polling</span>
+    </div>
+
+    <div class="body">
+      <section class="surface">
+        <div class="strip-head">
+          <h2>On air</h2>
+          <span class="chip air"><i class="dot tally"></i>MBPJ Impact v3</span>
+          <button class="chip is-new" id="strip-chip" title="Show overlay details"></button>
+          <span class="meta">Kuda 4–2 Away · 05:40 · RUNNING / GAME</span>
+          <span class="grow"></span>
+          <span class="tb-btn">Scoreboard</span>
+          <span class="tb-btn">Full frame</span>
+        </div>
+        <div class="stage">
+          <div class="board">
+            <div class="team l"><small>MBPJ Impact 2026 | 9–11 October</small><b>Kuda</b></div>
+            <div class="num">4</div>
+            <div class="crest"><svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true"><path d="M40 4 L70 14 L66 50 L40 76 L14 50 L10 14 Z" fill="#c0281e" stroke="#fff" stroke-width="3"/><text x="40" y="44" text-anchor="middle" font-family="Arial Narrow, sans-serif" font-weight="800" font-size="13" fill="#fff">IMPACT</text></svg></div>
+            <div class="num">2</div>
+            <div class="team r"><small>Day 1 | Rookie | Prelims</small><b>Away</b></div>
+          </div>
+          <span class="clock">05:40</span>
+          <span class="live-pill"><i class="dot live"></i>Live</span>
+        </div>
+      </section>
+
+      <div class="cols">
+        <div style="display:grid;gap:14px">
+          <section class="surface">
+            <div class="card-h"><b>Team names on air</b><span class="meta">unchanged</span></div>
+            <div class="placeholder"><div class="ph-line" style="width:70%"></div><div class="ph-line" style="width:45%"></div></div>
+          </section>
+          <section class="surface">
+            <div class="card-h"><b>Operator text</b><span class="meta">unchanged</span></div>
+            <div class="placeholder"><div class="ph-line" style="width:80%"></div></div>
+          </section>
+        </div>
+
+        <div style="display:grid;gap:14px">
+          <section class="surface">
+            <div class="card-h"><b>Checks</b><span class="chip" id="checks-chip"></span></div>
+            <div id="checks"></div>
+          </section>
+
+          <section class="surface">
+            <details><summary><b>vMix setup</b><span>URL, host, shortcuts</span></summary></details>
+            <details><summary><b>Feed data</b><span>What the feed sends</span></summary></details>
+            <details open id="od-wrap"><summary><b>Overlay details</b><span id="od-sum"></span></summary>
+              <div class="od is-new" id="od"></div>
+            </details>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const icon = {
+    ok: '<svg class="ic-ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+    warning: '<svg class="ic-warning" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+    critical: '<svg class="ic-critical" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
+    copy: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
+  };
+
+  const vmix = (o) => ({ kind: "Live", addr: "192.168.1.20", ua: "vMix · Chromium 120", theme: "MBPJ Impact v3", live: "1 s", size: "1920 × 1080", since: "connected 2 h", tone: "live", ...o });
+  const testTab = { kind: "Preview", addr: "This computer", ua: "Chrome 141", theme: "APM Invitational", live: "2 s", size: "1280 × 720", since: "in background", tone: "off", preview: true };
+
+  const scenarios = {
+    connected: {
+      label: "Connected",
+      story: "Healthy show. The sidebar adds an Overlay line on every page; the strip and Overlay details confirm what vMix renders. No new check appears because nothing needs action.",
+      side: ["live", "Connected"], headline: ["ok", "All checks clear"], chip: ["ok", "live", "vMix overlay connected"],
+      check: null, clients: [vmix({}), testTab]
+    },
+    behind: {
+      label: "Behind",
+      story: "The overlay is connected but its live data lags the server — a slow link or a struggling vMix machine. Viewers see an old score.",
+      side: ["warning", "Behind · 9 s"], headline: ["warning", "Overlay is behind the feed"], chip: ["warning", "warning", "vMix overlay 9 s behind"],
+      check: { tone: "warning", title: "Overlay is behind the feed", text: "The live overlay is showing data 9 s older than the server has.", fix: "Check the network between this laptop and the vMix machine. If it stays behind, refresh the Browser input in vMix (right-click → Refresh)." },
+      clients: [vmix({ live: "9 s", liveBad: "warn" })]
+    },
+    outdated: {
+      label: "Out of date",
+      story: "The theme was saved or switched but the vMix page has not picked it up yet. Usually clears within seconds; if it sticks, the operator knows to refresh the input.",
+      side: ["warning", "Out of date"], headline: ["warning", "Overlay shows an older theme"], chip: ["warning", "warning", "vMix overlay out of date"],
+      check: { tone: "warning", title: "Overlay shows an older theme", text: "It is still showing MBPJ Impact v2. On air is MBPJ Impact v3.", fix: "Wait a few seconds. If it does not update, refresh the Browser input in vMix." },
+      clients: [vmix({ theme: "MBPJ Impact v2", themeBad: "warn" })]
+    },
+    lost: {
+      label: "Lost",
+      story: "The vMix page stopped reporting — network down between machines, or vMix closed the input. The server and feed are fine, so today Operations would stay green.",
+      side: ["critical", "Lost · 12 s ago"], headline: ["critical", "vMix overlay lost"], chip: ["critical", "critical pulse", "vMix overlay lost 12 s ago"],
+      check: { tone: "critical", title: "vMix overlay lost", text: "The live overlay at 192.168.1.20 stopped responding 12 s ago. Viewers may see a frozen scoreboard.", fix: "Check the network cable or Wi-Fi between this laptop and the vMix machine, then refresh the Browser input in vMix." },
+      clients: [vmix({ tone: "critical", since: "lost 12 s ago", live: "—", lost: true })]
+    },
+    none: {
+      label: "Not connected",
+      story: "No /overlay/live page is open anywhere — the input was never added, or it points at the wrong address or port. A warning, not critical: the show may not have started.",
+      side: ["off", "Not connected"], headline: ["warning", "No live overlay connected"], chip: ["warning", "off", "No live overlay"],
+      check: { tone: "warning", title: "No live overlay connected", text: "Nothing has loaded /overlay/live, so vMix is not showing the scoreboard.", fix: "In vMix add a Browser input with the address below at 1920 × 1080.", url: true },
+      clients: []
+    },
+    preview: {
+      label: "Preview URL",
+      story: "vMix was given a preview address by mistake. Preview pages are listed but never count as the live overlay.",
+      side: ["warning", "Preview only"], headline: ["warning", "vMix is showing a preview page"], chip: ["warning", "warning", "Only a preview is connected"],
+      check: { tone: "warning", title: "Only a preview page is connected", text: "192.168.1.20 loaded /overlay/preview/…, which shows a chosen theme, not what is on air.", fix: "Change the vMix Browser input to the live address below.", url: true },
+      clients: [{ ...testTab, addr: "192.168.1.20", ua: "vMix · Chromium 120", theme: "MBPJ Impact v3 (preview)", since: "connected 4 min", tone: "warning", size: "1920 × 1080" }]
+    }
+  };
+
+  const $ = (s) => document.querySelector(s);
+  let current = "connected";
+
+  function render() {
+    const s = scenarios[current];
+    document.querySelectorAll("#scenarios button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === current)));
+    $("#story").textContent = s.story;
+
+    const side = $("#side-overlay");
+    side.querySelector(".dot").className = `dot ${s.side[0]}${current === "lost" ? " pulse" : ""}`;
+    side.querySelector(".v").textContent = s.side[1];
+    const hl = $("#side-headline");
+    hl.className = `headline ${s.headline[0]}`;
+    hl.innerHTML = icon[s.headline[0]] + s.headline[1];
+
+    const chip = $("#strip-chip");
+    chip.className = `chip is-new ${s.chip[0]}`;
+    chip.innerHTML = `<i class="dot ${s.chip[1]}"></i>${s.chip[2]}`;
+
+    const issues = s.check ? 1 : 0;
+    const tb = $("#tb-issues");
+    tb.className = `chip ${issues ? s.check.tone : "ok"}`;
+    tb.textContent = issues ? "1 issue" : "No issues";
+    const cc = $("#checks-chip");
+    cc.className = `chip ${issues ? s.check.tone : "ok"}`;
+    cc.textContent = issues ? (s.check.tone === "critical" ? "Action needed" : "Check") : "All clear";
+
+    $("#checks").innerHTML = s.check
+      ? `<div class="check is-new">${icon[s.check.tone]}<div><b>${s.check.title}</b><p>${s.check.text}</p><p class="fix"><strong>Fix:</strong> ${s.check.fix}</p>${
+          s.check.url ? `<div class="acts"><span class="mini">http://192.168.1.10:3000/overlay/live</span><button class="mini primary">${icon.copy}Copy vMix URL</button></div>` : ""
+        }</div></div>`
+      : `<div class="allclear">${icon.ok}Feed, theme, teams and the vMix overlay all look right.</div>`;
+
+    const live = s.clients.filter((c) => !c.preview && !c.lost);
+    const lost = s.clients.some((c) => c.lost);
+    $("#od-sum").textContent = live.length ? `${live.length} live overlay${live.length > 1 ? "s" : ""}` : lost ? "Live overlay lost" : "No live overlay";
+    $("#od").innerHTML =
+      (s.clients.length
+        ? `<h4>Pages showing the overlay</h4>` +
+          s.clients
+            .map(
+              (c) => `<div class="client"><i class="dot ${c.tone}"></i><div>
+                <div class="t"><b>${c.kind} · ${c.addr}</b><span>${c.since}</span></div>
+                <dl>
+                  <dt>Browser</dt><dd>${c.ua}</dd>
+                  <dt>Theme</dt><dd class="${c.themeBad === "warn" ? "warn" : ""}">${c.theme}</dd>
+                  <dt>Live data</dt><dd class="${c.lost ? "bad" : c.liveBad === "warn" ? "warn" : ""}">${c.lost ? "no reports for 12 s" : c.live + " old"}</dd>
+                  <dt>Size</dt><dd>${c.size}</dd>
+                </dl></div></div>`
+            )
+            .join("")
+        : `<p class="callout">No page has loaded the overlay since the server started.</p>`) +
+      `<p class="note">Shows what each page renders and when it last reported. Whether vMix has the input on Program is not visible from here.</p>`;
+  }
+
+  const wrap = $("#scenarios");
+  Object.entries(scenarios).forEach(([key, s]) => {
+    const b = document.createElement("button");
+    b.dataset.s = key;
+    b.textContent = s.label;
+    b.addEventListener("click", () => { current = key; render(); });
+    wrap.appendChild(b);
+  });
+  document.querySelectorAll("#themes button").forEach((b) =>
+    b.addEventListener("click", () => {
+      document.documentElement.dataset.adminTheme = b.dataset.theme;
+      document.querySelectorAll("#themes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    })
+  );
+  $("#strip-chip").addEventListener("click", () => { $("#od-wrap").open = true; $("#od-wrap").scrollIntoView({ block: "nearest", behavior: "smooth" }); });
+  render();
+})();
+</script>
+</body>
+</html>

@@ -24,6 +24,8 @@ import {
   type RuntimeIdentity
 } from "../shared/appEvents";
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme";
+import type { OverlayState } from "../shared/overlayHealth";
+import { eventStreamUrl } from "./overlayClient";
 
 export type AppEventConnectionState = "connecting" | "open" | "disconnected";
 
@@ -46,6 +48,9 @@ type AppEventsContextValue = {
   subscribeOperatorText(listener: StoreListener): () => void;
   getOperatorTextState(): OperatorTextState | null;
   updateOperatorTextState(state: OperatorTextState): void;
+  subscribeOverlay(listener: StoreListener): () => void;
+  getOverlayState(): OverlayState | null;
+  updateOverlayState(state: OverlayState): void;
 };
 
 const AppEventsContext = createContext<AppEventsContextValue | null>(null);
@@ -70,6 +75,10 @@ function getNullOperatorTextState() {
   return null;
 }
 
+function getNullOverlayState() {
+  return null;
+}
+
 export function AppEventProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<AppEventConnectionState>("connecting");
   const listenersRef = useRef(new Map<AppResourceDomain, Set<ResourceInvalidationListener>>());
@@ -77,6 +86,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const operatorTextListenersRef = useRef(new Set<StoreListener>());
   const liveStateRef = useRef<NormalizedLiveState | null>(null);
   const operatorTextStateRef = useRef<OperatorTextState | null>(null);
+  const overlayListenersRef = useRef(new Set<StoreListener>());
+  const overlayStateRef = useRef<OverlayState | null>(null);
   const instanceIdRef = useRef<string | null>(null);
   const revisionsRef = useRef<AppResourceRevisions | null>(null);
   const runtimeRef = useRef<RuntimeIdentity | null>(null);
@@ -111,6 +122,16 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const updateOperatorTextState = useCallback((state: OperatorTextState) => {
     operatorTextStateRef.current = state;
     for (const listener of [...operatorTextListenersRef.current]) listener();
+  }, []);
+
+  const subscribeOverlay = useCallback((listener: StoreListener) => {
+    overlayListenersRef.current.add(listener);
+    return () => overlayListenersRef.current.delete(listener);
+  }, []);
+  const getOverlayState = useCallback(() => overlayStateRef.current, []);
+  const updateOverlayState = useCallback((state: OverlayState) => {
+    overlayStateRef.current = state;
+    for (const listener of [...overlayListenersRef.current]) listener();
   }, []);
 
   const notify = useCallback((invalidation: ResourceInvalidation) => {
@@ -198,6 +219,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       revisionsRef.current = { ...snapshot.revisions };
       if (snapshot.liveState) updateLiveState(snapshot.liveState);
       if (snapshot.operatorTextState) updateOperatorTextState(snapshot.operatorTextState);
+      if (snapshot.overlayState) updateOverlayState(snapshot.overlayState);
 
       for (const domain of appResourceDomains) {
         notify({
@@ -223,6 +245,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       if (event.type === "system.snapshot") handleSnapshot(event);
       else if (event.type === "live.state") updateLiveState(event.state);
       else if (event.type === "operator-text.state") updateOperatorTextState(event.state);
+      else if (event.type === "overlay.state") updateOverlayState(event.state);
       else handleChanged(event);
 
       if (forward && window.parent === window) {
@@ -237,7 +260,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
     const openEventSource = () => {
       if (source) return;
       setTransportState("connecting");
-      source = new EventSource("/api/events");
+      source = new EventSource(eventStreamUrl(window.location.pathname));
       for (const type of ["system.snapshot", ...appChangedEventTypes, ...appRealtimeEventTypes]) {
         source.addEventListener(type, onEvent);
       }
@@ -309,7 +332,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
             revisions: revisionsRef.current,
             runtime: runtimeRef.current,
             ...(liveStateRef.current ? { liveState: liveStateRef.current } : {}),
-            ...(operatorTextStateRef.current ? { operatorTextState: operatorTextStateRef.current } : {})
+            ...(operatorTextStateRef.current ? { operatorTextState: operatorTextStateRef.current } : {}),
+            ...(overlayStateRef.current ? { overlayState: overlayStateRef.current } : {})
           }
         });
       }
@@ -344,7 +368,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       for (const port of childPorts) port.close();
       childPorts.clear();
     };
-  }, [notify, notifyAll, updateLiveState, updateOperatorTextState]);
+  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState]);
 
   const value = useMemo(
     () => ({
@@ -355,7 +379,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       updateLiveState,
       subscribeOperatorText,
       getOperatorTextState,
-      updateOperatorTextState
+      updateOperatorTextState,
+      subscribeOverlay,
+      getOverlayState,
+      updateOverlayState
     }),
     [
       connectionState,
@@ -365,7 +392,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       subscribeLive,
       subscribeOperatorText,
       updateLiveState,
-      updateOperatorTextState
+      updateOperatorTextState,
+      subscribeOverlay,
+      getOverlayState,
+      updateOverlayState
     ]
   );
   return <AppEventsContext.Provider value={value}>{children}</AppEventsContext.Provider>;
@@ -387,4 +417,9 @@ export function useAppEventOperatorTextState() {
     events?.getOperatorTextState ?? getNullOperatorTextState,
     getNullOperatorTextState
   );
+}
+
+export function useAppEventOverlayState() {
+  const events = useAppEvents();
+  return useSyncExternalStore(events?.subscribeOverlay ?? emptySubscribe, events?.getOverlayState ?? getNullOverlayState, getNullOverlayState);
 }

@@ -5,7 +5,7 @@ import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, 
 import type { RuntimeInfo } from "./api";
 import type { UpdateStatus } from "../shared/update";
 import type { AppResourceDomain } from "../shared/appEvents";
-import { useAppEventLiveState, useAppEventOperatorTextState, useAppEvents } from "./appEvents";
+import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEvents } from "./appEvents";
 import { ResourceRefreshCoordinator } from "./resourceRefresh";
 
 let resourceRefreshToken = 0;
@@ -378,3 +378,49 @@ export type SettingsResource = { data: AppSettings | null; loading: boolean; err
 export type ThemeResource = { data: ThemeDefinition | null; loading: boolean; error: string | null };
 export type AssetsResource = { data: StoredAsset[] | null; loading: boolean; error: string | null };
 export type TeamsResource = { data: TeamRecord[] | null; loading: boolean; error: string | null };
+
+/** Who is showing the overlay, pushed by the server; read over REST only while the event stream is down. */
+export function useOverlayState() {
+  const data = useAppEventOverlayState();
+  const appEvents = useAppEvents();
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+    const repeat = appEvents?.connectionState === "disconnected";
+
+    const load = async () => {
+      controller = new AbortController();
+      try {
+        const next = await api.getOverlayClients(controller.signal);
+        if (active) appEvents?.updateOverlayState(next);
+      } catch {
+        // Overlay status is advisory; the next push or poll fills it in.
+      } finally {
+        controller = null;
+        if (active && repeat) timer = window.setTimeout(() => void load(), 5000);
+      }
+    };
+
+    if (!data || repeat) void load();
+
+    return () => {
+      active = false;
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [appEvents?.connectionState, appEvents?.updateOverlayState, Boolean(data)]);
+
+  return data;
+}
+
+/** Re-renders every second so ages like "12 s ago" keep counting between pushes. */
+export function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}

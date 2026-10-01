@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings, useTheme } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
+import { useOverlayReporter } from "../overlayReporter";
 
 export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   useRuntimeVersionWatcher();
@@ -13,6 +14,8 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const operatorText = useOperatorTextState();
   const assets = useAssets();
+  // Reports what this page shows so Operations can tell whether vMix's overlay is alive and current.
+  useOverlayReporter(mode, themeResource.data ?? null, live.data);
 
   if (mode === "live" && settings.data && !settings.data.publishedThemeId) {
     return <div className="overlay-page loading">No published theme.</div>;

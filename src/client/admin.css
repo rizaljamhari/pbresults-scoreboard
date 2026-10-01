@@ -1883,7 +1883,92 @@ tr[aria-selected="true"] .ad-row-open {
   rotate: 90deg;
 }
 
-.ad-why .ad-facts {
+.ad-why /* Overlay health: the strip chip opens the list of pages showing the overlay. */
+.ad-strip-overlay {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+}
+
+.ad-strip-overlay:hover .ad-chip {
+  filter: brightness(0.97);
+}
+
+.ad-strip-overlay:focus-visible {
+  outline: 2px solid var(--ad-accent);
+  outline-offset: 2px;
+}
+
+.ad-overlay-pages {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ad-overlay-page {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--ad-line);
+  border-radius: 8px;
+  background: var(--ad-field);
+}
+
+.ad-overlay-page > .ad-dot {
+  margin-top: 5px;
+}
+
+.ad-overlay-page.is-closed {
+  opacity: 0.65;
+}
+
+.ad-overlay-page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ad-overlay-page-head b {
+  font-weight: 650;
+}
+
+.ad-overlay-page-head .ad-hint {
+  white-space: nowrap;
+}
+
+.ad-overlay-page-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.ad-overlay-page-facts dt {
+  color: var(--ad-faint);
+}
+
+.ad-overlay-page-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-overlay-page-facts dd.is-warn {
+  color: var(--ad-draft);
+  font-weight: 600;
+}
+
+.ad-facts {
   margin-top: 8px;
 }
 
@@ -2286,7 +2371,16 @@ tr[aria-selected="true"] .ad-row-open {
   border-bottom: 1px solid var(--ad-line);
 }
 
+/* Title and status chips keep their size; the score summary gives way first. */
+.ad-strip-head > h2,
+.ad-strip-head > .ad-chip,
+.ad-strip-overlay {
+  flex: none;
+  white-space: nowrap;
+}
+
 .ad-strip-meta {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--ad-muted);

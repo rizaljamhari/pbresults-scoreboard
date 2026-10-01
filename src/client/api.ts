@@ -20,6 +20,7 @@ import type {
 } from "../shared/theme";
 import type { UpdateStatus } from "../shared/update";
 import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/backup";
+import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -200,6 +201,16 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ inputName })
     }).then(handle<TeamMatchResult>),
+  getOverlayClients: (signal?: AbortSignal) => fetch("/api/overlay/clients", { signal }).then(handle<OverlayState>),
+  /** Fire and forget: an overlay's report must never affect what it renders. */
+  reportOverlay: (report: OverlayReport) => {
+    const body = JSON.stringify(report);
+    if (report.leaving && typeof navigator.sendBeacon === "function") {
+      navigator.sendBeacon("/api/overlay/report", new Blob([body], { type: "application/json" }));
+      return;
+    }
+    void fetch("/api/overlay/report", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => undefined);
+  },
   getThemes: () => fetch("/api/themes").then(handle<ThemeDefinition[]>),
   createTheme: (cloneFromId?: string, name?: string) =>
     fetch("/api/themes", {

@@ -1,4 +1,5 @@
 import type { AppSettings, NormalizedLiveState, ThemeDefinition } from "../../shared/theme";
+import type { OverlaySummary } from "../../shared/overlayHealth";
 
 export type LiveSummary = {
   tone: "ok" | "warning" | "critical";
@@ -6,6 +7,15 @@ export type LiveSummary = {
   feedLabel: string;
   stateLabel: string;
 };
+
+export type DotTone = "live" | "warning" | "critical" | undefined;
+
+/** The sidebar's Overlay line: dot and value. */
+export function overlayDot(overlay: OverlaySummary | null): { tone: DotTone; label: string } {
+  if (!overlay) return { tone: undefined, label: "Checking…" };
+  const tone: DotTone = overlay.level === "ok" ? "live" : overlay.level === "warning" ? "warning" : overlay.level === "critical" ? "critical" : undefined;
+  return { tone, label: overlay.label };
+}
 
 function secondsAgo(fetchedAt: string | null, now: number) {
   if (!fetchedAt) return null;
@@ -21,7 +31,8 @@ export function liveSummary(
   live: NormalizedLiveState | null,
   settings: AppSettings | null,
   onAirTheme: Pick<ThemeDefinition, "id" | "name"> | null,
-  now = Date.now()
+  now = Date.now(),
+  overlay: OverlaySummary | null = null
 ): LiveSummary {
   if (!live || live.sourceStatus === "idle") {
     return { tone: "warning", feedTone: undefined, feedLabel: "Waiting", stateLabel: "Waiting for the feed" };
@@ -37,6 +48,10 @@ export function liveSummary(
   const feedLabel = paused ? "Paused" : age === null ? "Live" : age <= 1 ? "Live · just now" : `Live · ${age}s ago`;
   const feedTone = paused || stale ? "warning" : "live";
 
+  // A lost overlay means viewers may see a frozen scoreboard: second only to the feed being unreachable.
+  if (overlay?.level === "critical" && overlay.check) {
+    return { tone: "critical", feedTone, feedLabel, stateLabel: overlay.check.title };
+  }
   if (!onAirTheme) {
     return { tone: "critical", feedTone, feedLabel, stateLabel: "No theme on air" };
   }
@@ -45,6 +60,9 @@ export function liveSummary(
   }
   if (stale) {
     return { tone: "warning", feedTone, feedLabel, stateLabel: "Feed data is out of date" };
+  }
+  if (overlay?.level === "warning" && overlay.check) {
+    return { tone: "warning", feedTone, feedLabel, stateLabel: overlay.check.title };
   }
   const unresolved = live.unresolvedTeamNames.length;
   if (unresolved > 0) {

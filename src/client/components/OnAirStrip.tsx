@@ -46,7 +46,8 @@ export function OnAirStrip({
   markers,
   summary,
   overlayUrl,
-  onCopyUrl
+  onCopyUrl,
+  overlayStatus = null
 }: {
   theme: ThemeDefinition | null;
   live: NormalizedLiveState | null;
@@ -56,6 +57,8 @@ export function OnAirStrip({
   summary: ReactNode;
   overlayUrl: string;
   onCopyUrl: () => void;
+  /** Whether the page vMix loads is connected and current; opens the overlay pages list. */
+  overlayStatus?: { level: "ok" | "info" | "warning" | "critical"; label: string; onOpen: () => void } | null;
 }) {
   const [view, setView] = useState<View>(readView);
   const [backdrop, setBackdrop] = useState<Backdrop>(readBackdrop);
@@ -105,6 +108,14 @@ export function OnAirStrip({
         ) : (
           <Chip tone="critical">No theme on air</Chip>
         )}
+        {overlayStatus ? (
+          <button type="button" className="ad-strip-overlay" onClick={overlayStatus.onOpen} title="Show the pages showing the overlay">
+            <Chip tone={overlayStatus.level === "ok" ? "ok" : overlayStatus.level === "info" ? "quiet" : overlayStatus.level}>
+              <Dot tone={overlayStatus.level === "ok" ? "live" : overlayStatus.level === "info" ? undefined : overlayStatus.level} flat />
+              {overlayStatus.label}
+            </Chip>
+          </button>
+        ) : null}
         <span className="ad-strip-meta">{summary}</span>
         <Grow />
         <Segmented

@@ -20,11 +20,12 @@ import {
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
-import { useAssets, useLiveState, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOverlayState, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { summarizeOverlays } from "../../shared/overlayHealth";
 import type { AppSettings } from "../../shared/theme";
 import { AppearanceContext, useAdminAppearance, type AppearancePreference } from "../appearance";
 import { formatClock } from "../../shared/normalize";
-import { liveSummary } from "./liveSummary";
+import { liveSummary, overlayDot } from "./liveSummary";
 import { Dot, IconButton } from "./admin/kit";
 
 function outletKey(pathname: string) {
@@ -168,12 +169,16 @@ function SidebarLiveStatus({
   onAirTheme: { id: string; name: string } | null;
 }) {
   const live = useLiveState(true, settings?.pollIntervalMs);
-  const summary = liveSummary(live.data, settings, onAirTheme);
+  const overlayState = useOverlayState();
+  const now = useNow();
+  const overlay = summarizeOverlays(overlayState, now, onAirTheme?.name ?? null);
+  const overlayLine = overlayDot(overlayState ? overlay : null);
+  const summary = liveSummary(live.data, settings, onAirTheme, now, overlayState ? overlay : null);
   const state = live.data;
   const StateIcon = summary.tone === "ok" ? CircleCheck : summary.tone === "critical" ? CircleAlert : TriangleAlert;
 
   return (
-    <Link className="ad-live" to="/admin/operations" title={`${summary.feedLabel} · ${summary.stateLabel}. Opens Operations.`}>
+    <Link className="ad-live" to="/admin/operations" title={`${summary.feedLabel} · Overlay ${overlayLine.label} · ${summary.stateLabel}. Opens Operations.`}>
       <div className="ad-live-body">
         <div className="ad-live-row">
           <span className="ad-k">Feed</span>
@@ -184,6 +189,11 @@ function SidebarLiveStatus({
           <span className="ad-k">On air</span>
           <Dot tone={onAirTheme ? "tally" : undefined} />
           <span className="ad-v">{onAirTheme?.name ?? "No theme"}</span>
+        </div>
+        <div className="ad-live-row" title="Whether the page vMix loads (/overlay/live) is connected and current">
+          <span className="ad-k">Overlay</span>
+          <Dot tone={overlayLine.tone} />
+          <span className="ad-v">{overlayLine.label}</span>
         </div>
         {state && state.sourceStatus !== "idle" ? (
           <div className="ad-live-score">
@@ -202,6 +212,7 @@ function SidebarLiveStatus({
       <div className="ad-live-mini" aria-hidden>
         <Dot tone={summary.feedTone} />
         <Dot tone={onAirTheme ? "tally" : undefined} />
+        <Dot tone={overlayLine.tone} />
       </div>
     </Link>
   );

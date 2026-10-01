@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultSettings, type NormalizedLiveState } from "../../shared/theme";
-import { liveSummary } from "./liveSummary";
+import type { OverlaySummary } from "../../shared/overlayHealth";
+import { liveSummary, overlayDot } from "./liveSummary";
 
 const now = Date.parse("2026-09-30T10:00:10.000Z");
 const theme = { id: "theme-a", name: "APM Invitational" };
@@ -53,6 +54,38 @@ describe("liveSummary", () => {
       feedTone: "live",
       feedLabel: "Live · just now",
       stateLabel: "All checks clear"
+    });
+  });
+
+  describe("with the overlay", () => {
+    const lost: OverlaySummary = {
+      level: "critical",
+      code: "lost",
+      label: "Lost · 12 s ago",
+      chip: "Live overlay lost 12 s ago",
+      check: { title: "Live overlay lost", detail: "", fix: "", showUrl: false },
+      liveCount: 0
+    };
+    const behind: OverlaySummary = { ...lost, level: "warning", code: "behind", label: "Behind · 9 s", check: { ...lost.check!, title: "Overlay is behind the feed" } };
+
+    it("still leads with an unreachable feed", () => {
+      expect(liveSummary(live({ sourceStatus: "error" }), defaultSettings, theme, now, lost).stateLabel).toBe("Live feed unreachable");
+    });
+
+    it("puts a lost overlay ahead of everything else", () => {
+      expect(liveSummary(live({ unresolvedTeamNames: ["SGS"] }), defaultSettings, null, now, lost)).toMatchObject({
+        tone: "critical",
+        stateLabel: "Live overlay lost"
+      });
+    });
+
+    it("ranks an overlay warning above team names", () => {
+      expect(liveSummary(live({ unresolvedTeamNames: ["SGS"] }), defaultSettings, theme, now, behind).stateLabel).toBe("Overlay is behind the feed");
+    });
+
+    it("gives the sidebar line a dot and label", () => {
+      expect(overlayDot(lost)).toEqual({ tone: "critical", label: "Lost · 12 s ago" });
+      expect(overlayDot(null)).toEqual({ tone: undefined, label: "Checking…" });
     });
   });
 });
