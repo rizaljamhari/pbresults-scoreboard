@@ -107,6 +107,26 @@ describe("game finished card", () => {
   });
 });
 
+describe("hidden centre line", () => {
+  function renderDuringPlay(editable: boolean) {
+    const theme = structuredClone(builtinThemes[0]);
+    theme.centerSecondary.gameMode = "hidden";
+    const live = normalizeLiveState(
+      { state: "RUNNING", period: "GAME", round: 2, mainGame: [{ name: "Left Team", score: 1 }, { name: "Right Team", score: 0 }] },
+      { sourceStatus: "ok", fetchedAt: "2026-08-19T05:00:00.000Z", errorMessage: null }
+    );
+    return renderToStaticMarkup(<OverlayRenderer theme={theme} live={live} editable={editable} />);
+  }
+
+  it("stays findable as an outline in the editor", () => {
+    expect(renderDuringPlay(true)).toContain("component-slot--ghost");
+  });
+
+  it("never draws the outline on air", () => {
+    expect(renderDuringPlay(false)).not.toContain("component-slot--ghost");
+  });
+});
+
 describe("moment card frame", () => {
   it("follows the centre line only while it is shown", () => {
     const theme = structuredClone(builtinThemes[0]);

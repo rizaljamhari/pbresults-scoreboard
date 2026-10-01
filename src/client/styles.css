@@ -266,6 +266,26 @@ details[open]:not(.editor-section-card) > summary::after {
   justify-content: center;
 }
 
+/* Editor only: a centre line hidden in the previewed state stays findable as an outline. */
+.overlay-canvas.editable .component-slot--ghost {
+  border: 3px dashed rgb(128 128 128 / 0.7) !important;
+  background: rgb(128 128 128 / 0.08);
+  box-shadow: none !important;
+  opacity: 1 !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.component-ghost-label {
+  color: rgb(150 150 150);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+}
+
 .moment-card {
   position: absolute;
   overflow: hidden;
@@ -2166,6 +2186,17 @@ details[open]:not(.editor-section-card) > summary::after {
   color: #7a4b00;
   font-size: 12.5px;
   line-height: 1.4;
+}
+
+.te-callout--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.te-callout--action .te-mini-btn {
+  flex: none;
 }
 
 .te-follow-link {

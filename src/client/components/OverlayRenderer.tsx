@@ -170,7 +170,7 @@ function resolveTextContent(theme: ThemeDefinition, componentId: ComponentId, li
   }
 }
 
-function resolveCenterSecondaryPresentation(theme: ThemeDefinition, live: NormalizedLiveState | null) {
+export function resolveCenterSecondaryPresentation(theme: ThemeDefinition, live: NormalizedLiveState | null) {
   if (!live) {
     return {
       content: theme.centerSecondary.gameText || "Center Secondary",
@@ -596,6 +596,18 @@ export function OverlayRenderer({
 
   const centerSecondaryPresentation = useMemo(() => resolveCenterSecondaryPresentation(theme, live), [theme, live]);
 
+  // The exit timer lives in a ref: live data re-renders far more often than the exit lasts, and an effect
+  // cleanup would cancel it and leave the old content stuck on screen.
+  const centerSecondaryExitTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (centerSecondaryExitTimerRef.current !== null) {
+        clearTimeout(centerSecondaryExitTimerRef.current);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const previousVariant = previousCenterSecondaryVariantRef.current;
     const nextVariant = centerSecondaryPresentation.variant;
@@ -608,12 +620,16 @@ export function OverlayRenderer({
       return;
     }
 
+    if (centerSecondaryExitTimerRef.current !== null) {
+      clearTimeout(centerSecondaryExitTimerRef.current);
+      centerSecondaryExitTimerRef.current = null;
+    }
     if (nextVariant === "hidden") {
       setCenterSecondaryExitActive(true);
-      const timerId = setTimeout(() => {
+      centerSecondaryExitTimerRef.current = window.setTimeout(() => {
+        centerSecondaryExitTimerRef.current = null;
         setCenterSecondaryExitActive(false);
       }, theme.centerSecondary.transition.durationMs);
-      return () => clearTimeout(timerId);
     } else {
       setCenterSecondaryAnimationTick((current) => current + 1);
       setCenterSecondaryExitActive(false);
@@ -890,6 +906,8 @@ export function OverlayRenderer({
         if (componentId === "breakTime" && momentHoldsCentreLine) {
           visible = component.visible;
         }
+        // In the editor a centre line with nothing to show stays as an outline, so it can still be found and moved.
+        const ghost = editable && componentId === "breakTime" && component.visible && !visible;
         const showContent = !(componentId === "breakTime" && hideCentreLineContent);
         const previousSwitchContent =
           teamSwitchActive && teamSwitchPayload ? resolveTextContent(theme, componentId, teamSwitchPayload.from) : null;
@@ -937,11 +955,16 @@ export function OverlayRenderer({
           <Fragment key={componentId}>
           <button
             type="button"
-            className={commonClass}
-            style={{ ...frameStyles(component), display: visible ? "flex" : "none" }}
+            className={ghost ? `${commonClass} component-slot--ghost` : commonClass}
+            style={{ ...frameStyles(component), display: visible || ghost ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(componentId)}
           >
-            <span className="component-body">
+            {ghost ? (
+              <span className="component-ghost-label" style={{ fontSize: Math.max(12, Math.min(28, Math.round(component.height * 0.42))) }}>
+                Centre line · nothing to show now
+              </span>
+            ) : null}
+            <span className="component-body" hidden={ghost}>
               <span className="component-surface" style={surface.background} />
               {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
               {!showContent ? null : teamSwitchActive && teamSwitchPayload ? (

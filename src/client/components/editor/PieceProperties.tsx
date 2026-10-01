@@ -66,7 +66,7 @@ const FIXED_BINDINGS: Record<string, string> = {
   awayTeamLogo: "Live: right team logo",
   awayScore: "Live: right score",
   gameTime: "Live: game clock",
-  breakTime: "Live: centre line (clock or text)",
+  breakTime: "Live: break clock, or text during play",
   eventLogo: "Theme image"
 };
 
@@ -265,7 +265,8 @@ export function PieceProperties({
         </Group>
       ) : null}
 
-      {isText ? (
+      {/* The centre line's type comes from its break clock and play text styles, set in its own section. */}
+      {isText && entry.id !== "breakTime" ? (
         <>
           <Group title="Text">
             <div className="te-row te-row--font">

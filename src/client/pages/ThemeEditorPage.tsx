@@ -56,7 +56,7 @@ import { ThemeProperties } from "../components/editor/ThemeProperties";
 import { EventOverlayProperties, type EventKind } from "../components/editor/EventOverlayProperties";
 import { EVENT_CARD_ID, momentCardId, type OverlayTarget } from "../components/editor/MoveableLayer";
 import { MomentCardProperties, MOMENT_NAMES, type MomentKind } from "../components/editor/MomentCardProperties";
-import { resolveEventLabelRect, resolveMomentFrame } from "../components/OverlayRenderer";
+import { resolveCenterSecondaryPresentation, resolveEventLabelRect, resolveMomentFrame } from "../components/OverlayRenderer";
 import { PanelSection } from "../components/editor/fields";
 import {
   alignPieces,
@@ -1824,6 +1824,7 @@ export function ThemeEditorPage() {
   };
 
   const overlayTarget = eventCard ?? momentTarget;
+  const centreLineEmpty = !resolveCenterSecondaryPresentation(theme, previewLive).content;
   const arrangeIds = overlaySelected ? [] : activePieceIds();
   const singleSelectedId = arrangeIds.length === 1 ? arrangeIds[0] : null;
   const mirrorPair = singleSelectedId && isFixedComponentId(singleSelectedId) ? mirroredPairForComponent(singleSelectedId) : null;
@@ -2278,16 +2279,18 @@ export function ThemeEditorPage() {
                 onResetToSaved={resetSelectedPieceToSaved}
                 onBringIntoFrame={bringSelectedIntoView}
                 centreLine={
-                  selectedSlot === "center" ? (
-                    <PanelSection title="Centre line" defaultOpen={false}>
-                      <CentreLineProperties
-                        line={theme.centerSecondary}
-                        moments={theme.momentOverlays}
-                        swatches={themeSwatches(theme)}
-                        patch={(update) => patchTheme((draft) => update(draft.centerSecondary))}
-                        onOpenMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
-                      />
-                    </PanelSection>
+                  selected === "breakTime" ? (
+                    <CentreLineProperties
+                      line={theme.centerSecondary}
+                      moments={theme.momentOverlays}
+                      align={theme.components.breakTime.textAlign}
+                      swatches={themeSwatches(theme)}
+                      notShownNow={centreLineEmpty}
+                      patch={(update) => patchTheme((draft) => update(draft.centerSecondary))}
+                      onAlign={(value) => patchTheme((draft) => (draft.components.breakTime.textAlign = value))}
+                      onPreviewBreak={previewLive.period !== "BREAK" && theme.centerSecondary.breakMode !== "hidden" ? () => applyPreviewMode("break") : undefined}
+                      onOpenMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
+                    />
                   ) : null
                 }
               />
