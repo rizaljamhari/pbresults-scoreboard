@@ -66,7 +66,7 @@ describe("game finished card", () => {
       Object.assign(theme.components.breakTime, { x: 100, y: 50, width: 200, height: 40, borderWidth: 3, borderRadius: [8, 8, 2, 2], zIndex: 7 });
       Object.assign(theme.centerSecondary, { breakMode: "staticText", breakText: "BREAK LINE 551" });
     });
-    const card = styleOf(markup, 'data-piece-id="__moment:gameFinished"');
+    const card = styleOf(markup, 'data-moment="gameFinished"');
     expect(card).toContain("left:103px;top:53px;width:194px;height:34px");
     expect(card).toContain("z-index:7");
     expect(card).toContain("border-radius:5px 5px 0px 0px");
@@ -92,7 +92,7 @@ describe("game finished card", () => {
       Object.assign(theme.momentOverlays.gameFinished, { placement: "free", x: 10, y: 20, width: 300, height: 60, text: "FINAL", hideCentreLineContent: false });
       theme.components.breakTime.visible = false;
     });
-    const card = styleOf(markup, 'data-piece-id="__moment:gameFinished"');
+    const card = styleOf(markup, 'data-moment="gameFinished"');
     expect(card).toContain("left:10px;top:20px;width:300px;height:60px");
     expect(markup).toContain("FINAL");
     expect(markup).not.toContain("GAME FINISHED");

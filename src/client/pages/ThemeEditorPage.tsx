@@ -54,8 +54,9 @@ import { LayersPanel } from "../components/editor/LayersPanel";
 import { PieceProperties, themeSwatches } from "../components/editor/PieceProperties";
 import { ThemeProperties } from "../components/editor/ThemeProperties";
 import { EventOverlayProperties, type EventKind } from "../components/editor/EventOverlayProperties";
-import { EVENT_CARD_ID, type EventCardTarget } from "../components/editor/MoveableLayer";
-import { resolveEventLabelRect } from "../components/OverlayRenderer";
+import { EVENT_CARD_ID, momentCardId, type OverlayTarget } from "../components/editor/MoveableLayer";
+import { MomentCardProperties, MOMENT_NAMES, type MomentKind } from "../components/editor/MomentCardProperties";
+import { resolveEventLabelRect, resolveMomentFrame } from "../components/OverlayRenderer";
 import { PanelSection } from "../components/editor/fields";
 import {
   alignPieces,
@@ -472,11 +473,14 @@ export function ThemeEditorPage() {
   const [previewGameTimerValue, setPreviewGameTimerValue] = useState(371);
   const [previewBreakTimerValue, setPreviewBreakTimerValue] = useState(3);
   // "Preview as": which broadcast state the canvas shows, and for event states, which team it is for.
-  const [previewMode, setPreviewMode] = useState<"live" | "game" | "break" | "towel" | "base" | "winner">("live");
+  const [previewMode, setPreviewMode] = useState<"live" | "game" | "break" | "timeout" | "finished" | "towel" | "base" | "winner">("live");
+  // The timeout is a 1.2 s flash on air; the editor holds it so it can be designed, and Play shows one real flash.
+  const [previewTimeout, setPreviewTimeout] = useState<"hold" | "flash" | null>(null);
+  const previewTimeoutTimerRef = useRef<number | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
   const [previewFinished, setPreviewFinished] = useState(false);
   const [overlayKey, setOverlayKey] = useState(0);
-  const [eventCardSelected, setEventCardSelected] = useState(false);
+  const [overlaySelected, setOverlaySelected] = useState(false);
   const theme = themeResource.data;
   const themeRef = useRef(theme);
   const savedSnapshotRef = useRef(savedSnapshot);
@@ -679,18 +683,45 @@ export function ThemeEditorPage() {
     );
   }
 
+  function selectOverlayCard() {
+    setSelectedIds([]);
+    setSelected(null);
+    setSelectAllMode(false);
+    setOverlaySelected(true);
+  }
+
   function applyPreviewMode(mode: typeof previewMode, side: "left" | "right" = previewSide) {
     setPreviewMode(mode);
     setPreviewSide(side);
     setPreviewFinished(false);
+    setPreviewTimeout(null);
+    if (previewTimeoutTimerRef.current !== null) {
+      window.clearTimeout(previewTimeoutTimerRef.current);
+      previewTimeoutTimerRef.current = null;
+    }
     if (mode === "live") {
       resetPreviewState();
-      setEventCardSelected(false);
+      setOverlaySelected(false);
       return;
     }
     if (mode === "game" || mode === "break") {
       applyPreviewPreset(mode);
-      setEventCardSelected(false);
+      setOverlaySelected(false);
+      return;
+    }
+    if (mode === "timeout") {
+      applyPreviewPreset("break");
+      setPreviewBreakTimerValue(60);
+      setPreviewTimeout("hold");
+      selectOverlayCard();
+      return;
+    }
+    if (mode === "finished") {
+      applyPreviewPreset("break");
+      setPreviewFinished(true);
+      setPreviewLeftScore(3);
+      setPreviewRightScore(1);
+      selectOverlayCard();
       return;
     }
     // Events are recorded against home/away; which of those is on the left depends on the side switch.
@@ -705,11 +736,32 @@ export function ThemeEditorPage() {
       setPreviewRightScore(side === "left" ? 1 : 3);
     }
     // Entering an event state selects its card, so Properties shows what can be changed.
-    setSelectedIds([]);
-    setSelected(null);
-    setSelectAllMode(false);
-    setEventCardSelected(true);
+    selectOverlayCard();
   }
+
+  function replayPreviewEntrance() {
+    if (previewMode === "timeout") {
+      const duration = themeResource.data?.momentOverlays.timeout.durationMs ?? 1200;
+      setPreviewTimeout("flash");
+      if (previewTimeoutTimerRef.current !== null) {
+        window.clearTimeout(previewTimeoutTimerRef.current);
+      }
+      previewTimeoutTimerRef.current = window.setTimeout(() => {
+        previewTimeoutTimerRef.current = null;
+        setPreviewTimeout("hold");
+      }, duration + 400);
+    }
+    setOverlayKey((key) => key + 1);
+  }
+
+  useEffect(
+    () => () => {
+      if (previewTimeoutTimerRef.current !== null) {
+        window.clearTimeout(previewTimeoutTimerRef.current);
+      }
+    },
+    []
+  );
 
   const selectedLogoContext =
     selectedIsTeamLogo && selectedImageComponent
@@ -859,6 +911,12 @@ export function ThemeEditorPage() {
     });
   }
 
+  function patchMoments(mutator: (moments: ThemeDefinition["momentOverlays"]) => void) {
+    patchTheme((draft) => {
+      mutator(draft.momentOverlays);
+    });
+  }
+
   function patchWinnerOverlay(mutator: (winner: ThemeDefinition["teamEventOverlay"]["winner"]) => void) {
     patchTeamEventOverlay((overlay) => {
       mutator(overlay.winner);
@@ -866,7 +924,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponent(id: string, options?: { additive?: boolean }) {
-    setEventCardSelected(false);
+    setOverlaySelected(false);
     setSelectAllMode(false);
     const additive = options?.additive === true;
 
@@ -894,7 +952,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponents(ids: string[], options?: { additive?: boolean }) {
-    setEventCardSelected(false);
+    setOverlaySelected(false);
     setSelectAllMode(false);
 
     const unique = Array.from(new Set(ids));
@@ -1144,7 +1202,7 @@ export function ThemeEditorPage() {
   }
 
   function clearSelectionState() {
-    setEventCardSelected(false);
+    setOverlaySelected(false);
     setSelectAllMode(false);
     setSelectedIds([]);
     setSelected(null);
@@ -1499,7 +1557,7 @@ export function ThemeEditorPage() {
     navigate("/admin/themes");
   }
 
-  async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base" | "winner") {
+  async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base" | "winner" | MomentKind) {
     const result = await api.uploadAsset(file);
     const asset = result.asset;
     assets.setData([asset, ...(assets.data ?? [])]);
@@ -1544,6 +1602,13 @@ export function ThemeEditorPage() {
     if (target === "base") {
       patchBaseOverlay((base) => {
         base.backgroundImageAssetId = asset.id;
+      });
+      return;
+    }
+
+    if (target === "timeout" || target === "gameFinished") {
+      patchMoments((moments) => {
+        moments[target].backgroundImageAssetId = asset.id;
       });
       return;
     }
@@ -1700,7 +1765,28 @@ export function ThemeEditorPage() {
 
   const eventKind: EventKind | null =
     previewMode === "towel" ? "concede" : previewMode === "base" ? "base" : previewMode === "winner" ? "winner" : null;
-  const eventCard: EventCardTarget | null = (() => {
+  const momentKind: MomentKind | null = previewMode === "timeout" ? "timeout" : previewMode === "finished" ? "gameFinished" : null;
+  const momentFrame = momentKind ? resolveMomentFrame(momentKind, theme, theme.components.breakTime.visible) : null;
+  const momentTarget: OverlayTarget | null =
+    momentKind && momentFrame
+      ? {
+          id: momentCardId(momentKind),
+          rect: { x: momentFrame.x, y: momentFrame.y, width: momentFrame.width, height: momentFrame.height },
+          movable: !momentFrame.following,
+          resizable: !momentFrame.following,
+          label: `${MOMENT_NAMES[momentKind]} card`,
+          badge: momentFrame.following ? "Follows centre line" : null,
+          onBadgeClick: momentFrame.following ? () => selectComponent("breakTime") : undefined,
+          commit: (draft, _start, end) => {
+            const card = draft.momentOverlays[momentKind];
+            card.x = Math.round(end.x);
+            card.y = Math.round(end.y);
+            card.width = Math.max(1, Math.round(end.width));
+            card.height = Math.max(1, Math.round(end.height));
+          }
+        }
+      : null;
+  const eventCard: OverlayTarget | null = (() => {
     if (!eventKind) {
       return null;
     }
@@ -1714,8 +1800,14 @@ export function ThemeEditorPage() {
     const following = Boolean(followed && followed.component.visible);
     const rect = resolveEventLabelRect(previewSide, theme, general);
     return {
+      id: EVENT_CARD_ID,
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       movable: !following,
+      resizable: false,
+      commit: (draft, start, end) => {
+        draft.teamEventOverlay.general.offsetX = Math.round(draft.teamEventOverlay.general.offsetX + (end.x - start.x));
+        draft.teamEventOverlay.general.offsetY = Math.round(draft.teamEventOverlay.general.offsetY + (end.y - start.y));
+      },
       label: `${eventKind === "concede" ? "Towel" : eventKind === "base" ? "Base" : "Winner"} card`,
       badge: followed
         ? following
@@ -1731,7 +1823,8 @@ export function ThemeEditorPage() {
     }
   };
 
-  const arrangeIds = eventCardSelected ? [] : activePieceIds();
+  const overlayTarget = eventCard ?? momentTarget;
+  const arrangeIds = overlaySelected ? [] : activePieceIds();
   const singleSelectedId = arrangeIds.length === 1 ? arrangeIds[0] : null;
   const mirrorPair = singleSelectedId && isFixedComponentId(singleSelectedId) ? mirroredPairForComponent(singleSelectedId) : null;
   const arrangeActions: ArrangeActions | null =
@@ -1773,19 +1866,20 @@ export function ThemeEditorPage() {
         theme={theme}
         live={previewLive}
         assets={assets.data ?? []}
-        selectedId={eventCardSelected ? null : selected}
-        selectedIds={eventCardSelected ? [EVENT_CARD_ID] : selectedIds}
-        eventCard={eventCard}
+        selectedId={overlaySelected ? null : selected}
+        selectedIds={overlaySelected ? (overlayTarget ? [overlayTarget.id] : []) : selectedIds}
+        overlayTarget={overlayTarget}
+        previewTimeout={previewMode === "timeout" ? previewTimeout : null}
         overlayKey={overlayKey}
         selectAll={selectAllMode}
         zoom={canvasZoom}
         onZoomChange={setCanvasZoom}
         onSelect={(pieceId, options) => {
-          if (pieceId === EVENT_CARD_ID) {
+          if (overlayTarget && pieceId === overlayTarget.id) {
             setSelectedIds([]);
             setSelected(null);
             setSelectAllMode(false);
-            setEventCardSelected(true);
+            setOverlaySelected(true);
             return;
           }
           selectComponent(pieceId, options);
@@ -1962,6 +2056,8 @@ export function ThemeEditorPage() {
                     ["live", "Live feed"],
                     ["game", "Game"],
                     ["break", "Break"],
+                    ["timeout", "Timeout"],
+                    ["finished", "Finished"],
                     ["towel", "Towel"],
                     ["base", "Base"],
                     ["winner", "Winner"]
@@ -1980,9 +2076,9 @@ export function ThemeEditorPage() {
                   </button>
                 ))}
               </div>
+              {eventKind || momentKind ? <span className="te-sep" aria-hidden /> : null}
               {eventKind ? (
                 <>
-                  <span className="te-sep" aria-hidden />
                   <div className="te-preview-modes" role="radiogroup" aria-label="Which team">
                     {(["left", "right"] as const).map((side) => (
                       <button
@@ -1997,10 +2093,12 @@ export function ThemeEditorPage() {
                       </button>
                     ))}
                   </div>
-                  <IconButton label="Play the entrance again" onClick={() => setOverlayKey((key) => key + 1)}>
-                    <Play />
-                  </IconButton>
                 </>
+              ) : null}
+              {eventKind || momentKind ? (
+                <IconButton label={previewMode === "timeout" ? "Play the timeout flash" : "Play the entrance again"} onClick={replayPreviewEntrance}>
+                  <Play />
+                </IconButton>
               ) : null}
               <span className="te-sep" aria-hidden />
               <IconButton
@@ -2129,7 +2227,18 @@ export function ThemeEditorPage() {
         ) : (
           <>
             {arrangeActions && arrangeActions.count > 1 ? <ArrangePanel actions={arrangeActions} /> : null}
-            {eventCardSelected && eventKind ? (
+            {overlaySelected && momentKind ? (
+              <MomentCardProperties
+                theme={theme}
+                kind={momentKind}
+                assets={assets.data ?? []}
+                swatches={themeSwatches(theme)}
+                currentRect={momentTarget?.rect ?? null}
+                patch={patchMoments}
+                onUpload={(file) => void uploadAssetIntoTarget(file, momentKind)}
+                onSelectCentreLine={() => selectComponent("breakTime")}
+              />
+            ) : overlaySelected && eventKind ? (
               <EventOverlayProperties
                 theme={theme}
                 kind={eventKind}
@@ -2176,7 +2285,7 @@ export function ThemeEditorPage() {
                         moments={theme.momentOverlays}
                         swatches={themeSwatches(theme)}
                         patch={(update) => patchTheme((draft) => update(draft.centerSecondary))}
-                        patchMoments={(update) => patchTheme((draft) => update(draft.momentOverlays))}
+                        onOpenMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
                       />
                     </PanelSection>
                   ) : null

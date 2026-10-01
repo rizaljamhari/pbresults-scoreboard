@@ -16,14 +16,21 @@ const SAFE_AREA_TOP = 54;
 const SAFE_AREA_SIDE = 96;
 /** Selection id for the event card, which is part of the theme's event overlay rather than a piece. */
 export const EVENT_CARD_ID = "__event-card";
+/** Selection id for a moment card (timeout, game finished). */
+export const momentCardId = (kind: "timeout" | "gameFinished") => `__moment:${kind}`;
 
-export type EventCardTarget = {
+/** A card shown by the current preview state (event or moment): selectable and, when free, movable on the canvas. */
+export type OverlayTarget = {
+  id: string;
   rect: { x: number; y: number; width: number; height: number };
-  /** False while the card follows a logo or name: its position comes from that piece. */
+  /** False while the card follows another piece: its position comes from that piece. */
   movable: boolean;
+  resizable: boolean;
   label: string;
   badge?: string | null;
   onBadgeClick?: () => void;
+  /** Writes a finished move or resize into the theme. */
+  commit: (draft: ThemeDefinition, start: Box, end: Box) => void;
 };
 
 const ALL_DIRECTIONS = { top: true, left: true, bottom: true, right: true, center: true, middle: true };
@@ -37,12 +44,12 @@ type MoveableLayerProps = {
   lockedIds?: ReadonlySet<string>;
   /** Changes whenever the canvas pans or zooms, so the control box can follow the pieces on screen. */
   viewKey?: string;
-  eventCard?: EventCardTarget | null;
+  overlayTarget?: OverlayTarget | null;
   onSelect: (id: string, options?: { additive?: boolean }) => void;
   onCommit: (theme: ThemeDefinition) => void;
 };
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 type Modifiers = { shift: boolean; noSnap: boolean; alt: boolean };
 
 function readTranslate(transform: string | undefined) {
@@ -58,7 +65,7 @@ function lockAxis(tx: number, ty: number, shift: boolean) {
   return Math.abs(tx) >= Math.abs(ty) ? { tx, ty: 0 } : { tx: 0, ty };
 }
 
-export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedIds, viewKey, eventCard, onSelect, onCommit }: MoveableLayerProps) {
+export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedIds, viewKey, overlayTarget, onSelect, onCommit }: MoveableLayerProps) {
   const layerRef = useRef<HTMLDivElement | null>(null);
   const moveableRef = useRef<Moveable | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
@@ -87,16 +94,16 @@ export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedI
       return;
     }
     const next = selectedIds
-      .filter((id) => !lockedIds?.has(id) && !(id === EVENT_CARD_ID && !eventCard?.movable))
+      .filter((id) => !lockedIds?.has(id) && !(id === overlayTarget?.id && !overlayTarget.movable))
       .map((id) => layer.querySelector<HTMLElement>(`[data-piece-id="${CSS.escape(id)}"]`))
       .filter((element): element is HTMLElement => Boolean(element));
     setTargets(next);
-  }, [selectedKey, lockedIds, entries, eventCard?.movable, Boolean(eventCard)]);
+  }, [selectedKey, lockedIds, entries, overlayTarget?.id, overlayTarget?.movable]);
 
   // Pieces move through React (left/top), not through Moveable; re-measure the control box after every change.
   useEffect(() => {
     moveableRef.current?.updateRect();
-  }, [entries, scale, targets, viewKey, eventCard?.rect.x, eventCard?.rect.y, eventCard?.rect.width, eventCard?.rect.height]);
+  }, [entries, scale, targets, viewKey, overlayTarget?.rect.x, overlayTarget?.rect.y, overlayTarget?.rect.width, overlayTarget?.rect.height]);
 
   useEffect(() => {
     const update = (event: KeyboardEvent) => {
@@ -163,8 +170,8 @@ export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedI
 
   function rememberStart(ids: string[]) {
     const map = new Map<string, Box>();
-    if (eventCard && ids.includes(EVENT_CARD_ID)) {
-      map.set(EVENT_CARD_ID, { ...eventCard.rect });
+    if (overlayTarget && ids.includes(overlayTarget.id)) {
+      map.set(overlayTarget.id, { ...overlayTarget.rect });
     }
     for (const id of ids) {
       const component = getThemeComponent(theme, id);
@@ -207,15 +214,19 @@ export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedI
   function commit(boxes: Array<{ id: string; box: Box }>, duplicate: boolean) {
     const next = structuredClone(theme);
     for (const { id, box } of boxes) {
-      if (id === EVENT_CARD_ID) {
+      if (overlayTarget && id === overlayTarget.id) {
         const start = startBoxesRef.current.get(id);
         if (start) {
-          next.teamEventOverlay.general.offsetX = Math.round(next.teamEventOverlay.general.offsetX + (box.x - start.x));
-          next.teamEventOverlay.general.offsetY = Math.round(next.teamEventOverlay.general.offsetY + (box.y - start.y));
+          overlayTarget.commit(next, start, box);
         }
-        const element = layerRef.current?.querySelector<HTMLElement>(`[data-piece-id="${EVENT_CARD_ID}"]`);
+        const element = layerRef.current?.querySelector<HTMLElement>(`[data-piece-id="${CSS.escape(id)}"]`);
         if (element) {
+          // Write the committed box back: React skips style values it believes are unchanged.
           element.style.transform = "";
+          element.style.left = `${Math.round(box.x)}px`;
+          element.style.top = `${Math.round(box.y)}px`;
+          element.style.width = `${Math.max(1, Math.round(box.width))}px`;
+          element.style.height = `${Math.max(1, Math.round(box.height))}px`;
         }
         continue;
       }
@@ -363,29 +374,29 @@ export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedI
           />
         );
       })}
-      {eventCard ? (
+      {overlayTarget ? (
         <div
-          data-piece-id={EVENT_CARD_ID}
+          data-piece-id={overlayTarget.id}
           data-visible="true"
-          className={["mv-piece", "mv-event-card", selectedIds.includes(EVENT_CARD_ID) ? "mv-piece--selected" : "", eventCard.movable ? "" : "mv-piece--locked"].join(" ")}
-          style={{ left: eventCard.rect.x, top: eventCard.rect.y, width: eventCard.rect.width, height: eventCard.rect.height, zIndex: 10000 }}
-          aria-label={eventCard.label}
+          className={["mv-piece", "mv-event-card", selectedIds.includes(overlayTarget.id) ? "mv-piece--selected" : "", overlayTarget.movable ? "" : "mv-piece--locked"].join(" ")}
+          style={{ left: overlayTarget.rect.x, top: overlayTarget.rect.y, width: overlayTarget.rect.width, height: overlayTarget.rect.height, zIndex: 10000 }}
+          aria-label={overlayTarget.label}
           onPointerDown={(event) => {
-            if (event.button === 0 && !selectedIds.includes(EVENT_CARD_ID)) {
-              onSelect(EVENT_CARD_ID, { additive: false });
+            if (event.button === 0 && !selectedIds.includes(overlayTarget.id)) {
+              onSelect(overlayTarget.id, { additive: false });
             }
           }}
-          onContextMenu={() => onSelect(EVENT_CARD_ID, { additive: false })}
+          onContextMenu={() => onSelect(overlayTarget.id, { additive: false })}
         />
       ) : null}
-      {eventCard?.badge ? (
+      {overlayTarget?.badge ? (
         <button
           type="button"
           className="mv-event-badge"
-          style={{ left: eventCard.rect.x, top: eventCard.rect.y + eventCard.rect.height, transform: `scale(${scale > 0 ? 1 / scale : 1})` }}
-          onClick={eventCard.onBadgeClick}
+          style={{ left: overlayTarget.rect.x, top: overlayTarget.rect.y + overlayTarget.rect.height, transform: `scale(${scale > 0 ? 1 / scale : 1})` }}
+          onClick={overlayTarget.onBadgeClick}
         >
-          {eventCard.badge}
+          {overlayTarget.badge}
         </button>
       ) : null}
       {controlHost ? createPortal(<div ref={hudRef} className="mv-hud" hidden />, controlHost) : null}
@@ -395,7 +406,7 @@ export function MoveableLayer({ theme, selectedIds, scale, snapSettings, lockedI
               ref={moveableRef}
               target={targets.length === 1 ? targets[0] : targets}
               draggable
-              resizable={!selectedIds.includes(EVENT_CARD_ID)}
+              resizable={!(overlayTarget && selectedIds.includes(overlayTarget.id) && !overlayTarget.resizable)}
               keepRatio={modifiers.shift}
               throttleDrag={0}
               throttleResize={0}

@@ -14,6 +14,8 @@ type OverlayRendererProps = {
   transparentBackground?: boolean;
   selectedComponentId?: string | null;
   onSelectComponent?: (id: string) => void;
+  /** Editor only: show the timeout card without a feed jump, held on screen or as one full flash. Never used on air. */
+  previewTimeout?: "hold" | "flash" | null;
 };
 
 type OverlaySnapshot = {
@@ -407,7 +409,8 @@ export function OverlayRenderer({
   editable = false,
   transparentBackground = false,
   selectedComponentId,
-  onSelectComponent
+  onSelectComponent,
+  previewTimeout = null
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; eventType: "towel" | "base"; until: number; token: string } | null>(null);
@@ -679,7 +682,9 @@ export function OverlayRenderer({
 
   const timeoutCard = theme.momentOverlays.timeout;
   const gameFinishedCard = theme.momentOverlays.gameFinished;
-  const timeoutVisible = Boolean(breakTimeoutToken) && timeoutCard.enabled && live?.period === "BREAK" && !gameFinishToken;
+  const timeoutVisible = previewTimeout
+    ? timeoutCard.enabled
+    : Boolean(breakTimeoutToken) && timeoutCard.enabled && live?.period === "BREAK" && !gameFinishToken;
   const gameFinishedVisible = Boolean(gameFinishToken);
   const hideCentreLineContent =
     (gameFinishedVisible && gameFinishedCard.hideCentreLineContent) || (timeoutVisible && timeoutCard.hideCentreLineContent);
@@ -688,7 +693,7 @@ export function OverlayRenderer({
   const freeMomentZIndex =
     Math.max(0, ...Object.values(theme.components).map((component) => component.zIndex), ...theme.freeComponents.map((component) => component.zIndex)) + 1;
   const momentCards = [
-    { kind: "timeout" as const, card: timeoutCard, active: timeoutVisible, token: breakTimeoutToken },
+    { kind: "timeout" as const, card: timeoutCard, active: timeoutVisible, token: previewTimeout ?? breakTimeoutToken },
     { kind: "gameFinished" as const, card: gameFinishedCard, active: gameFinishedVisible, token: gameFinishToken }
   ].filter((entry) => entry.active);
 
@@ -704,7 +709,7 @@ export function OverlayRenderer({
       <div
         key={`moment:${entry.kind}:${entry.token}`}
         className="moment-card"
-        data-piece-id={`__moment:${entry.kind}`}
+        data-moment={entry.kind}
         style={{
           left: frame.x,
           top: frame.y,
@@ -717,7 +722,9 @@ export function OverlayRenderer({
           boxShadow: card.shadow,
           animation:
             entry.kind === "timeout"
-              ? `center-secondary-timeout-flash ${(card as typeof timeoutCard).durationMs}ms ease-out both`
+              ? previewTimeout === "hold"
+                ? "center-secondary-timeout-hold 220ms ease-out both"
+                : `center-secondary-timeout-flash ${(card as typeof timeoutCard).durationMs}ms ease-out both`
               : "center-secondary-slide-up 220ms ease"
         }}
       >

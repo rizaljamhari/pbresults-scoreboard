@@ -1,6 +1,6 @@
 # Theme Editor: Centre Line Panel and Independent Moment Cards
 
-Status: phase 1 implemented · 2026-10-01
+Status: phases 1–2 implemented · 2026-10-01
 Mockup: `docs/mockups/centre-line-and-moments.html`
 
 Two changes to the theme editor and overlay renderer:

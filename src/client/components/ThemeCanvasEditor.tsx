@@ -5,7 +5,7 @@ import { getThemeComponent, listThemeComponentEntries, type ThemeComponent } fro
 import { OverlayRenderer } from "./OverlayRenderer";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
 import * as Slider from "@radix-ui/react-slider";
-import { MoveableLayer, type EventCardTarget } from "./editor/MoveableLayer";
+import { MoveableLayer, type OverlayTarget } from "./editor/MoveableLayer";
 import { Field, SwitchRow } from "./editor/fields";
 
 type ThemeCanvasEditorProps = {
@@ -24,8 +24,10 @@ type ThemeCanvasEditorProps = {
   panMode?: boolean;
   /** Pieces that stay put: not draggable, still snap targets. Editor-only, not part of the theme. */
   lockedIds?: ReadonlySet<string>;
-  /** The event card shown by the current preview state, selectable on the canvas. */
-  eventCard?: EventCardTarget | null;
+  /** The event or moment card shown by the current preview state, selectable on the canvas. */
+  overlayTarget?: OverlayTarget | null;
+  /** Editor-only: show the timeout card without waiting for the feed (held, or one full flash). */
+  previewTimeout?: "hold" | "flash" | null;
   /** Changing this remounts the overlay render, replaying entrance animations. */
   overlayKey?: number;
   renderChrome?: (api: CanvasChromeApi) => ReactNode;
@@ -129,7 +131,8 @@ export function ThemeCanvasEditor({
   fitInsets,
   panMode = false,
   lockedIds,
-  eventCard,
+  overlayTarget,
+  previewTimeout,
   overlayKey,
   renderChrome,
   onSelect,
@@ -667,6 +670,7 @@ export function ThemeCanvasEditor({
               transparentBackground={fullscreen && theme.canvas.transparentPreview}
               live={live}
               assets={assets}
+              previewTimeout={previewTimeout}
               editable
               selectedComponentId={selectAll ? null : selectedId}
               onSelectComponent={onSelect}
@@ -685,7 +689,7 @@ export function ThemeCanvasEditor({
               scale={stageScale}
               snapSettings={snapSettings}
               lockedIds={lockedIds}
-              eventCard={eventCard}
+              overlayTarget={overlayTarget}
               viewKey={`${camera.x},${camera.y},${stageScale}`}
               onSelect={onSelect}
               onCommit={onUpdate}

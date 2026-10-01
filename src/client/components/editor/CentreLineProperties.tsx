@@ -1,5 +1,6 @@
+import { Link2 } from "lucide-react";
 import { fontFamilies, type ThemeDefinition } from "../../../shared/theme";
-import { ColorInput, Field, FieldRow, Group, NumberInput, SelectInput, SwitchRow, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, Group, NumberInput, SelectInput, TextInput } from "./fields";
 
 type CentreLine = ThemeDefinition["centerSecondary"];
 type Moments = ThemeDefinition["momentOverlays"];
@@ -23,23 +24,23 @@ const TRANSITION_OPTIONS: ReadonlyArray<{ value: CentreLine["transition"]["anima
 const FONT_OPTIONS = fontFamilies.map((font) => ({ value: font as FontFamily, label: font }));
 
 /**
- * The line under the clock: what it shows during play and breaks, how it changes, and the Game finished and
- * Timeout treatments. Shown inside the centre piece's properties.
+ * The line under the clock: what it shows during play and breaks and how it changes, with links to the
+ * timeout and game finished cards that cover it. Shown inside the centre piece's properties.
  */
 export function CentreLineProperties({
   line,
   moments,
   swatches,
   patch,
-  patchMoments
+  onOpenMoment
 }: {
   line: CentreLine;
   moments: Moments;
   swatches: string[];
   patch: (update: (line: CentreLine) => void) => void;
-  patchMoments: (update: (moments: Moments) => void) => void;
+  /** Previews that moment and selects its card. */
+  onOpenMoment: (kind: "timeout" | "gameFinished") => void;
 }) {
-  const timeout = moments.timeout;
   return (
     <>
       <Group title="What it shows">
@@ -86,62 +87,19 @@ export function CentreLineProperties({
         <ColorInput label="Colour" value={line.staticStyle.color} swatches={swatches} onChange={(value) => patch((draft) => (draft.staticStyle.color = value))} />
       </Group>
 
-      <Group title="Game finished">
-        <SwitchRow
-          label="Show GAME FINISHED"
-          hint="Replaces this line when a game ends. The winner card is set separately."
-          checked={moments.gameFinished.enabled}
-          onChange={(checked) => patchMoments((draft) => (draft.gameFinished.enabled = checked))}
-        />
-      </Group>
-
-      <Group title="Timeout">
-        <SwitchRow
-          label="Flash a timeout"
-          hint="Shows once over the break timer when break time jumps up."
-          checked={timeout.enabled}
-          onChange={(checked) => patchMoments((draft) => (draft.timeout.enabled = checked))}
-        />
-        {timeout.enabled ? (
-          <>
-            <TextInput label="Text" value={timeout.text} onChange={(value) => patchMoments((draft) => (draft.timeout.text = value))} />
-            <FieldRow>
-              <Field label="Shows for">
-                <NumberInput label="Timeout duration" value={timeout.durationMs} min={0} step={100} unit="ms" onChange={(value) => patchMoments((draft) => (draft.timeout.durationMs = value))} />
-              </Field>
-              <Field label="When time jumps by">
-                <NumberInput
-                  label="Trigger increase"
-                  value={timeout.minIncreaseSeconds}
-                  min={0}
-                  unit="s"
-                  onChange={(value) => patchMoments((draft) => (draft.timeout.minIncreaseSeconds = value))}
-                />
-              </Field>
-            </FieldRow>
-            <SelectInput label="Font" value={timeout.fontFamily} options={FONT_OPTIONS} onChange={(value) => patchMoments((draft) => (draft.timeout.fontFamily = value))} />
-            <FieldRow>
-              <Field label="Size">
-                <NumberInput label="Timeout size" value={timeout.fontSize} min={1} unit="px" onChange={(value) => patchMoments((draft) => (draft.timeout.fontSize = value))} />
-              </Field>
-              <Field label="Weight">
-                <NumberInput label="Timeout weight" value={timeout.fontWeight} min={100} max={900} step={100} onChange={(value) => patchMoments((draft) => (draft.timeout.fontWeight = value))} />
-              </Field>
-            </FieldRow>
-            <Field label="Letter spacing">
-              <NumberInput
-                label="Timeout letter spacing"
-                value={timeout.letterSpacing}
-                step={0.1}
-                precision={1}
-                unit="px"
-                onChange={(value) => patchMoments((draft) => (draft.timeout.letterSpacing = value))}
-              />
-            </Field>
-            <ColorInput label="Text colour" value={timeout.color} swatches={swatches} onChange={(value) => patchMoments((draft) => (draft.timeout.color = value))} />
-            <ColorInput label="Background" value={timeout.backgroundColor} swatches={swatches} onChange={(value) => patchMoments((draft) => (draft.timeout.backgroundColor = value))} />
-          </>
-        ) : null}
+      <Group title="Cards that cover this line">
+        {(["timeout", "gameFinished"] as const).map((kind) => {
+          const card = moments[kind];
+          const where = card.placement === "centreLine" ? "On this line" : "Placed freely";
+          return (
+            <button key={kind} type="button" className="te-follow-link" onClick={() => onOpenMoment(kind)}>
+              <Link2 aria-hidden />
+              <span>
+                {kind === "timeout" ? "Timeout card" : "Game finished card"} · {card.enabled ? where : "Off"}
+              </span>
+            </button>
+          );
+        })}
       </Group>
     </>
   );
