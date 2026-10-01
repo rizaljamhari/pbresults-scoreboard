@@ -2179,6 +2179,15 @@ export function ThemeEditorPage() {
                 draft.components.awayTeamLogo.visible = visible;
               })
             }
+            moments={(["timeout", "gameFinished"] as const).map((kind) => ({
+              kind,
+              name: `${MOMENT_NAMES[kind]} card`,
+              enabled: theme.momentOverlays[kind].enabled,
+              placement: theme.momentOverlays[kind].placement,
+              selected: overlaySelected && momentKind === kind
+            }))}
+            onSelectMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
+            onToggleMoment={(kind) => patchMoments((moments) => (moments[kind].enabled = !moments[kind].enabled))}
             onCollapse={() => setLayersCollapsed(true)}
           />
         </aside>

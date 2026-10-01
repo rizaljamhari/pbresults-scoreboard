@@ -2025,6 +2025,16 @@ details[open]:not(.editor-section-card) > summary::after {
   overflow: hidden;
 }
 
+/* Holds the lock column on rows that have no lock, so toggles line up while a row is hovered. */
+.te-layer-spacer {
+  width: 0;
+}
+
+.te-layer:hover .te-layer-spacer,
+.te-layer:focus-within .te-layer-spacer {
+  width: 26px;
+}
+
 .te-layer-toggle svg {
   width: 14px;
   height: 14px;

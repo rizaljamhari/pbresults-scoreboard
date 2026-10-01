@@ -1,4 +1,5 @@
-import { Eye, EyeOff, Hash, Image as ImageIcon, Lock, LockOpen, PanelRightClose, Timer, Type } from "lucide-react";
+import { Fragment } from "react";
+import { Eye, EyeOff, Flag, Hash, Hourglass, Image as ImageIcon, Lock, LockOpen, PanelRightClose, Timer, Type } from "lucide-react";
 import type { ThemeDefinition } from "../../../shared/theme";
 import { getThemeComponentEntry, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { IconButton } from "./EditorChrome";
@@ -6,6 +7,60 @@ import { SwitchRow } from "./fields";
 import { pieceName, pieceShortName } from "./pieceNames";
 
 export type LayerGroup = { id: string; title: string; ids: string[] };
+
+/** A moment card (timeout, game finished): not a piece, so it is listed on its own and opens its preview. */
+export type MomentLayer = {
+  kind: "timeout" | "gameFinished";
+  name: string;
+  enabled: boolean;
+  placement: "centreLine" | "free";
+  selected: boolean;
+};
+
+function MomentRows({
+  moments,
+  onSelect,
+  onToggle
+}: {
+  moments: MomentLayer[];
+  onSelect: (kind: MomentLayer["kind"]) => void;
+  onToggle: (kind: MomentLayer["kind"]) => void;
+}) {
+  return (
+    <section className="te-layer-group" aria-label="Moments">
+      <h3>Moments</h3>
+      <ul>
+        {moments.map((moment) => (
+          <li
+            key={moment.kind}
+            className={["te-layer", moment.selected ? "te-layer--selected" : "", moment.enabled ? "" : "te-layer--hidden"].join(" ")}
+          >
+            <button
+              type="button"
+              className="te-layer-main"
+              aria-pressed={moment.selected}
+              aria-label={`${moment.name}${moment.enabled ? "" : ", off"}`}
+              onClick={() => onSelect(moment.kind)}
+            >
+              {moment.kind === "timeout" ? <Hourglass aria-hidden /> : <Flag aria-hidden />}
+              <span className="te-layer-name">{moment.name}</span>
+              <span className="te-layer-tag">{moment.placement === "centreLine" ? "on line" : "free"}</span>
+            </button>
+            <IconButton
+              label={moment.enabled ? `Turn off ${moment.name}` : `Turn on ${moment.name}`}
+              pressed={!moment.enabled}
+              onClick={() => onToggle(moment.kind)}
+              className="te-layer-toggle"
+            >
+              {moment.enabled ? <Eye /> : <EyeOff />}
+            </IconButton>
+            <span className="te-layer-spacer" aria-hidden />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 
 function iconFor(entry: ThemeComponentEntry) {
@@ -35,6 +90,9 @@ export function LayersPanel({
   onToggleVisible,
   onToggleLock,
   onToggleTeamLogos,
+  moments,
+  onSelectMoment,
+  onToggleMoment,
   onCollapse
 }: {
   theme: ThemeDefinition;
@@ -45,6 +103,9 @@ export function LayersPanel({
   onToggleVisible: (id: string) => void;
   onToggleLock: (id: string) => void;
   onToggleTeamLogos: (visible: boolean) => void;
+  moments: MomentLayer[];
+  onSelectMoment: (kind: MomentLayer["kind"]) => void;
+  onToggleMoment: (kind: MomentLayer["kind"]) => void;
   onCollapse: () => void;
 }) {
   const allGroups: LayerGroup[] = [...groups, { id: "custom", title: "Custom", ids: theme.freeComponents.map((component) => component.id) }];
@@ -59,7 +120,8 @@ export function LayersPanel({
         </IconButton>
       </header>
       {allGroups.map((group) => (
-        <section key={group.id} className="te-layer-group" aria-label={group.title}>
+        <Fragment key={group.id}>
+        <section className="te-layer-group" aria-label={group.title}>
           <h3>{group.title}</h3>
           {group.ids.length === 0 ? (
             <p className="te-layer-empty">Add text (T) or an image (I) to create a custom layer.</p>
@@ -101,6 +163,8 @@ export function LayersPanel({
             </ul>
           )}
         </section>
+        {group.id === "center" ? <MomentRows moments={moments} onSelect={onSelectMoment} onToggle={onToggleMoment} /> : null}
+        </Fragment>
       ))}
       <div className="te-layer-options">
         <SwitchRow
