@@ -101,7 +101,8 @@ export function OnAirStrip({
           On air
         </h2>
         {theme ? (
-          <Chip tone="air">
+          // Neutral, not red: the header already says On air, and red is kept for problems. The dot is the tally light.
+          <Chip className="ad-strip-theme" title="Theme on air">
             <Dot tone="tally" flat />
             {theme.name}
           </Chip>

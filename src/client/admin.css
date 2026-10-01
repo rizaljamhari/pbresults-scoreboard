@@ -2379,6 +2379,11 @@ tr[aria-selected="true"] .ad-row-open {
   white-space: nowrap;
 }
 
+.ad-strip-theme {
+  color: var(--ad-text);
+  font-weight: 600;
+}
+
 .ad-strip-meta {
   flex: 1 1 auto;
   min-width: 0;
