@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
 import type { ThemeDefinition } from "../../shared/theme";
-import { filterAndSortThemes } from "./themeAdminUtils";
+import { filterAndSortThemes, fitContent, themeContentBounds } from "./themeAdminUtils";
 
 function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   return {
@@ -45,5 +45,39 @@ describe("filterAndSortThemes", () => {
       "Bravo Custom",
       "Alpha Custom"
     ]);
+  });
+});
+
+describe("theme thumbnail crop", () => {
+  it("covers every visible piece and ignores hidden ones", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    for (const component of Object.values(theme.components)) {
+      component.visible = false;
+    }
+    theme.freeComponents = [];
+    Object.assign(theme.components.homeName, { visible: true, opacity: 1, x: 100, y: 50, width: 200, height: 40 });
+    Object.assign(theme.components.awayName, { visible: true, opacity: 1, x: 500, y: 60, width: 100, height: 60 });
+    expect(themeContentBounds(theme)).toEqual({ x: 100, y: 50, width: 500, height: 70 });
+  });
+
+  it("keeps the crop inside the frame", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    Object.assign(theme.components.homeName, { visible: true, x: -50, y: -20 });
+    const bounds = themeContentBounds(theme);
+    expect(bounds.x).toBe(0);
+    expect(bounds.y).toBe(0);
+  });
+
+  it("falls back to the whole frame when nothing is visible", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    for (const component of Object.values(theme.components)) {
+      component.visible = false;
+    }
+    theme.freeComponents = [];
+    expect(themeContentBounds(theme)).toEqual({ x: 0, y: 0, width: theme.canvas.width, height: theme.canvas.height });
+  });
+
+  it("centres the content in the box, fitting the tighter side", () => {
+    expect(fitContent({ x: 100, y: 50, width: 1000, height: 100 }, 320, 140, 10)).toEqual({ scale: 0.3, x: -20, y: 40 });
   });
 });

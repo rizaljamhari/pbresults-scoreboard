@@ -1069,19 +1069,17 @@
 
 .ad-theme-thumb {
   position: relative;
-  aspect-ratio: 16 / 9;
+  height: 128px;
   overflow: hidden;
   border-bottom: 1px solid var(--ad-line);
 }
 
-.ad-theme-thumb-frame,
+/* The full frame, scaled and shifted so the theme's drawn area sits centred in the box. */
 .ad-theme-thumb-stage {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.ad-theme-thumb-stage > div {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
   pointer-events: none;
 }
 

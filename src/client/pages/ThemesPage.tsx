@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CopyPlus, Download, Ellipsis, Eye, PenLine, Plus, Radio, Trash2, Upload } from "lucide-react";
 import { api } from "../api";
@@ -6,13 +6,18 @@ import { useAssets, useLiveState, useSettings, useThemes } from "../hooks";
 import { showToast } from "../toast";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../shared/theme";
 import { OverlayRenderer } from "../components/OverlayRenderer";
-import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
 import { Button, Chip, Dot, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus } from "../components/admin/kit";
-import { filterAndSortThemes, type ThemeKindFilter, type ThemeSort } from "./themeAdminUtils";
+import { filterAndSortThemes, fitContent, themeContentBounds, type ThemeKindFilter, type ThemeSort } from "./themeAdminUtils";
 
 const PREFERRED_BUILTIN_THEME_ID = "theme-7ad8adb8-e017-4853-93b1-fb608a750253";
 
-/** A still preview of the theme with the current scores. Rendered once per theme, not on every feed update. */
+const THUMB_PADDING = 14;
+
+/**
+ * A still preview of the theme with the current scores, cropped to what the theme draws so the scoreboard
+ * is legible, and centred in a fixed-height box so every card lines up. Rendered once per theme, not on
+ * every feed update, and only after the box is measured so nothing jumps.
+ */
 const ThemeThumb = memo(function ThemeThumb({
   theme,
   live,
@@ -22,11 +27,38 @@ const ThemeThumb = memo(function ThemeThumb({
   live: NormalizedLiveState | null;
   assets: StoredAsset[];
 }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
+  const bounds = useMemo(() => themeContentBounds(theme), [theme]);
+
+  useEffect(() => {
+    const element = boxRef.current;
+    if (!element) {
+      return;
+    }
+    const update = () => {
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      setBox((current) => (current && current.width === width && current.height === height ? current : width && height ? { width, height } : null));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const fit = box ? fitContent(bounds, box.width, box.height, THUMB_PADDING) : null;
+
   return (
-    <div className="ad-theme-thumb ad-checker" aria-hidden>
-      <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="ad-theme-thumb-frame" innerClassName="ad-theme-thumb-stage" mode="width">
-        <OverlayRenderer theme={theme} live={live} assets={assets} transparentBackground={theme.canvas.transparentPreview} />
-      </ScaledCanvasFrame>
+    <div ref={boxRef} className="ad-theme-thumb ad-checker" aria-hidden>
+      {fit ? (
+        <div
+          className="ad-theme-thumb-stage"
+          style={{ width: theme.canvas.width, height: theme.canvas.height, transform: `translate(${fit.x}px, ${fit.y}px) scale(${fit.scale})` }}
+        >
+          <OverlayRenderer theme={theme} live={live} assets={assets} transparentBackground />
+        </div>
+      ) : null}
     </div>
   );
 });
