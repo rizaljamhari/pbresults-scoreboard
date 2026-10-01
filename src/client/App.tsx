@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { AssetsPage } from "./pages/AssetsPage";
 import { OverlayPage } from "./pages/OverlayPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -18,6 +19,8 @@ export function App() {
         <Route path="admin/settings" element={<SettingsPage />} />
         <Route path="admin/teams" element={<TeamsPage />} />
         <Route path="admin/teams/:id" element={<TeamsPage />} />
+        <Route path="admin/assets" element={<AssetsPage />} />
+        <Route path="admin/assets/:id" element={<AssetsPage />} />
         <Route path="admin/themes" element={<ThemesPage />} />
         <Route path="admin/themes/:id" element={<ThemeEditorPage />} />
       </Route>

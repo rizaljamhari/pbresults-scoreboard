@@ -20,6 +20,12 @@ import {
   themeSchema,
   type AppExportPackage,
   type AppSettings,
+  type AssetCleanupReport,
+  type AssetCleanupRequest,
+  type AssetCleanupResult,
+  type AssetLibraryEntry,
+  type AssetThemeUsageLocation,
+  type AssetUsage,
   type OperationsState,
   type OperatorTextOverride,
   type OperatorTextState,
@@ -131,53 +137,136 @@ function findReusedAssetByHash(contentHash: string, mode: "any" | "processed-onl
   return visibleSameHash ?? source ?? null;
 }
 
+type AssetRef<Location> = {
+  location: Location;
+  assetId: string | null;
+  set: (assetId: string | null) => void;
+};
+
+function themeAssetRefs(theme: ThemeDefinition): Array<AssetRef<AssetThemeUsageLocation>> {
+  const refs: Array<AssetRef<AssetThemeUsageLocation>> = [];
+  for (const [key, component] of Object.entries(theme.components) as Array<
+    [keyof ThemeDefinition["components"], ThemeDefinition["components"][keyof ThemeDefinition["components"]]]
+  >) {
+    if (component.kind === "image") {
+      refs.push({
+        location: { type: "component", key },
+        assetId: component.assetId,
+        set: (assetId) => {
+          component.assetId = assetId;
+        }
+      });
+    }
+    refs.push({
+      location: { type: "surface", key, label: key },
+      assetId: component.backgroundImageAssetId,
+      set: (assetId) => {
+        component.backgroundImageAssetId = assetId;
+      }
+    });
+  }
+  for (const component of theme.freeComponents) {
+    if (component.kind === "image") {
+      refs.push({
+        location: { type: "free", id: component.id, label: component.label },
+        assetId: component.assetId,
+        set: (assetId) => {
+          component.assetId = assetId;
+        }
+      });
+    }
+    refs.push({
+      location: { type: "surface", key: component.id, label: component.label },
+      assetId: component.backgroundImageAssetId,
+      set: (assetId) => {
+        component.backgroundImageAssetId = assetId;
+      }
+    });
+  }
+  for (const which of ["concede", "base", "winner"] as const) {
+    const event = theme.teamEventOverlay[which];
+    refs.push({
+      location: { type: "eventOverlay", which },
+      assetId: event.backgroundImageAssetId,
+      set: (assetId) => {
+        event.backgroundImageAssetId = assetId;
+      }
+    });
+  }
+  return refs.filter((ref) => ref.assetId !== null);
+}
+
+function teamAssetRefs(team: TeamRecord): Array<AssetRef<"primary" | "alternate">> {
+  const refs: Array<AssetRef<"primary" | "alternate">> = [];
+  if (team.logoAssetId) {
+    refs.push({
+      location: "primary",
+      assetId: team.logoAssetId,
+      set: (assetId) => {
+        team.logoAssetId = assetId;
+      }
+    });
+  }
+  if (team.alternateLogoAssetId) {
+    refs.push({
+      location: "alternate",
+      assetId: team.alternateLogoAssetId,
+      set: (assetId) => {
+        team.alternateLogoAssetId = assetId;
+      }
+    });
+  }
+  return refs;
+}
+
 function collectThemeAssetIds(theme: ThemeDefinition): string[] {
-  const assetIds = new Set<string>();
-  for (const component of [...Object.values(theme.components), ...theme.freeComponents]) {
-    if (component.kind === "image" && component.assetId) {
-      assetIds.add(component.assetId);
-    }
-    if (component.backgroundImageAssetId) {
-      assetIds.add(component.backgroundImageAssetId);
-    }
-  }
-  if (theme.teamEventOverlay.concede.backgroundImageAssetId) {
-    assetIds.add(theme.teamEventOverlay.concede.backgroundImageAssetId);
-  }
-  if (theme.teamEventOverlay.base.backgroundImageAssetId) {
-    assetIds.add(theme.teamEventOverlay.base.backgroundImageAssetId);
-  }
-  return [...assetIds];
+  return [...new Set(themeAssetRefs(theme).map((ref) => ref.assetId as string))];
 }
 
 function collectTeamAssetIds(teams: TeamRecord[]): string[] {
-  const assetIds = new Set<string>();
-  for (const team of teams) {
-    if (team.logoAssetId) {
-      assetIds.add(team.logoAssetId);
-    }
-    if (team.alternateLogoAssetId) {
-      assetIds.add(team.alternateLogoAssetId);
-    }
-  }
-  return [...assetIds];
+  return [...new Set(teams.flatMap((team) => teamAssetRefs(team).map((ref) => ref.assetId as string)))];
 }
 
 function remapThemeAssetIds(theme: ThemeDefinition, idMap: Map<string, string>) {
-  for (const component of [...Object.values(theme.components), ...theme.freeComponents]) {
-    if (component.kind === "image") {
-      component.assetId = component.assetId ? (idMap.get(component.assetId) ?? null) : null;
-    }
-    component.backgroundImageAssetId = component.backgroundImageAssetId
-      ? (idMap.get(component.backgroundImageAssetId) ?? null)
-      : null;
+  for (const ref of themeAssetRefs(theme)) {
+    ref.set(ref.assetId ? (idMap.get(ref.assetId) ?? null) : null);
   }
-  theme.teamEventOverlay.concede.backgroundImageAssetId = theme.teamEventOverlay.concede.backgroundImageAssetId
-    ? (idMap.get(theme.teamEventOverlay.concede.backgroundImageAssetId) ?? null)
-    : null;
-  theme.teamEventOverlay.base.backgroundImageAssetId = theme.teamEventOverlay.base.backgroundImageAssetId
-    ? (idMap.get(theme.teamEventOverlay.base.backgroundImageAssetId) ?? null)
-    : null;
+}
+
+export function computeAssetUsageIndex(): Map<string, AssetUsage[]> {
+  const index = new Map<string, AssetUsage[]>();
+  const add = (assetId: string, usage: AssetUsage) => {
+    const list = index.get(assetId);
+    if (list) {
+      list.push(usage);
+    } else {
+      index.set(assetId, [usage]);
+    }
+  };
+  const publishedThemeId = getSettings().publishedThemeId;
+  for (const theme of listThemes()) {
+    for (const ref of themeAssetRefs(theme)) {
+      add(ref.assetId as string, {
+        kind: "theme",
+        themeId: theme.id,
+        themeName: theme.name,
+        builtin: theme.builtin,
+        published: theme.id === publishedThemeId,
+        location: ref.location
+      });
+    }
+  }
+  for (const team of listTeamRecords()) {
+    for (const ref of teamAssetRefs(team)) {
+      add(ref.assetId as string, {
+        kind: "team",
+        teamId: team.id,
+        teamName: team.canonicalName,
+        slot: ref.location
+      });
+    }
+  }
+  return index;
 }
 
 function withBuiltinThemes(themes: ThemeDefinition[]): ThemeDefinition[] {
@@ -818,17 +907,32 @@ export function getAsset(id: string): StoredAssetRecord | null {
   };
 }
 
+function assetStoredName(id: string, originalName: string, mimeType: string): string {
+  const extension = mime.extension(mimeType) || path.extname(originalName).replace(".", "") || "bin";
+  return `${id}.${extension}`;
+}
+
+async function writeFileAtomic(filePath: string, buffer: Buffer) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fsp.writeFile(tempPath, buffer);
+  try {
+    await fsp.rename(tempPath, filePath);
+  } catch (error) {
+    await fsp.rm(tempPath, { force: true });
+    throw error;
+  }
+}
+
 async function persistAssetRecord(
   buffer: Buffer,
   originalName: string,
   mimeType: string,
   options: StoreAssetOptions = {}
 ): Promise<StoredAssetRecord> {
-  const extension = mime.extension(mimeType) || path.extname(originalName).replace(".", "") || "bin";
   const id = createThemeId("asset");
-  const storedName = `${id}.${extension}`;
+  const storedName = assetStoredName(id, originalName, mimeType);
   const filePath = path.join(uploadsDir, storedName);
-  await fsp.writeFile(filePath, buffer);
+  await writeFileAtomic(filePath, buffer);
   const reusableAnalysis =
     options.visibleContent && options.visibleContent.status !== "failed" ? options.visibleContent : null;
   const visibleContent = reusableAnalysis ?? (await analyzeVisibleContent(buffer, mimeType));
@@ -843,6 +947,9 @@ async function persistAssetRecord(
     hiddenFromPicker: options.hiddenFromPicker ?? false,
     contentHash: options.contentHash ?? null,
     visibleContent,
+    displayName: null,
+    updatedAt: null,
+    byteSize: buffer.length,
     filePath
   };
   const assets = readJson<StoredAssetRecord[]>(assetsPath, []);
@@ -1015,6 +1122,443 @@ export async function storeAsset(
       reason: options.attemptBackgroundRemoval === false ? "Background removal disabled for this operation" : "Background removal disabled in settings"
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Asset library management
+// ---------------------------------------------------------------------------
+
+const RECENT_ASSET_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export class AssetNotFoundError extends Error {
+  readonly code = "asset_not_found";
+  constructor(id: string) {
+    super(`Asset not found: ${id}`);
+  }
+}
+
+export class AssetInUseError extends Error {
+  readonly code = "asset_in_use";
+  constructor(readonly usages: AssetUsage[]) {
+    super(`Asset is used in ${usages.length} place${usages.length === 1 ? "" : "s"}`);
+  }
+}
+
+export class AssetOperationError extends Error {
+  readonly code = "asset_operation_invalid";
+}
+
+function readAssetRecords(): StoredAssetRecord[] {
+  return readJson<StoredAssetRecord[]>(assetsPath, []).map((raw) => ({ ...assetSchema.parse(raw), filePath: raw.filePath }));
+}
+
+function writeAssetRecords(records: StoredAssetRecord[]) {
+  writeJson(assetsPath, records);
+}
+
+/** The file the overlay actually loads: `/uploads/<name>` resolves inside the current uploads folder. */
+function resolveAssetFilePath(record: Pick<StoredAssetRecord, "url" | "filePath">): string {
+  const servedName = path.basename(record.url.split("?")[0] ?? "");
+  return servedName ? path.join(uploadsDir, servedName) : record.filePath;
+}
+
+function statFileSize(filePath: string): number | null {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return null;
+  }
+}
+
+function requireAssetRecord(id: string): StoredAssetRecord {
+  const record = readAssetRecords().find((asset) => asset.id === id);
+  if (!record) {
+    throw new AssetNotFoundError(id);
+  }
+  return record;
+}
+
+function updateAssetRecord(id: string, patch: Partial<StoredAssetRecord>): StoredAssetRecord {
+  const records = readAssetRecords();
+  const index = records.findIndex((asset) => asset.id === id);
+  if (index < 0) {
+    throw new AssetNotFoundError(id);
+  }
+  records[index] = { ...records[index], ...patch };
+  writeAssetRecords(records);
+  return records[index];
+}
+
+function toPublicAsset(record: StoredAssetRecord): StoredAsset {
+  return assetSchema.parse(record);
+}
+
+/**
+ * Writes new bytes into an existing asset id. The url keeps the id; only the
+ * extension changes when the mime type does, in which case the old file goes.
+ */
+async function writeAssetBytesInPlace(
+  record: StoredAssetRecord,
+  buffer: Buffer,
+  mimeType: string,
+  patch: Partial<StoredAssetRecord> = {}
+): Promise<StoredAssetRecord> {
+  const previousFilePath = resolveAssetFilePath(record);
+  const storedName = assetStoredName(record.id, patch.originalName ?? record.originalName, mimeType);
+  const filePath = path.join(uploadsDir, storedName);
+  await writeFileAtomic(filePath, buffer);
+  if (previousFilePath !== filePath) {
+    await fsp.rm(previousFilePath, { force: true });
+  }
+  const visibleContent = await analyzeVisibleContent(buffer, mimeType);
+  return updateAssetRecord(record.id, {
+    ...patch,
+    mimeType,
+    url: `/uploads/${storedName}`,
+    filePath,
+    contentHash: computeContentHash(buffer),
+    visibleContent,
+    byteSize: buffer.length,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+async function removeAssetRecordAndFile(id: string): Promise<number> {
+  const records = readAssetRecords();
+  const record = records.find((asset) => asset.id === id);
+  if (!record) {
+    return 0;
+  }
+  const filePath = resolveAssetFilePath(record);
+  const freed = statFileSize(filePath) ?? 0;
+  writeAssetRecords(records.filter((asset) => asset.id !== id));
+  await fsp.rm(filePath, { force: true });
+  return freed;
+}
+
+/** Removes a hidden original once no other record derives from it and nothing references it directly. */
+async function removeOriginalIfOrphaned(originalId: string | null, usageIndex = computeAssetUsageIndex()): Promise<number> {
+  if (!originalId) {
+    return 0;
+  }
+  const records = readAssetRecords();
+  const original = records.find((asset) => asset.id === originalId);
+  if (!original || !original.hiddenFromPicker) {
+    return 0;
+  }
+  if (records.some((asset) => asset.sourceAssetId === originalId) || usageIndex.has(originalId)) {
+    return 0;
+  }
+  return removeAssetRecordAndFile(originalId);
+}
+
+export function listAssetLibrary(): AssetLibraryEntry[] {
+  const records = readAssetRecords();
+  const byId = new Map(records.map((record) => [record.id, record]));
+  const usageIndex = computeAssetUsageIndex();
+  return records
+    .filter((record) => !record.hiddenFromPicker)
+    .map((record) => {
+      const filePath = resolveAssetFilePath(record);
+      const size = statFileSize(filePath);
+      const source = record.sourceAssetId ? byId.get(record.sourceAssetId) ?? null : null;
+      const sourceSize = source ? statFileSize(resolveAssetFilePath(source)) : null;
+      const original = source && sourceSize !== null ? { id: source.id, url: source.url, byteSize: sourceSize } : null;
+      return {
+        ...toPublicAsset(record),
+        byteSize: size ?? record.byteSize,
+        usages: usageIndex.get(record.id) ?? [],
+        original,
+        backgroundRemoved: Boolean(original && source?.contentHash !== record.contentHash),
+        fileMissing: size === null
+      };
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+export function renameAsset(id: string, displayName: string | null): StoredAsset {
+  const trimmed = displayName?.trim() ?? "";
+  const updated = updateAssetRecord(requireAssetRecord(id).id, {
+    displayName: trimmed ? trimmed : null,
+    updatedAt: new Date().toISOString()
+  });
+  return toPublicAsset(updated);
+}
+
+export async function replaceAssetFile(
+  id: string,
+  buffer: Buffer,
+  originalName: string,
+  mimeType: string,
+  options: { removeBackground?: boolean } = {}
+): Promise<StoreAssetResult> {
+  const record = requireAssetRecord(id);
+  if (record.hiddenFromPicker) {
+    throw new AssetOperationError("Hidden originals cannot be replaced directly");
+  }
+  const previousOriginalId = record.sourceAssetId;
+  const removeBackground = options.removeBackground ?? getSettings().autoRemoveBackgroundUploads;
+
+  let processing: UploadProcessingInfo = {
+    status: "skipped",
+    reason: removeBackground ? null : "Background removal not requested"
+  };
+  let updated: StoredAssetRecord;
+
+  const removal = removeBackground ? await removeImageBackground(buffer, mimeType, originalName) : null;
+  if (removal?.status === "processed") {
+    const original = await persistAssetRecord(buffer, originalName, mimeType, {
+      role: "original",
+      hiddenFromPicker: true,
+      sourceAssetId: null,
+      contentHash: computeContentHash(buffer)
+    });
+    updated = await writeAssetBytesInPlace(record, removal.buffer, removal.mimeType, {
+      originalName: removal.originalName,
+      role: "processed",
+      sourceAssetId: original.id
+    });
+    processing = { status: "processed", reason: null };
+  } else {
+    if (removal) {
+      processing = { status: removal.status, reason: removal.reason };
+    }
+    updated = await writeAssetBytesInPlace(record, buffer, mimeType, {
+      originalName,
+      role: "original",
+      sourceAssetId: null
+    });
+  }
+
+  if (previousOriginalId && previousOriginalId !== updated.sourceAssetId) {
+    await removeOriginalIfOrphaned(previousOriginalId);
+  }
+  return { asset: toPublicAsset(updated), processing };
+}
+
+export async function revertAssetToOriginal(id: string): Promise<StoredAsset> {
+  const record = requireAssetRecord(id);
+  const source = record.sourceAssetId ? readAssetRecords().find((asset) => asset.id === record.sourceAssetId) : null;
+  if (!source) {
+    throw new AssetOperationError("This asset has no stored original to revert to");
+  }
+  const buffer = await fsp.readFile(resolveAssetFilePath(source));
+  const updated = await writeAssetBytesInPlace(record, buffer, source.mimeType, {
+    originalName: source.originalName
+  });
+  return toPublicAsset(updated);
+}
+
+export async function reprocessAssetBackground(id: string): Promise<StoreAssetResult> {
+  const record = requireAssetRecord(id);
+  if (record.hiddenFromPicker) {
+    throw new AssetOperationError("Hidden originals cannot be processed directly");
+  }
+  const existingSource = record.sourceAssetId ? readAssetRecords().find((asset) => asset.id === record.sourceAssetId) ?? null : null;
+  const sourceRecord = existingSource ?? record;
+  const sourceBuffer = await fsp.readFile(resolveAssetFilePath(sourceRecord));
+  const removal = await removeImageBackground(sourceBuffer, sourceRecord.mimeType, sourceRecord.originalName);
+  if (removal.status !== "processed") {
+    return { asset: toPublicAsset(record), processing: { status: removal.status, reason: removal.reason } };
+  }
+
+  const sourceAssetId =
+    existingSource?.id ??
+    (
+      await persistAssetRecord(sourceBuffer, record.originalName, record.mimeType, {
+        role: "original",
+        hiddenFromPicker: true,
+        sourceAssetId: null,
+        contentHash: computeContentHash(sourceBuffer)
+      })
+    ).id;
+  const updated = await writeAssetBytesInPlace(requireAssetRecord(id), removal.buffer, removal.mimeType, {
+    originalName: removal.originalName,
+    role: "processed",
+    sourceAssetId
+  });
+  return { asset: toPublicAsset(updated), processing: { status: "processed", reason: null } };
+}
+
+export type DeleteAssetResult = {
+  deletedIds: string[];
+  clearedThemeIds: string[];
+  clearedTeamIds: string[];
+  freedBytes: number;
+};
+
+function clearAssetReferences(assetId: string): { clearedThemeIds: string[]; clearedTeamIds: string[] } {
+  const clearedThemeIds: string[] = [];
+  for (const theme of listThemes()) {
+    const refs = themeAssetRefs(theme).filter((ref) => ref.assetId === assetId);
+    if (refs.length) {
+      refs.forEach((ref) => ref.set(null));
+      saveTheme(theme);
+      clearedThemeIds.push(theme.id);
+    }
+  }
+  const clearedTeamIds: string[] = [];
+  for (const team of listTeamRecords()) {
+    const refs = teamAssetRefs(team).filter((ref) => ref.assetId === assetId);
+    if (refs.length) {
+      refs.forEach((ref) => ref.set(null));
+      saveTeamRecord(team);
+      clearedTeamIds.push(team.id);
+    }
+  }
+  return { clearedThemeIds, clearedTeamIds };
+}
+
+export async function deleteAsset(id: string, options: { force?: boolean } = {}): Promise<DeleteAssetResult> {
+  const record = requireAssetRecord(id);
+  const usages = computeAssetUsageIndex().get(id) ?? [];
+  if (usages.length && !options.force) {
+    throw new AssetInUseError(usages);
+  }
+  const cleared = usages.length ? clearAssetReferences(id) : { clearedThemeIds: [], clearedTeamIds: [] };
+  const deletedIds = [id];
+  let freedBytes = await removeAssetRecordAndFile(id);
+  const freedOriginal = await removeOriginalIfOrphaned(record.sourceAssetId);
+  if (record.sourceAssetId && !readAssetRecords().some((asset) => asset.id === record.sourceAssetId)) {
+    deletedIds.push(record.sourceAssetId);
+    freedBytes += freedOriginal;
+  }
+  return { deletedIds, ...cleared, freedBytes };
+}
+
+export function attachExistingTeamLogo(teamId: string, assetId: string | null, slot: "primary" | "alternate"): TeamRecord {
+  const team = getTeamRecord(teamId);
+  if (!team) {
+    throw new Error("Team not found");
+  }
+  if (assetId) {
+    const asset = requireAssetRecord(assetId);
+    if (asset.hiddenFromPicker) {
+      throw new AssetOperationError("Hidden originals cannot be used as a logo");
+    }
+  }
+  return saveTeamRecord({
+    ...team,
+    logoAssetId: slot === "primary" ? assetId : team.logoAssetId,
+    alternateLogoAssetId: slot === "alternate" ? assetId : team.alternateLogoAssetId
+  });
+}
+
+function isStrayCandidate(fileName: string): boolean {
+  return !fileName.startsWith(".") && !fileName.endsWith(".tmp");
+}
+
+export function getAssetCleanupReport(now = Date.now()): AssetCleanupReport {
+  const records = readAssetRecords();
+  const usageIndex = computeAssetUsageIndex();
+  const derivedFrom = new Set(records.map((record) => record.sourceAssetId).filter((id): id is string => Boolean(id)));
+  const toItem = (record: StoredAssetRecord, byteSize: number | null) => ({
+    id: record.id,
+    name: record.displayName ?? record.originalName,
+    url: byteSize === null ? null : record.url,
+    byteSize,
+    createdAt: record.createdAt,
+    recent: now - Date.parse(record.createdAt) < RECENT_ASSET_WINDOW_MS
+  });
+
+  const report: AssetCleanupReport = {
+    unusedAssets: [],
+    orphanOriginals: [],
+    strayFiles: [],
+    brokenRecords: [],
+    reclaimableBytes: 0
+  };
+
+  const knownFiles = new Set<string>();
+  for (const record of records) {
+    const filePath = resolveAssetFilePath(record);
+    knownFiles.add(path.basename(filePath));
+    const size = statFileSize(filePath);
+    const used = usageIndex.has(record.id);
+    if (used) {
+      continue;
+    }
+    if (size === null) {
+      if (!derivedFrom.has(record.id)) {
+        report.brokenRecords.push(toItem(record, null));
+      }
+      continue;
+    }
+    if (!record.hiddenFromPicker) {
+      report.unusedAssets.push(toItem(record, size));
+      report.reclaimableBytes += size;
+    } else if (!derivedFrom.has(record.id)) {
+      report.orphanOriginals.push(toItem(record, size));
+      report.reclaimableBytes += size;
+    }
+  }
+
+  let entries: fs.Dirent[] = [];
+  try {
+    entries = fs.readdirSync(uploadsDir, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !isStrayCandidate(entry.name) || knownFiles.has(entry.name)) {
+      continue;
+    }
+    const size = statFileSize(path.join(uploadsDir, entry.name)) ?? 0;
+    report.strayFiles.push({ fileName: entry.name, byteSize: size });
+    report.reclaimableBytes += size;
+  }
+
+  report.unusedAssets.sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+  return report;
+}
+
+export async function runAssetCleanup(request: AssetCleanupRequest): Promise<AssetCleanupResult & { deletedIds: string[] }> {
+  const report = getAssetCleanupReport();
+  const result: AssetCleanupResult & { deletedIds: string[] } = { deleted: 0, skipped: [], freedBytes: 0, deletedIds: [] };
+  const unused = new Set(report.unusedAssets.map((item) => item.id));
+  const orphans = new Set(report.orphanOriginals.map((item) => item.id));
+  const broken = new Set(report.brokenRecords.map((item) => item.id));
+  const stray = new Set(report.strayFiles.map((item) => item.fileName));
+
+  for (const id of request.assetIds) {
+    if (!unused.has(id)) {
+      result.skipped.push({ id, reason: "No longer unused" });
+      continue;
+    }
+    const removed = await deleteAsset(id);
+    result.deleted += removed.deletedIds.length;
+    result.deletedIds.push(...removed.deletedIds);
+    result.freedBytes += removed.freedBytes;
+  }
+  for (const id of request.originalIds) {
+    if (!orphans.has(id) || !readAssetRecords().some((asset) => asset.id === id)) {
+      result.skipped.push({ id, reason: "No longer an orphaned original" });
+      continue;
+    }
+    result.freedBytes += await removeAssetRecordAndFile(id);
+    result.deleted += 1;
+    result.deletedIds.push(id);
+  }
+  for (const id of request.brokenRecordIds) {
+    if (!broken.has(id)) {
+      result.skipped.push({ id, reason: "Record is no longer broken or is in use" });
+      continue;
+    }
+    writeAssetRecords(readAssetRecords().filter((asset) => asset.id !== id));
+    result.deleted += 1;
+    result.deletedIds.push(id);
+  }
+  for (const fileName of request.strayFiles) {
+    if (fileName !== path.basename(fileName) || !stray.has(fileName)) {
+      result.skipped.push({ id: fileName, reason: "Not a stray upload" });
+      continue;
+    }
+    const filePath = path.join(uploadsDir, fileName);
+    result.freedBytes += statFileSize(filePath) ?? 0;
+    await fsp.rm(filePath, { force: true });
+    result.deleted += 1;
+  }
+  return result;
 }
 
 export async function exportThemePackage(id: string): Promise<ThemeExportPackage> {

@@ -311,6 +311,13 @@ Important:
 
 That is why full app backup/import is cross-platform friendly.
 
+Asset management (`/admin/assets`):
+- every asset id reference is walked in one place (`themeAssetRefs` / `teamAssetRefs` in `storage.ts`): image layers, free image layers, layer background images, the concede/base/winner overlay backgrounds and both team logo slots
+- the library page shows where each asset is used, and supports rename (`displayName`), replace-in-place (same id), revert to the original upload and re-running background removal
+- deleting an asset that is still used is refused with `409` and the usage list; a forced delete clears those references first
+- "Clean up" lists unused assets, hidden originals left behind by background removal, stray files in `data/uploads/` and records whose file is missing; assets added in the last 24 hours start unticked because an unsaved theme may be about to use them
+- the theme editor and team panel pick images through the shared `AssetLibraryPicker`
+
 ## Persistent local files
 
 Main local state files:

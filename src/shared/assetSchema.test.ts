@@ -16,5 +16,8 @@ describe("assetSchema", () => {
     expect(parsed.hiddenFromPicker).toBe(false);
     expect(parsed.contentHash).toBeNull();
     expect(parsed.visibleContent).toBeNull();
+    expect(parsed.displayName).toBeNull();
+    expect(parsed.updatedAt).toBeNull();
+    expect(parsed.byteSize).toBeNull();
   });
 });

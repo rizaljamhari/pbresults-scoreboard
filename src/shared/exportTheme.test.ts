@@ -17,6 +17,9 @@ describe("createThemeExportPackage", () => {
           hiddenFromPicker: false,
           contentHash: null,
           visibleContent: null,
+          displayName: null,
+          updatedAt: null,
+          byteSize: null,
           createdAt: new Date().toISOString()
         },
         data: "data:image/png;base64,AAAA"

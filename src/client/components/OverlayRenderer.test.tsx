@@ -65,6 +65,9 @@ describe("visible-pixel image rendering", () => {
     sourceAssetId: null,
     hiddenFromPicker: false,
     contentHash: "logo-hash",
+    displayName: null,
+    updatedAt: null,
+    byteSize: null,
     visibleContent: {
       analyzerVersion: 1,
       status: "ready",

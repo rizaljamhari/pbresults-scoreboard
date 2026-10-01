@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   CircleAlert,
   CircleCheck,
+  Images,
   Monitor,
   MonitorPlay,
   Moon,
@@ -19,12 +20,19 @@ import {
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
-import { useLiveState, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
 import type { AppSettings } from "../../shared/theme";
 import { AppearanceContext, useAdminAppearance, type AppearancePreference } from "../appearance";
 import { formatClock } from "../../shared/normalize";
 import { liveSummary } from "./liveSummary";
 import { Dot, IconButton } from "./admin/kit";
+
+function outletKey(pathname: string) {
+  for (const prefix of ["/admin/teams", "/admin/assets"]) {
+    if (pathname.startsWith(prefix)) return prefix;
+  }
+  return pathname;
+}
 
 const APPEARANCE_OPTIONS: Array<{ value: AppearancePreference; label: string; icon: typeof Sun }> = [
   { value: "system", label: "Follow system", icon: Monitor },
@@ -49,6 +57,7 @@ export function AppShell() {
   const settings = useSettings();
   const themes = useThemes();
   const teams = useTeams();
+  const assets = useAssets();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const focusMode = /^\/admin\/themes\/[^/]+/.test(location.pathname);
 
@@ -81,6 +90,7 @@ export function AppShell() {
     { to: "/admin/operations", label: "Operations", icon: RadioTower, active: location.pathname === "/admin/operations" },
     { to: "/admin/themes", label: "Themes", icon: Palette, active: location.pathname.startsWith("/admin/themes"), count: themes.data?.length },
     { to: "/admin/teams", label: "Teams", icon: Shield, active: location.pathname.startsWith("/admin/teams"), count: teams.data?.length },
+    { to: "/admin/assets", label: "Assets", icon: Images, active: location.pathname.startsWith("/admin/assets"), count: assets.data?.length },
     { to: "/admin/settings", label: "Settings", icon: Settings2, active: location.pathname === "/admin/settings" }
   ];
 
@@ -140,8 +150,8 @@ export function AppShell() {
           </div>
         </aside>
         <main className="ad-main">
-          {/* Teams keeps one page while its side panel opens different teams, so the list and filters stay put. */}
-          <Outlet key={location.pathname.startsWith("/admin/teams") ? "/admin/teams" : location.pathname} />
+          {/* Teams and Assets keep one page while their side panel opens different records, so the list and filters stay put. */}
+          <Outlet key={outletKey(location.pathname)} />
         </main>
         <ToastViewport />
       </div>

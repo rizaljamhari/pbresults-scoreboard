@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
+import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextInput } from "./fields";
 
 export type EventKind = "concede" | "base" | "winner";
@@ -78,19 +79,14 @@ export function EventOverlayProperties({
         <ColorInput label="Background" value={settings.backgroundColor} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.backgroundColor = value))} />
         <Field label="Background image">
           <div className="te-asset-row">
-            <select
-              className="te-select"
-              aria-label="Background image"
-              value={settings.backgroundImageAssetId ?? ""}
-              onChange={(event) => patchEvent((draft) => (draft.backgroundImageAssetId = event.target.value || null))}
-            >
-              <option value="">None</option>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.originalName}
-                </option>
-              ))}
-            </select>
+            <AssetLibraryPicker
+              label="Background image"
+              value={settings.backgroundImageAssetId ?? null}
+              assets={assets}
+              onChange={(value) => patchEvent((draft) => (draft.backgroundImageAssetId = value))}
+              onUpload={onUpload}
+              triggerClassName="te-select"
+            />
             <label className="te-mini-btn" title="Upload an image">
               <Upload aria-hidden />
               <span>Upload</span>

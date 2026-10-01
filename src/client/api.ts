@@ -1,6 +1,11 @@
 import type {
   AppExportPackage,
   AppSettings,
+  AssetCleanupReport,
+  AssetCleanupRequest,
+  AssetCleanupResult,
+  AssetLibraryEntry,
+  AssetUsage,
   NormalizedLiveState,
   OperatorTextOverride,
   OperatorTextState,
@@ -25,6 +30,13 @@ export type UploadAssetResponse = {
   processing: UploadProcessingInfo;
 };
 
+export type DeleteAssetResponse = {
+  deletedIds: string[];
+  clearedThemeIds: string[];
+  clearedTeamIds: string[];
+  freedBytes: number;
+};
+
 export type UploadTeamLogoResponse = {
   team: TeamRecord;
   asset: StoredAsset;
@@ -44,6 +56,7 @@ export type ApiErrorPayload = {
   conflictTeamId?: string | null;
   conflictTeamName?: string | null;
   conflictType?: "reassignable" | "blocked" | null;
+  usages?: AssetUsage[];
 };
 
 export class ApiError extends Error {
@@ -227,6 +240,43 @@ export const api = {
       body: form
     }).then(handle<UploadAssetResponse>);
   },
+  getAssetLibrary: () => fetch("/api/assets/library").then(handle<AssetLibraryEntry[]>),
+  renameAsset: (id: string, displayName: string | null) =>
+    fetch(`/api/assets/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName })
+    }).then(handle<StoredAsset>),
+  replaceAssetFile: (id: string, file: File, removeBackground: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch(`/api/assets/${encodeURIComponent(id)}/file?removeBackground=${removeBackground}`, {
+      method: "PUT",
+      body: form
+    }).then(handle<UploadAssetResponse>);
+  },
+  revertAsset: (id: string) =>
+    fetch(`/api/assets/${encodeURIComponent(id)}/revert`, { method: "POST" }).then(handle<StoredAsset>),
+  reprocessAsset: (id: string) =>
+    fetch(`/api/assets/${encodeURIComponent(id)}/reprocess`, { method: "POST" }).then(handle<UploadAssetResponse>),
+  /** Rejects with an ApiError (status 409, payload.usages) when the asset is in use and not forced. */
+  deleteAsset: (id: string, force = false) =>
+    fetch(`/api/assets/${encodeURIComponent(id)}${force ? "?force=true" : ""}`, { method: "DELETE" }).then(
+      handle<DeleteAssetResponse>
+    ),
+  getAssetCleanupReport: () => fetch("/api/assets/cleanup").then(handle<AssetCleanupReport>),
+  runAssetCleanup: (request: AssetCleanupRequest) =>
+    fetch("/api/assets/cleanup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }).then(handle<AssetCleanupResult>),
+  linkTeamLogo: (teamId: string, assetId: string | null, slot: "primary" | "alternate") =>
+    fetch(`/api/teams/${teamId}/logo/asset`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assetId, slot })
+    }).then(handle<TeamRecord>),
   exportTheme: (id: string) => fetch(`/api/themes/${id}/export`).then(handle<ThemeExportPackage>),
   importTheme: (payload: ThemeExportPackage) =>
     fetch("/api/themes/import", {

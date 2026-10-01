@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
+import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
 import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
@@ -112,14 +113,7 @@ function AssetPicker({
   return (
     <Field label={label}>
       <div className="te-asset-row">
-        <select className="te-select" aria-label={label} value={value ?? ""} onChange={(event) => onChange(event.target.value || null)}>
-          <option value="">None</option>
-          {assets.map((asset) => (
-            <option key={asset.id} value={asset.id}>
-              {asset.originalName}
-            </option>
-          ))}
-        </select>
+        <AssetLibraryPicker label={label} value={value} assets={assets} onChange={onChange} onUpload={onUpload} triggerClassName="te-select" />
         {onUpload ? (
           <label className="te-mini-btn" title="Upload an image">
             <Upload aria-hidden />

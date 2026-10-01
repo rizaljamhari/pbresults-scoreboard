@@ -634,7 +634,77 @@ export const assetSchema = z.object({
   sourceAssetId: z.string().nullable().default(null),
   hiddenFromPicker: z.boolean().default(false),
   contentHash: z.string().nullable().default(null),
-  visibleContent: visibleContentAnalysisSchema.nullable().default(null)
+  visibleContent: visibleContentAnalysisSchema.nullable().default(null),
+  displayName: z.string().nullable().default(null),
+  updatedAt: z.string().nullable().default(null),
+  byteSize: z.number().int().min(0).nullable().default(null)
+});
+
+export const assetThemeUsageLocationSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("component"), key: z.enum(componentIds) }),
+  z.object({ type: z.literal("free"), id: z.string(), label: z.string() }),
+  z.object({ type: z.literal("surface"), key: z.string(), label: z.string() }),
+  z.object({ type: z.literal("eventOverlay"), which: z.enum(["concede", "base", "winner"]) })
+]);
+
+export const assetUsageSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("theme"),
+    themeId: z.string(),
+    themeName: z.string(),
+    builtin: z.boolean(),
+    published: z.boolean(),
+    location: assetThemeUsageLocationSchema
+  }),
+  z.object({
+    kind: z.literal("team"),
+    teamId: z.string(),
+    teamName: z.string(),
+    slot: z.enum(["primary", "alternate"])
+  })
+]);
+
+export const assetLibraryEntrySchema = assetSchema.extend({
+  usages: z.array(assetUsageSchema),
+  original: z
+    .object({
+      id: z.string(),
+      url: z.string(),
+      byteSize: z.number().int().min(0).nullable()
+    })
+    .nullable(),
+  backgroundRemoved: z.boolean(),
+  fileMissing: z.boolean()
+});
+
+const assetCleanupItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().nullable(),
+  byteSize: z.number().int().min(0).nullable(),
+  createdAt: z.string().nullable(),
+  recent: z.boolean()
+});
+
+export const assetCleanupReportSchema = z.object({
+  unusedAssets: z.array(assetCleanupItemSchema),
+  orphanOriginals: z.array(assetCleanupItemSchema),
+  strayFiles: z.array(z.object({ fileName: z.string(), byteSize: z.number().int().min(0) })),
+  brokenRecords: z.array(assetCleanupItemSchema),
+  reclaimableBytes: z.number().int().min(0)
+});
+
+export const assetCleanupRequestSchema = z.object({
+  assetIds: z.array(z.string()).default([]),
+  originalIds: z.array(z.string()).default([]),
+  strayFiles: z.array(z.string()).default([]),
+  brokenRecordIds: z.array(z.string()).default([])
+});
+
+export const assetCleanupResultSchema = z.object({
+  deleted: z.number().int().min(0),
+  skipped: z.array(z.object({ id: z.string(), reason: z.string() })),
+  freedBytes: z.number().int().min(0)
 });
 
 export const themeExportSchema = z.object({
@@ -684,6 +754,12 @@ export type ThemeDefinition = z.infer<typeof themeSchema>;
 export type AppSettings = z.infer<typeof settingsSchema>;
 export type NormalizedLiveState = z.infer<typeof normalizedLiveStateSchema>;
 export type StoredAsset = z.infer<typeof assetSchema>;
+export type AssetUsage = z.infer<typeof assetUsageSchema>;
+export type AssetThemeUsageLocation = z.infer<typeof assetThemeUsageLocationSchema>;
+export type AssetLibraryEntry = z.infer<typeof assetLibraryEntrySchema>;
+export type AssetCleanupReport = z.infer<typeof assetCleanupReportSchema>;
+export type AssetCleanupRequest = z.infer<typeof assetCleanupRequestSchema>;
+export type AssetCleanupResult = z.infer<typeof assetCleanupResultSchema>;
 export type VisibleContentAnalysis = z.infer<typeof visibleContentAnalysisSchema>;
 export type TeamRecord = z.infer<typeof teamRecordSchema>;
 export type TeamMatchResult = z.infer<typeof teamMatchResultSchema>;
