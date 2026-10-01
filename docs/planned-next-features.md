@@ -22,7 +22,7 @@ The onsite application remains the source of truth. Cloud services may add conve
 | --- | --- | --- | --- | --- |
 | 1 | Automatic updates from GitHub Releases | Very high | Medium | Implemented; Windows qualification pending |
 | 2 | Event-driven UI refresh | High | Medium | Implemented; Windows qualification pending |
-| 3 | Automatic local and cloud backups | Very high | Medium | Proposed |
+| 3 | Automatic local and cloud backups | Very high | Medium | Local phase implemented; S3 and Google Drive pending |
 | 4 | Temporary ngrok remote access | High | Medium | Planned; technical design complete |
 | 5 | Additional backup and remote-access providers | Medium | Medium | Proposed |
 
@@ -144,6 +144,19 @@ The runtime-version safety check now runs only as a serialized 60-second fallbac
 See [event-driven-ui-refresh-technical-plan.md](./event-driven-ui-refresh-technical-plan.md) for the detailed event contract, mutation coverage, client refresh coordinator, draft-safety behavior, rollout phases, and qualification matrix.
 
 ## Feature 3: automatic local and cloud backups
+
+### Local phase status
+
+Implemented:
+
+- Backup v2 (`version: 2`) with operations state, originating app version, reason, per-logo SHA-256 and size, and section checksums. Version 1 files still restore.
+- A transactional restore: full validation before anything changes, a `pre-restore` safety backup, staged logos, rollback of every document on a failed commit, and old logo deletion only after the commit.
+- Automatic backups when the server starts and stops, skipped when nothing changed since the last backup. Because this is a local server, start and stop are the schedule; there is no timer. The startup backup is the guaranteed one, since closing the Windows console window gives the stop backup only a few seconds.
+- `pre-import` backups before team registry imports, a manual **Back up now**, and retention of the newest 30 automatic backups by default (manual backups are never pruned).
+- `backups/scheduled/` next to the app, plus one optional extra folder such as a USB drive, configurable only from the onsite machine.
+- A restore preview with counts and warnings for stored backups and uploaded files.
+
+Remaining: the S3-compatible and Google Drive destinations, and Windows qualification of console-close (`SIGHUP`) behavior and USB paths.
 
 ### Outcome
 

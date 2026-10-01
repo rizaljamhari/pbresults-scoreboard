@@ -262,6 +262,7 @@ Mutation notifications use these event names:
 - `theme.published`
 - `assets.changed`
 - `teams.changed`
+- `backups.changed`
 
 Data-bearing real-time messages use:
 
@@ -616,28 +617,42 @@ Important:
 ### `GET /api/app/export`
 
 Returns:
-- `AppExportPackage`
+- `AppExportV2Package` with `reason: "export"`
 
 Shape:
 
 ```ts
-type AppExportPackage = {
-  version: 1;
+type AppExportV2Package = {
+  version: 2;
   exportedAt: string;
+  appVersion: string;
+  reason: "manual" | "startup" | "shutdown" | "pre-restore" | "pre-import" | "export";
   settings: AppSettings;
   themes: ThemeDefinition[];
   teams: TeamRecord[];
+  operations: OperationsState;
   assets: Array<{
     asset: StoredAsset;
     data: string; // data:<mime>;base64,...
+    sha256: string; // of the decoded bytes
+    size: number;
   }>;
-}
+  checksums: {
+    // sha256 of JSON.stringify(section), compared against the section exactly as it appears in the file
+    settings: string;
+    themes: string;
+    teams: string;
+    operations: string;
+  };
+};
 ```
+
+Version 1 packages (`version: 1`, no `appVersion`, `reason`, `operations`, per-asset checksums or `checksums`) are still accepted by every restore and inspect endpoint.
 
 ### `POST /api/app/import`
 
 Request body:
-- `AppExportPackage`
+- a version 1 or version 2 package
 
 Returns:
 
@@ -649,9 +664,95 @@ Returns:
 ```
 
 Effect:
-- replaces settings, themes, assets, and teams
-- rewrites uploaded files locally
-- reconfigures the poller
+- validates the whole package first: schema, section checksums, every logo's checksum and size, and safe file names; a failure returns `400` and changes nothing
+- saves a `pre-restore` backup; if that fails, returns `500` and changes nothing
+- stages logos, then replaces settings, themes, assets, teams and operations state as one transaction; a failure while committing puts back the previous documents and removes only files this restore added
+- deletes logos that are no longer referenced only after the commit
+- a version 1 package keeps the current team-resolution overrides and clears operator text
+- reconfigures the poller and publishes `settings.changed`, `themes.changed`, `assets.changed` and `teams.changed`
+
+## Backup endpoints
+
+Backups are version 2 packages written to `backups/scheduled/` next to the application as `<timestamp>-<reason>.pbbackup.json`. Each file is written as `.partial`, flushed, read back and validated before it is renamed, so a final-named file is always restorable.
+
+Automatic backups run when the server starts and when it stops, and are skipped when the stored data has not changed since the last successful backup. A `pre-restore` or `pre-import` backup runs before every restore and team import. Backups and restores run one at a time.
+
+Configuration and status live in `backups/backup-state.json`, which is machine-local and never part of a backup.
+
+```ts
+type BackupStatus = {
+  backupsDir: string;
+  extraFolder: string | null;
+  retainAutomatic: number; // newest automatic backups kept per folder; manual backups are never pruned
+  lastSuccess: BackupRunResult | null;
+  lastFailure: BackupRunResult | null;
+  busy: boolean;
+  backups: Array<{ file: string; reason: string; createdAt: string; sizeBytes: number; automatic: boolean }>;
+};
+
+type BackupRunResult = {
+  at: string;
+  reason: string;
+  durationMs: number;
+  sizeBytes: number | null;
+  file: string | null;
+  extraCopy: "ok" | "failed" | "skipped";
+  extraCopyError: string | null;
+  error: string | null;
+};
+
+type BackupPreview = {
+  version: 1 | 2;
+  appVersion: string | null;
+  createdAt: string;
+  reason: string | null;
+  counts: {
+    themes: number;
+    teams: number;
+    assets: number;
+    teamResolutionOverrides: number | null; // null for version 1
+    operatorTextOverrides: number | null;
+  };
+  totalAssetBytes: number;
+  warnings: string[];
+};
+```
+
+### `GET /api/backups`
+
+Returns:
+- `BackupStatus`
+
+### `POST /api/backups`
+
+Saves a `manual` backup. Returns `201` with `BackupStatus`. A failed copy to the extra folder is reported in `lastSuccess.extraCopy` and does not fail the request.
+
+### `POST /api/backups/inspect`
+
+Request body:
+- a version 1 or version 2 package
+
+Runs the full restore validation without changing anything. Returns `BackupPreview`, or `400` with a message naming the damaged part.
+
+### `POST /api/backups/:file/inspect`
+
+Same as above for a stored backup. Unknown or unsafe file names return `404`.
+
+### `POST /api/backups/:file/restore`
+
+Restores a stored backup with the same safety backup and transaction as `POST /api/app/import`. Returns `201` with `{ settings, themes }`.
+
+### `PUT /api/backups/config`
+
+Loopback requests only; other addresses receive `403`.
+
+Request body:
+
+```json
+{ "extraFolder": "E:\\Scoreboard backups", "retainAutomatic": 30 }
+```
+
+`extraFolder` is an absolute path or `null`. The folder must already exist and be writable (checked with a probe file). `retainAutomatic` is between 5 and 500. Returns `BackupStatus`.
 
 ## Team registry endpoints
 
@@ -683,6 +784,7 @@ Returns:
 - `TeamRecord[]`
 
 Effect:
+- saves a `pre-import` backup first; if that fails, returns `500` and changes nothing
 - merges imported teams by `id`
 - remaps imported logo asset ids
 - reconfigures the poller

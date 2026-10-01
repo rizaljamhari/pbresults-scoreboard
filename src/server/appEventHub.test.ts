@@ -23,7 +23,7 @@ describe("AppEventHub", () => {
     const snapshot = hub.getSnapshot(runtime);
 
     expect(published).toMatchObject({ sequence: 1, revision: 1, resourceIds: ["theme-1"] });
-    expect(snapshot.revisions).toEqual({ settings: 1, themes: 0, assets: 0, teams: 0 });
+    expect(snapshot.revisions).toEqual({ settings: 1, themes: 0, assets: 0, teams: 0, backups: 0 });
     expect(formatAppEventFrame(snapshot, 2000)).toContain("event: system.snapshot");
   });
 
@@ -62,7 +62,7 @@ describe("AppEventHub", () => {
 
     expect(live).toMatchObject({ type: "live.state", sequence: 1 });
     expect(operator).toMatchObject({ type: "operator-text.state", sequence: 2 });
-    expect(snapshot.revisions).toEqual({ settings: 0, themes: 0, assets: 0, teams: 0 });
+    expect(snapshot.revisions).toEqual({ settings: 0, themes: 0, assets: 0, teams: 0, backups: 0 });
     expect(frames[0]).toContain("event: live.state");
     expect(frames[1]).toContain("event: operator-text.state");
   });

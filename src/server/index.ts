@@ -24,7 +24,6 @@ import {
   getSettings,
   getTheme,
   getTeamRecord,
-  importAppPackage,
   importTeamRegistryPackage,
   importThemePackage,
   listTeamRecords,
@@ -40,7 +39,7 @@ import {
   createThemeFromClone,
   clearTeamResolutionOverride
 } from "./storage.js";
-import { appExportSchema, settingsSchema, teamRecordSchema, teamRegistryExportSchema, themeExportSchema, themeSchema } from "../shared/theme.js";
+import { settingsSchema, teamRecordSchema, teamRegistryExportSchema, themeExportSchema, themeSchema } from "../shared/theme.js";
 import {
   updateDownloadRequestSchema,
   updateInstallRequestSchema,
@@ -54,6 +53,7 @@ import { UpdateFailure, updateService } from "./updateService.js";
 import { AppEventHub } from "./appEventHub.js";
 import { registerAppEventRoutes } from "./appEventRoutes.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
+import { BackupFailure, backupService } from "./backupService.js";
 
 const app = Fastify({
   logger: true,
@@ -75,6 +75,7 @@ const unsubscribeLiveEventBridge = livePoller.subscribe(({ normalized }) => {
 const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state) => {
   appEventHub.publishOperatorTextState(state);
 });
+backupService.onChange(() => appEventHub.publish("backups.changed"));
 let shuttingDown = false;
 let visibleContentBackfillRunning = false;
 let visibleContentBackfillRequested = false;
@@ -126,6 +127,7 @@ async function gracefulShutdown() {
   unsubscribeLiveEventBridge();
   unsubscribeOperatorTextEventBridge();
   livePoller.stop();
+  await runShutdownBackup();
   appEventHub.close();
   for (const stream of openStreams) {
     if (!stream.destroyed) {
@@ -134,6 +136,43 @@ async function gracefulShutdown() {
     }
   }
   await app.close();
+}
+
+const shutdownBackupTimeoutMs = 3000;
+
+/** Best effort: a closing console window gives the process only a few seconds, and the next startup backs up anyway. */
+async function runShutdownBackup() {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), shutdownBackupTimeoutMs);
+  });
+  try {
+    const outcome = await Promise.race([backupService.createBackup("shutdown", { skipIfUnchanged: true }), timeout]);
+    if (outcome === "timeout") {
+      app.log.warn("Shutdown backup did not finish in time");
+    }
+  } catch (error) {
+    app.log.warn({ error }, "Shutdown backup failed");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sendBackupFailure(reply: FastifyReply, error: unknown) {
+  if (error instanceof BackupFailure) {
+    return reply.code(error.statusCode).send({ message: error.message });
+  }
+  return reply.code(400).send({ message: error instanceof Error ? error.message : "Backup operation failed" });
+}
+
+function publishFullRestore() {
+  livePoller.reconfigure();
+  operatorTextRuntime.emitCurrent();
+  appEventHub.publish("settings.changed");
+  appEventHub.publish("themes.changed");
+  appEventHub.publish("assets.changed");
+  appEventHub.publish("teams.changed");
+  scheduleVisibleContentBackfill();
 }
 
 function requireLocalUpdateRequest(request: Parameters<typeof isLoopbackRequest>[0], reply: FastifyReply) {
@@ -399,21 +438,69 @@ app.delete("/api/operations/resolve/:side", async (request, reply) => {
 });
 app.get("/api/app/export", async () => exportAppPackage());
 app.post("/api/app/import", async (request, reply) => {
-  const pkg = appExportSchema.parse(request.body);
-  const restored = await importAppPackage(pkg);
-  livePoller.reconfigure();
-  operatorTextRuntime.emitCurrent();
-  appEventHub.publish("settings.changed");
-  appEventHub.publish("themes.changed");
-  appEventHub.publish("assets.changed");
-  appEventHub.publish("teams.changed");
-  scheduleVisibleContentBackfill();
-  return reply.code(201).send(restored);
+  try {
+    const restored = await backupService.restorePackage(request.body);
+    publishFullRestore();
+    return reply.code(201).send(restored);
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
+});
+app.get("/api/backups", async () => backupService.getStatus());
+app.post("/api/backups", async (_request, reply) => {
+  try {
+    await backupService.createBackup("manual");
+    return reply.code(201).send(backupService.getStatus());
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
+});
+app.post("/api/backups/inspect", async (request, reply) => {
+  try {
+    return backupService.inspectPackage(request.body);
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
+});
+app.post("/api/backups/:file/inspect", async (request, reply) => {
+  try {
+    return await backupService.inspectFile((request.params as { file: string }).file);
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
+});
+app.post("/api/backups/:file/restore", async (request, reply) => {
+  try {
+    const restored = await backupService.restoreFile((request.params as { file: string }).file);
+    publishFullRestore();
+    return reply.code(201).send(restored);
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
+});
+app.put("/api/backups/config", async (request, reply) => {
+  if (!isLoopbackRequest(request)) {
+    return reply.code(403).send({ message: "Backup folders can be changed only from the scoreboard computer." });
+  }
+  const body = (request.body as { extraFolder?: unknown; retainAutomatic?: unknown } | undefined) ?? {};
+  try {
+    return backupService.updateConfig({
+      extraFolder: typeof body.extraFolder === "string" ? body.extraFolder : null,
+      retainAutomatic: typeof body.retainAutomatic === "number" ? body.retainAutomatic : NaN
+    });
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
 });
 app.get("/api/teams/export", async () => exportTeamRegistryPackage());
 app.post("/api/teams/import", async (request, reply) => {
   const pkg = teamRegistryExportSchema.parse(request.body);
-  const restored = await importTeamRegistryPackage(pkg);
+  let restored;
+  try {
+    restored = await backupService.runAfterSafetyBackup(() => importTeamRegistryPackage(pkg));
+  } catch (error) {
+    return sendBackupFailure(reply, error);
+  }
   livePoller.reconfigure();
   appEventHub.publish("teams.changed");
   appEventHub.publish("assets.changed");
@@ -560,9 +647,14 @@ if (fs.existsSync(clientRoot)) {
 }
 
 updateService.configureLifecycle({ port, shutdown: gracefulShutdown });
+backupService.cleanupInterrupted();
 await app.listen({ port, host: "0.0.0.0" });
+void backupService.createBackup("startup", { skipIfUnchanged: true }).catch((error) => {
+  app.log.warn({ error }, "Startup backup failed");
+});
 scheduleVisibleContentBackfill();
 updateService.startAutomaticChecks();
 
 process.on("SIGINT", () => void gracefulShutdown());
 process.on("SIGTERM", () => void gracefulShutdown());
+process.on("SIGHUP", () => void gracefulShutdown());

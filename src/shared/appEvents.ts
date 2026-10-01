@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { normalizedLiveStateSchema, operatorTextStateSchema } from "./theme.js";
 
-export const appResourceDomains = ["settings", "themes", "assets", "teams"] as const;
+export const appResourceDomains = ["settings", "themes", "assets", "teams", "backups"] as const;
 export type AppResourceDomain = (typeof appResourceDomains)[number];
 
 export const appChangedEventTypes = [
@@ -9,7 +9,8 @@ export const appChangedEventTypes = [
   "themes.changed",
   "theme.published",
   "assets.changed",
-  "teams.changed"
+  "teams.changed",
+  "backups.changed"
 ] as const;
 export type AppChangedEventType = (typeof appChangedEventTypes)[number];
 
@@ -21,14 +22,16 @@ export const appEventTypeToDomain: Record<AppChangedEventType, AppResourceDomain
   "themes.changed": "themes",
   "theme.published": "settings",
   "assets.changed": "assets",
-  "teams.changed": "teams"
+  "teams.changed": "teams",
+  "backups.changed": "backups"
 };
 
 export const appResourceRevisionsSchema = z.object({
   settings: z.number().int().nonnegative(),
   themes: z.number().int().nonnegative(),
   assets: z.number().int().nonnegative(),
-  teams: z.number().int().nonnegative()
+  teams: z.number().int().nonnegative(),
+  backups: z.number().int().nonnegative().default(0)
 });
 
 const appEventCommonSchema = z.object({
@@ -59,7 +62,8 @@ export const appChangedEventSchema = z.discriminatedUnion("type", [
   appEventCommonSchema.extend({ type: z.literal("themes.changed"), ...changedEventFields }),
   appEventCommonSchema.extend({ type: z.literal("theme.published"), ...changedEventFields }),
   appEventCommonSchema.extend({ type: z.literal("assets.changed"), ...changedEventFields }),
-  appEventCommonSchema.extend({ type: z.literal("teams.changed"), ...changedEventFields })
+  appEventCommonSchema.extend({ type: z.literal("teams.changed"), ...changedEventFields }),
+  appEventCommonSchema.extend({ type: z.literal("backups.changed"), ...changedEventFields })
 ]);
 
 export const appRealtimeEventSchema = z.discriminatedUnion("type", [
@@ -90,7 +94,8 @@ export const initialAppResourceRevisions: AppResourceRevisions = {
   settings: 0,
   themes: 0,
   assets: 0,
-  teams: 0
+  teams: 0,
+  backups: 0
 };
 
 export function parseAppEventMessage(eventType: string, data: string): AppEvent | null {

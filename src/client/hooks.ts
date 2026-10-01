@@ -137,6 +137,10 @@ export function useUpdateStatus() {
   return { data, error, setData };
 }
 
+export function useBackups() {
+  return useResource(api.getBackups, [], { domain: "backups", refreshOnEvents: true });
+}
+
 export function useTeams() {
   return useResource(api.getTeams, [], { domain: "teams", refreshOnEvents: true });
 }

@@ -733,6 +733,39 @@ export const appExportSchema = z.object({
   )
 });
 
+export const backupReasons = ["manual", "startup", "shutdown", "pre-restore", "pre-import", "export"] as const;
+export type BackupReason = (typeof backupReasons)[number];
+
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+
+/** Backup v2: v1 plus operations state, the originating version and per-entry checksums. */
+export const appExportV2Schema = z.object({
+  version: z.literal(2),
+  exportedAt: z.string(),
+  appVersion: z.string(),
+  reason: z.enum(backupReasons),
+  settings: settingsSchema,
+  themes: z.array(themeSchema),
+  teams: z.array(teamRecordSchema),
+  operations: operationsStateSchema,
+  assets: z.array(
+    z.object({
+      asset: assetSchema,
+      data: z.string(),
+      sha256: sha256Schema,
+      size: z.number().int().nonnegative()
+    })
+  ),
+  checksums: z.object({
+    settings: sha256Schema,
+    themes: sha256Schema,
+    teams: sha256Schema,
+    operations: sha256Schema
+  })
+});
+
+export const anyAppExportSchema = z.discriminatedUnion("version", [appExportSchema, appExportV2Schema]);
+
 export const teamRegistryExportSchema = z.object({
   version: z.literal(1),
   exportedAt: z.string(),
@@ -770,6 +803,8 @@ export type OperatorTextState = z.infer<typeof operatorTextStateSchema>;
 export type OperationsState = z.infer<typeof operationsStateSchema>;
 export type ThemeExportPackage = z.infer<typeof themeExportSchema>;
 export type AppExportPackage = z.infer<typeof appExportSchema>;
+export type AppExportV2Package = z.infer<typeof appExportV2Schema>;
+export type AnyAppExportPackage = z.infer<typeof anyAppExportSchema>;
 export type TeamRegistryExportPackage = z.infer<typeof teamRegistryExportSchema>;
 
 export const defaultSettings: AppSettings = {

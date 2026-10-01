@@ -30,6 +30,7 @@ describe("app event contracts", () => {
     });
 
     expect(parsed.revisions.assets).toBe(3);
+    expect(parsed.revisions.backups).toBe(0);
     expect(parsed.liveState?.sourceStatus).toBe("idle");
     expect(parsed.operatorTextState).toEqual(operatorTextState);
     expect(appEventSchema.parse(parsed)).toEqual(parsed);
@@ -51,7 +52,8 @@ describe("app event contracts", () => {
     ["themes.changed", "themes"],
     ["theme.published", "settings"],
     ["assets.changed", "assets"],
-    ["teams.changed", "teams"]
+    ["teams.changed", "teams"],
+    ["backups.changed", "backups"]
   ] as const)("maps %s to the %s revision domain", (type, domain) => {
     const parsed = appChangedEventSchema.parse({ ...common, type, revision: 1, resourceIds: ["resource-1"] });
     expect(appEventTypeToDomain[parsed.type]).toBe(domain);

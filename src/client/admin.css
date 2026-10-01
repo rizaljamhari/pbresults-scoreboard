@@ -1236,6 +1236,10 @@
   text-align: right;
 }
 
+.ad-backup-table tbody tr {
+  cursor: default;
+}
+
 .ad-faint {
   color: var(--ad-faint);
 }

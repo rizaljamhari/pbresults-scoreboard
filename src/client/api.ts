@@ -1,5 +1,5 @@
 import type {
-  AppExportPackage,
+  AppExportV2Package,
   AppSettings,
   AssetCleanupReport,
   AssetCleanupRequest,
@@ -19,6 +19,7 @@ import type {
   ThemeExportPackage
 } from "../shared/theme";
 import type { UpdateStatus } from "../shared/update";
+import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/backup";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -133,13 +134,33 @@ export const api = {
     fetch(`/api/operations/resolve/${side}?rawInputName=${encodeURIComponent(rawInputName)}`, {
       method: "DELETE"
     }).then(handle<void>),
-  exportApp: () => fetch("/api/app/export").then(handle<AppExportPackage>),
-  importApp: (payload: AppExportPackage) =>
+  exportApp: () => fetch("/api/app/export").then(handle<AppExportV2Package>),
+  importApp: (payload: unknown) =>
     fetch("/api/app/import", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload)
     }).then(handle<{ settings: AppSettings; themes: ThemeDefinition[] }>),
+  getBackups: () => fetch("/api/backups").then(handle<BackupStatus>),
+  createBackup: () => fetch("/api/backups", { method: "POST" }).then(handle<BackupStatus>),
+  inspectBackupPackage: (payload: unknown) =>
+    fetch("/api/backups/inspect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(handle<BackupPreview>),
+  inspectBackupFile: (file: string) =>
+    fetch(`/api/backups/${encodeURIComponent(file)}/inspect`, { method: "POST" }).then(handle<BackupPreview>),
+  restoreBackupFile: (file: string) =>
+    fetch(`/api/backups/${encodeURIComponent(file)}/restore`, { method: "POST" }).then(
+      handle<{ settings: AppSettings; themes: ThemeDefinition[] }>
+    ),
+  updateBackupConfig: (config: BackupConfigInput) =>
+    fetch("/api/backups/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(config)
+    }).then(handle<BackupStatus>),
   exportTeams: () => fetch("/api/teams/export").then(handle<TeamRegistryExportPackage>),
   importTeams: (payload: TeamRegistryExportPackage) =>
     fetch("/api/teams/import", {

@@ -2,10 +2,11 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import mime from "mime-types";
 import {
-  appExportSchema,
+  anyAppExportSchema,
+  appExportV2Schema,
   assetSchema,
   createThemeId,
   operationsStateSchema,
@@ -18,7 +19,8 @@ import {
   teamResolutionOverrideSchema,
   themeExportSchema,
   themeSchema,
-  type AppExportPackage,
+  type AnyAppExportPackage,
+  type AppExportV2Package,
   type AppSettings,
   type AssetCleanupReport,
   type AssetCleanupRequest,
@@ -26,6 +28,7 @@ import {
   type AssetLibraryEntry,
   type AssetThemeUsageLocation,
   type AssetUsage,
+  type BackupReason,
   type OperationsState,
   type OperatorTextOverride,
   type OperatorTextState,
@@ -43,7 +46,9 @@ import { defaultSettings } from "../shared/theme.js";
 import { listExplicitTeamMatchNames, matchTeamName, normalizeTeamName } from "../shared/teamMatching.js";
 import { listOperatorTextComponents } from "../shared/themeComponents.js";
 import { analyzeVisibleContent, removeImageBackground } from "./imageProcessing.js";
-import { dataDir, uploadsDir } from "./runtimePaths.js";
+import type { BackupPreview } from "../shared/backup.js";
+import { runtimeBuild } from "./buildInfo.js";
+import { dataDir, isPathInside, uploadsDir } from "./runtimePaths.js";
 const settingsPath = path.join(dataDir, "settings.json");
 const themesPath = path.join(dataDir, "themes.json");
 const assetsPath = path.join(dataDir, "assets.json");
@@ -415,8 +420,19 @@ function readJson<T>(filePath: string, fallback: T): T {
 }
 
 function writeJson(filePath: string, value: unknown) {
+  writeFileDurably(filePath, JSON.stringify(value, null, 2));
+}
+
+/** Write through a flushed temp file and rename, so a crash leaves either the old or the new content. */
+function writeFileDurably(filePath: string, content: string) {
   const tempPath = `${filePath}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
+  const fd = fs.openSync(tempPath, "w");
+  try {
+    fs.writeFileSync(fd, content);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   fs.renameSync(tempPath, filePath);
 }
 
@@ -1604,28 +1620,90 @@ export async function importThemePackage(pkg: ThemeExportPackage): Promise<Theme
   return saveTheme(theme);
 }
 
-export async function exportAppPackage(): Promise<AppExportPackage> {
+function sectionChecksum(value: unknown): string {
+  return computeContentHash(Buffer.from(JSON.stringify(value) ?? "null", "utf8"));
+}
+
+function resolveStoredAssetPath(asset: StoredAssetRecord): string {
+  if (asset.filePath && fs.existsSync(asset.filePath)) {
+    return asset.filePath;
+  }
+  return path.join(uploadsDir, path.basename(asset.url));
+}
+
+export type AppPackageBuildResult = {
+  pkg: AppExportV2Package;
+  missingAssetIds: string[];
+};
+
+/** Build a v2 package. The JSON documents are read together, before any asset file, so the sections agree with each other. */
+export async function buildAppPackage(reason: BackupReason, exportedAt = new Date().toISOString()): Promise<AppPackageBuildResult> {
   const settings = getSettings();
   const themes = listThemes();
   const teams = listTeamRecords();
-  const assets = await Promise.all(
-    readJson<StoredAssetRecord[]>(assetsPath, []).map(async (asset) => {
-      const file = await fsp.readFile(asset.filePath);
-      return {
-        asset: assetSchema.parse(asset),
-        data: `data:${asset.mimeType};base64,${file.toString("base64")}`
-      };
-    })
-  );
+  const operations = getOperationsState();
+  const assetRecords = readJson<StoredAssetRecord[]>(assetsPath, []);
+  const missingAssetIds: string[] = [];
+  const assets: AppExportV2Package["assets"] = [];
 
-  return appExportSchema.parse({
-    version: 1,
-    exportedAt: new Date().toISOString(),
+  for (const asset of assetRecords) {
+    let file: Buffer;
+    try {
+      file = await fsp.readFile(resolveStoredAssetPath(asset));
+    } catch {
+      missingAssetIds.push(asset.id);
+      continue;
+    }
+    assets.push({
+      asset: assetSchema.parse(asset),
+      data: `data:${asset.mimeType};base64,${file.toString("base64")}`,
+      sha256: computeContentHash(file),
+      size: file.length
+    });
+  }
+
+  const pkg = appExportV2Schema.parse({
+    version: 2,
+    exportedAt,
+    appVersion: runtimeBuild.info.appVersion,
+    reason,
     settings,
     themes,
     teams,
-    assets
+    operations,
+    assets,
+    checksums: {
+      settings: sectionChecksum(settings),
+      themes: sectionChecksum(themes),
+      teams: sectionChecksum(teams),
+      operations: sectionChecksum(operations)
+    }
   });
+  return { pkg, missingAssetIds };
+}
+
+export async function exportAppPackage(reason: BackupReason = "export"): Promise<AppExportV2Package> {
+  return (await buildAppPackage(reason)).pkg;
+}
+
+/** A cheap identity of the stored data, used to skip automatic backups when nothing changed. */
+export function computeDataFingerprint(): string {
+  const hash = createHash("sha256");
+  for (const filePath of [settingsPath, themesPath, assetsPath, teamsPath, operationsPath]) {
+    hash.update(path.basename(filePath));
+    hash.update("\0");
+    hash.update(fs.existsSync(filePath) ? fs.readFileSync(filePath) : Buffer.alloc(0));
+    hash.update("\0");
+  }
+  const uploads = fs.existsSync(uploadsDir)
+    ? fs
+        .readdirSync(uploadsDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
+        .map((entry) => `${entry.name}:${fs.statSync(path.join(uploadsDir, entry.name)).size}`)
+        .sort()
+    : [];
+  hash.update(uploads.join("\n"));
+  return hash.digest("hex");
 }
 
 export async function exportTeamRegistryPackage(): Promise<TeamRegistryExportPackage> {
@@ -1650,49 +1728,242 @@ export async function exportTeamRegistryPackage(): Promise<TeamRegistryExportPac
   });
 }
 
-export async function importAppPackage(pkg: AppExportPackage): Promise<{ settings: AppSettings; themes: ThemeDefinition[] }> {
-  const parsed = appExportSchema.parse(pkg);
-  const existingAssets = readJson<StoredAssetRecord[]>(assetsPath, []);
+type DecodedAsset = {
+  asset: StoredAsset;
+  fileName: string;
+  buffer: Buffer;
+};
 
-  await Promise.all(
-    existingAssets.map(async (asset) => {
-      try {
-        await fsp.unlink(asset.filePath);
-      } catch {
-        // Ignore cleanup errors for missing files.
+export type ValidatedAppPackage = {
+  pkg: AnyAppExportPackage;
+  assets: DecodedAsset[];
+  preview: BackupPreview;
+};
+
+const safeUploadNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function decodeDataUrl(data: string, label: string): Buffer {
+  const match = /^data:[^,;]*;base64,([A-Za-z0-9+/]*={0,2})$/.exec(data);
+  if (!match) {
+    throw new Error(`${label} is not valid base64 image data.`);
+  }
+  const buffer = Buffer.from(match[1], "base64");
+  if (buffer.toString("base64") !== match[1]) {
+    throw new Error(`${label} is not valid base64 image data.`);
+  }
+  return buffer;
+}
+
+function sectionOf(raw: unknown, key: string): unknown {
+  return raw && typeof raw === "object" ? (raw as Record<string, unknown>)[key] : undefined;
+}
+
+/**
+ * Fully check a backup without touching live data: schema, every checksum, every asset decode and the references
+ * between themes, teams and assets. Throws on anything that would make a restore unsafe; returns warnings otherwise.
+ */
+export function validateAppPackage(raw: unknown): ValidatedAppPackage {
+  const parsed = anyAppExportSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new Error(`This file is not a scoreboard backup (${issue?.path.join(".") || "root"}: ${issue?.message ?? "invalid"}).`);
+  }
+  const pkg = parsed.data;
+  const warnings: string[] = [];
+
+  if (pkg.version === 2) {
+    for (const key of ["settings", "themes", "teams", "operations"] as const) {
+      if (sectionChecksum(sectionOf(raw, key)) !== pkg.checksums[key]) {
+        throw new Error(`The backup's ${key} section is damaged (checksum mismatch).`);
       }
-    })
-  );
-
-  const restoredAssets: StoredAssetRecord[] = [];
-  for (const item of parsed.assets) {
-    const fileName = path.basename(item.asset.url);
-    const filePath = path.join(uploadsDir, fileName);
-    const [, base64] = item.data.split(",", 2);
-    await fsp.writeFile(filePath, Buffer.from(base64, "base64"));
-    restoredAssets.push({
-      ...item.asset,
-      filePath
-    });
+    }
   }
 
-  const restoredThemes = withBuiltinThemes(parsed.themes.map((theme) => themeSchema.parse(theme)));
-  const restoredTeams = parsed.teams.map((team) => teamRecordSchema.parse(team));
-  const publishedThemeExists = restoredThemes.some((theme) => theme.id === parsed.settings.publishedThemeId);
-  const fallbackThemeId = resolvePrimaryThemeId(restoredThemes);
-  const restoredSettings = settingsSchema.parse({
-    ...parsed.settings,
-    publishedThemeId: publishedThemeExists ? parsed.settings.publishedThemeId : fallbackThemeId
-  });
+  const assets: DecodedAsset[] = [];
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const item of pkg.assets) {
+    const label = `Logo "${item.asset.originalName}"`;
+    const fileName = path.basename(item.asset.url);
+    if (!safeUploadNamePattern.test(fileName) || seenNames.has(fileName) || seenIds.has(item.asset.id)) {
+      throw new Error(`${label} has an unsafe or duplicate file name.`);
+    }
+    seenIds.add(item.asset.id);
+    seenNames.add(fileName);
+    const buffer = decodeDataUrl(item.data, label);
+    if ("sha256" in item && (buffer.length !== item.size || computeContentHash(buffer) !== item.sha256)) {
+      throw new Error(`${label} is damaged (checksum mismatch).`);
+    }
+    assets.push({ asset: item.asset, fileName, buffer });
+  }
 
-  writeJson(settingsPath, restoredSettings);
-  writeJson(themesPath, restoredThemes);
-  writeJson(assetsPath, restoredAssets);
-  writeJson(teamsPath, restoredTeams);
-  writeOperationsState({
-    ...getOperationsState(),
-    operatorTextOverrides: []
+  const missingReferences = new Set<string>();
+  for (const theme of pkg.themes) {
+    for (const assetId of collectThemeAssetIds(theme)) {
+      if (!seenIds.has(assetId)) missingReferences.add(assetId);
+    }
+  }
+  for (const assetId of collectTeamAssetIds(pkg.teams)) {
+    if (!seenIds.has(assetId)) missingReferences.add(assetId);
+  }
+  if (missingReferences.size > 0) {
+    warnings.push(`${missingReferences.size} image reference(s) point to logos that are not in the backup; they will show empty.`);
+  }
+  if (pkg.settings.publishedThemeId && !pkg.themes.some((theme) => theme.id === pkg.settings.publishedThemeId)) {
+    warnings.push("The published theme is not in the backup; a built-in theme will be published instead.");
+  }
+  if (pkg.version === 1) {
+    warnings.push("This is an older backup without operations state; current team-resolution overrides are kept and operator text is reset.");
+  } else if (pkg.appVersion !== runtimeBuild.info.appVersion) {
+    warnings.push(`Created by version ${pkg.appVersion}; this is version ${runtimeBuild.info.appVersion}.`);
+  }
+
+  return {
+    pkg,
+    assets,
+    preview: {
+      version: pkg.version,
+      appVersion: pkg.version === 2 ? pkg.appVersion : null,
+      createdAt: pkg.exportedAt,
+      reason: pkg.version === 2 ? pkg.reason : null,
+      counts: {
+        themes: pkg.themes.length,
+        teams: pkg.teams.length,
+        assets: pkg.assets.length,
+        teamResolutionOverrides: pkg.version === 2 ? pkg.operations.overrides.length : null,
+        operatorTextOverrides: pkg.version === 2 ? pkg.operations.operatorTextOverrides.length : null
+      },
+      totalAssetBytes: assets.reduce((total, item) => total + item.buffer.length, 0),
+      warnings
+    }
+  };
+}
+
+type RestoreFaultPoint = "staged" | "files-committed" | "documents-partial";
+let restoreFaultInjector: ((point: RestoreFaultPoint) => void) | null = null;
+
+/** Test hook: throw at a named point of the restore transaction. */
+export function setRestoreFaultInjectorForTests(injector: typeof restoreFaultInjector) {
+  restoreFaultInjector = injector;
+}
+
+function readFileOrNull(filePath: string): string | null {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null;
+}
+
+function restoreFileContent(filePath: string, content: string | null) {
+  if (content === null) {
+    fs.rmSync(filePath, { force: true });
+  } else {
+    writeFileDurably(filePath, content);
+  }
+}
+
+/** Remove staging folders left behind by a restore that was interrupted by a crash or power loss. */
+export function cleanupInterruptedRestores() {
+  if (!fs.existsSync(uploadsDir)) return;
+  for (const entry of fs.readdirSync(uploadsDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith(".restore-")) {
+      fs.rmSync(path.join(uploadsDir, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Restore a v1 or v2 package as one transaction. Nothing live changes until the whole package has validated and
+ * every logo is staged; a failure while committing puts back the previous documents and removes only the files this
+ * restore added. Old logos are deleted only after the commit.
+ */
+export async function importAppPackage(raw: unknown): Promise<{ settings: AppSettings; themes: ThemeDefinition[] }> {
+  const { pkg, assets } = validateAppPackage(raw);
+
+  const restoredThemes = withBuiltinThemes(pkg.themes.map((theme) => themeSchema.parse(theme)));
+  const restoredThemeIds = new Set(restoredThemes.map((theme) => theme.id));
+  const restoredTeams = pkg.teams.map((team) => teamRecordSchema.parse(team));
+  const publishedThemeExists = restoredThemes.some((theme) => theme.id === pkg.settings.publishedThemeId);
+  const restoredSettings = settingsSchema.parse({
+    ...pkg.settings,
+    publishedThemeId: publishedThemeExists ? pkg.settings.publishedThemeId : resolvePrimaryThemeId(restoredThemes)
   });
+  const restoredOperations: OperationsState =
+    pkg.version === 2
+      ? {
+          ...pkg.operations,
+          operatorTextOverrides: pkg.operations.operatorTextOverrides.filter((override) => restoredThemeIds.has(override.themeId))
+        }
+      : { ...getOperationsState(), operatorTextOverrides: [] };
+  const restoredAssets: StoredAssetRecord[] = assets.map((item) => ({
+    ...item.asset,
+    filePath: path.join(uploadsDir, item.fileName)
+  }));
+
+  const documentPaths = [settingsPath, themesPath, assetsPath, teamsPath, operationsPath];
+  const previousDocuments = new Map(documentPaths.map((filePath) => [filePath, readFileOrNull(filePath)]));
+  const previousAssets = readJson<StoredAssetRecord[]>(assetsPath, []);
+  const stagingDir = path.join(uploadsDir, `.restore-${randomUUID()}`);
+  const displacedDir = path.join(stagingDir, ".displaced");
+  const addedFiles: string[] = [];
+  const displacedFiles: Array<{ from: string; to: string }> = [];
+
+  try {
+    await fsp.mkdir(displacedDir, { recursive: true });
+    for (const item of assets) {
+      await fsp.writeFile(path.join(stagingDir, item.fileName), item.buffer);
+    }
+    restoreFaultInjector?.("staged");
+
+    for (const item of assets) {
+      const staged = path.join(stagingDir, item.fileName);
+      const target = path.join(uploadsDir, item.fileName);
+      if (fs.existsSync(target)) {
+        if (computeContentHash(await fsp.readFile(target)) === computeContentHash(item.buffer)) {
+          continue;
+        }
+        const displaced = path.join(displacedDir, item.fileName);
+        await fsp.rename(target, displaced);
+        displacedFiles.push({ from: displaced, to: target });
+      }
+      await fsp.rename(staged, target);
+      addedFiles.push(target);
+    }
+    restoreFaultInjector?.("files-committed");
+
+    writeJson(settingsPath, restoredSettings);
+    writeJson(themesPath, restoredThemes);
+    restoreFaultInjector?.("documents-partial");
+    writeJson(assetsPath, restoredAssets);
+    writeJson(teamsPath, restoredTeams);
+    writeOperationsState(restoredOperations);
+  } catch (error) {
+    for (const [filePath, content] of previousDocuments) {
+      try {
+        restoreFileContent(filePath, content);
+      } catch {
+        // Keep putting back the remaining documents.
+      }
+    }
+    for (const filePath of addedFiles) {
+      await fsp.rm(filePath, { force: true }).catch(() => undefined);
+    }
+    for (const displaced of displacedFiles) {
+      await fsp.rename(displaced.from, displaced.to).catch(() => undefined);
+    }
+    await fsp.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+
+  const keptFiles = new Set(restoredAssets.map((asset) => path.resolve(asset.filePath)));
+  for (const asset of previousAssets) {
+    const filePath = path.resolve(resolveStoredAssetPath(asset));
+    if (!keptFiles.has(filePath) && isPathInside(uploadsDir, filePath)) {
+      await fsp.rm(filePath, { force: true }).catch(() => undefined);
+    }
+  }
+  await fsp.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+
+  for (const theme of restoredThemes) {
+    pruneOperatorTextOverridesForTheme(theme);
+  }
 
   return {
     settings: restoredSettings,

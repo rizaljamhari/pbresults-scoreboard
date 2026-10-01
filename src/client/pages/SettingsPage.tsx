@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, TriangleAlert, Upload } from "lucide-react";
+import { Check, TriangleAlert } from "lucide-react";
 import { api } from "../api";
 import { useSettings, useThemes, useUpdateStatus } from "../hooks";
 import { showToast } from "../toast";
-import type { AppSettings } from "../../shared/theme";
+import type { AppSettings, ThemeDefinition } from "../../shared/theme";
 import { Button, Chip, Grow, SettingRow, Switch, Toolbar } from "../components/admin/kit";
 import { SoftwareUpdateRows } from "../components/SoftwareUpdateRows";
+import { BackupRows } from "../components/BackupRows";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 const SECTIONS = [
@@ -26,7 +27,6 @@ export function SettingsPage() {
   const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
   const lastServerSettingsRef = useRef(settings.data);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!settings.data || !draft) {
@@ -142,37 +142,12 @@ export function SettingsPage() {
     showToast({ kind: "info", message: "Changes discarded.", durationMs: 1800 });
   }
 
-  async function handleExportApp() {
-    try {
-      const payload = await api.exportApp();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `pbresults-scoreboard-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      showToast({ kind: "success", message: "Backup exported." });
-    } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to export the backup." });
-    }
-  }
-
-  async function handleImportApp(file: File) {
-    if (!window.confirm(`Restore "${file.name}"? It replaces the current settings, themes, teams and logos.`)) {
-      return;
-    }
-    try {
-      const text = await file.text();
-      const imported = await api.importApp(JSON.parse(text));
-      lastServerSettingsRef.current = imported.settings;
-      settings.setData(imported.settings);
-      themes.setData(imported.themes);
-      setDraft(createSettingsDraft(imported.settings));
-      setExternallyChanged(false);
-      showToast({ kind: "success", message: "Backup restored." });
-    } catch (error) {
-      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to restore the backup." });
-    }
+  function handleRestored(restored: { settings: AppSettings; themes: ThemeDefinition[] }) {
+    lastServerSettingsRef.current = restored.settings;
+    settings.setData(restored.settings);
+    themes.setData(restored.themes);
+    setDraft(createSettingsDraft(restored.settings));
+    setExternallyChanged(false);
   }
 
   const updatesSupported = update.data?.managedUpdatesSupported ?? true;
@@ -349,30 +324,8 @@ export function SettingsPage() {
 
               <section className="ad-set-group" id="set-backup">
                 <h2>Backup and restore</h2>
-                <div className="ad-surface">
-                  <SettingRow title="Full backup" hint="Settings, themes, teams and uploaded logos in one file.">
-                    <Button onClick={() => void handleExportApp()}>
-                      <Download aria-hidden />
-                      Export
-                    </Button>
-                    <Button variant="ghost" onClick={() => importInputRef.current?.click()}>
-                      <Upload aria-hidden />
-                      Restore…
-                    </Button>
-                    <input
-                      ref={importInputRef}
-                      hidden
-                      type="file"
-                      accept="application/json,.json"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void handleImportApp(file);
-                        }
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </SettingRow>
+                <div className="ad-surface" style={{ overflow: "hidden" }}>
+                  <BackupRows hasUnsavedChanges={hasUnsavedChanges} onRestored={handleRestored} />
                 </div>
               </section>
             </form>
