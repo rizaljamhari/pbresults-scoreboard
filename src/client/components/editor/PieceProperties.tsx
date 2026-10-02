@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, type StoredAsset, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
 import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
+import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import {
   ColorInput,
   Field,
@@ -497,6 +498,16 @@ export function PieceProperties({
         </div>
       </PanelSection>
 
+      <PanelSection title="Shadow" defaultOpen={false}>
+        <ShadowInput label="Shadow" kind="box" value={String(component.shadow)} swatches={swatches} onChange={(value) => patch((draft) => (draft.shadow = value))} />
+      </PanelSection>
+
+      {isText && entry.id !== "breakTime" ? (
+        <PanelSection title="Text effects" defaultOpen={false}>
+          <TextEffectFields value={component as unknown as TextEffectSettings} swatches={swatches} onChange={(next) => patch((draft) => Object.assign(draft, next))} />
+        </PanelSection>
+      ) : null}
+
       <PanelSection title="Advanced" defaultOpen={false}>
         {isText ? (
           <div className="te-grid-2">
@@ -526,7 +537,6 @@ export function PieceProperties({
           value={Math.round(Number(component.backgroundOverlayOpacity) * 100)}
           onChange={(value) => patch((draft) => (draft.backgroundOverlayOpacity = value / 100))}
         />
-        <TextInput label="Shadow (CSS)" value={String(component.shadow)} placeholder="none" onChange={(value) => patch((draft) => (draft.shadow = value))} />
       </PanelSection>
     </div>
   );

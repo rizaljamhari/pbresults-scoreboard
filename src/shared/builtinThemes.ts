@@ -1,4 +1,4 @@
-import { defaultTextFit, type ThemeDefinition } from "./theme.js";
+import { defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
 
 /** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
 function momentCard(x: number, y: number, width: number, height: number) {
@@ -24,7 +24,8 @@ function momentCard(x: number, y: number, width: number, height: number) {
     paddingX: 0,
     paddingY: 0,
     shadow: "none",
-    ...defaultTextFit
+    ...defaultTextFit,
+    ...defaultTextEffects
   };
 }
 
@@ -67,6 +68,7 @@ function textBox(
     letterSpacing: 1.5,
     lineHeight: 1,
     ...defaultTextFit,
+    ...defaultTextEffects,
     ...overrides
   };
   return {
@@ -153,6 +155,7 @@ function teamEventOverlay(
       durationMs: 2000,
       followTarget: "none",
       ...defaultTextFit,
+      ...defaultTextEffects,
       ...(overrides.general ?? {})
     },
     concede: {
@@ -236,7 +239,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.1,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "homeTeamLogo": {
         "x": 362,
@@ -298,7 +302,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0,
         "lineHeight": 0.92,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "awayName": {
         "x": 1133,
@@ -331,7 +336,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.1,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "awayTeamLogo": {
         "x": 1134,
@@ -393,7 +399,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0,
         "lineHeight": 0.92,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "gameTime": {
         "x": 882,
@@ -426,7 +433,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0.8,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "breakTime": {
         "x": 787,
@@ -459,7 +467,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0.4,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "eventLogo": {
         "x": 882,
@@ -619,7 +628,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.2,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "homeTeamLogo": {
         "x": 132,
@@ -681,7 +691,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.5,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "awayName": {
         "x": 1264,
@@ -714,7 +725,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.2,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "awayTeamLogo": {
         "x": 1264,
@@ -776,7 +788,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 1.5,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "gameTime": {
         "x": 849,
@@ -809,7 +822,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0.8,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "breakTime": {
         "x": 835,
@@ -842,7 +856,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "textAlign": "center",
         "letterSpacing": 0.4,
         "lineHeight": 1,
-        ...defaultTextFit
+        ...defaultTextFit,
+        ...defaultTextEffects
       },
       "eventLogo": {
         "x": 905,

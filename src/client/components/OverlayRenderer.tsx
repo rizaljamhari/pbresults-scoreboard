@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatClock } from "../../shared/normalize";
-import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextFitSettings } from "../../shared/theme";
+import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
 import { FitText } from "./FitText";
 import { useTimeoutToken } from "./momentTriggers";
@@ -61,8 +61,21 @@ function resolveBackgroundSize(fit: ThemeDefinition["components"]["homeName"]["b
   }
 }
 
-function textCase(settings: TextFitSettings): CSSProperties["textTransform"] {
-  return settings.textTransform === "none" ? undefined : settings.textTransform;
+/** Letter case, shadow and outline; empty for a theme that uses none of them, so older themes render unchanged. */
+function textLook(settings: TextFitSettings & TextEffectSettings): CSSProperties {
+  const style: CSSProperties = {};
+  if (settings.textTransform !== "none") {
+    style.textTransform = settings.textTransform;
+  }
+  if (settings.textShadow.trim() && settings.textShadow.trim() !== "none") {
+    style.textShadow = settings.textShadow;
+  }
+  if (settings.textStrokeWidth > 0) {
+    // The stroke is centred on the letter edge and painted under the fill, so half of it shows: double it.
+    style.WebkitTextStroke = `${settings.textStrokeWidth * 2}px ${settings.textStrokeColor}`;
+    style.paintOrder = "stroke fill";
+  }
+  return style;
 }
 
 function frameStyles(component: ThemeDefinition["components"][ComponentId]): CSSProperties {
@@ -763,7 +776,7 @@ export function OverlayRenderer({
             fontWeight: card.fontWeight,
             letterSpacing: card.letterSpacing,
             lineHeight: frame.following ? breakTime.lineHeight : 1,
-            textTransform: textCase(card)
+            ...textLook(card)
           }}
         >
           <FitText settings={card}>{card.text}</FitText>
@@ -988,7 +1001,7 @@ export function OverlayRenderer({
                       fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
-                      textTransform: textCase(component),
+                      ...textLook(component),
                       animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
                       position: "absolute",
                       inset: 0,
@@ -1013,7 +1026,7 @@ export function OverlayRenderer({
                       fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
-                      textTransform: textCase(component),
+                      ...textLook(component),
                       animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
                       position: "absolute",
                       inset: 0,
@@ -1041,7 +1054,7 @@ export function OverlayRenderer({
                     fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                     letterSpacing: component.letterSpacing,
                     lineHeight: component.lineHeight,
-                    textTransform: textCase(component),
+                    ...textLook(component),
                     animation: contentAnimation
                   }}
                 >
@@ -1124,7 +1137,7 @@ export function OverlayRenderer({
                   fontWeight: component.fontWeight,
                   letterSpacing: component.letterSpacing,
                   lineHeight: component.lineHeight,
-                  textTransform: textCase(component),
+                  ...textLook(component),
                   whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
                   overflow: "hidden"
                 }}
@@ -1191,7 +1204,7 @@ export function OverlayRenderer({
                 fontWeight: overlayGeneral.fontWeight,
                 letterSpacing: overlayGeneral.letterSpacing,
                 lineHeight: 1,
-                textTransform: textCase(overlayGeneral)
+                ...textLook(overlayGeneral)
               }}
             >
               <FitText settings={overlayGeneral}>{winnerLabel ? winnerText : concedeText}</FitText>

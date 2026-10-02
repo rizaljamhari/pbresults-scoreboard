@@ -89,3 +89,27 @@ describe("text fit in the overlay", () => {
     expect(markup).toContain("text-transform:uppercase");
   });
 });
+
+describe("text effects in the overlay", () => {
+  const live = normalizeLiveState(
+    { state: "PLAY", period: "GAME", round: 1, mainGame: [{ name: "Left", score: 1 }, { name: "Right", score: 0 }] },
+    { sourceStatus: "ok", fetchedAt: "2026-10-02T05:00:00.000Z", errorMessage: null }
+  );
+
+  it("adds no shadow or outline styles by default", () => {
+    const markup = renderToStaticMarkup(<OverlayRenderer theme={structuredClone(builtinThemes[0])} live={live} />);
+    expect(markup).not.toContain("text-shadow");
+    expect(markup).not.toContain("text-stroke");
+  });
+
+  it("draws the text shadow and an outline outside the letters", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    theme.components.homeScore.textShadow = "0 2px 6px #00000099";
+    theme.components.homeScore.textStrokeWidth = 2;
+    theme.components.homeScore.textStrokeColor = "#112233";
+    const markup = renderToStaticMarkup(<OverlayRenderer theme={theme} live={live} />);
+    expect(markup).toContain("text-shadow:0 2px 6px #00000099");
+    expect(markup).toContain("-webkit-text-stroke:4px #112233");
+    expect(markup).toContain("paint-order:stroke fill");
+  });
+});

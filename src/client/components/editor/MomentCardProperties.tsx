@@ -1,6 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
+import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
 export type MomentKind = "timeout" | "gameFinished";
@@ -192,6 +193,7 @@ export function MomentCardProperties({
           />
         </Field>
         <TextFitFields value={card} onChange={(next) => set((draft) => Object.assign(draft, next))} />
+        <TextEffectFields value={card} swatches={swatches} onChange={(next) => set((draft) => Object.assign(draft, next))} />
         <ColorInput label="Text colour" value={card.color} swatches={swatches} onChange={(value) => set((draft) => (draft.color = value))} />
       </PanelSection>
 
@@ -279,7 +281,7 @@ export function MomentCardProperties({
             />
           </Field>
         </FieldRow>
-        <TextInput label="Shadow (CSS)" value={card.shadow} placeholder="none" onChange={(value) => set((draft) => (draft.shadow = value))} />
+        <ShadowInput label="Shadow" kind="box" value={card.shadow} swatches={swatches} onChange={(value) => set((draft) => (draft.shadow = value))} />
       </PanelSection>
 
       <PanelSection title="Motion">

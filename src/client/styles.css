@@ -1593,6 +1593,68 @@ details[open]:not(.editor-section-card) > summary::after {
   height: 15px;
 }
 
+/* Shadow editor: preset with a live sample, then one compact card per layer. */
+.te-shadow {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.te-shadow-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: end;
+}
+
+.te-shadow-sample {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--te-hover);
+  color: var(--te-text);
+  font: 700 17px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+.te-shadow-sample-box {
+  width: 18px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--te-island);
+}
+
+.te-shadow-layer {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px 8px;
+  border: 1px solid var(--te-line);
+  border-radius: 8px;
+}
+
+.te-shadow-layer-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  color: var(--te-muted);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.te-shadow-layer-title .te-icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.te-shadow > .te-mini-btn {
+  justify-self: start;
+}
+
 /* "Aa / AA / Ab" letter-case choices read as type samples. */
 .te-case-glyph {
   font-size: 13px;

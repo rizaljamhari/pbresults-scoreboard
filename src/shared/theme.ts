@@ -52,6 +52,19 @@ const textFitSchema = z.object(textFitFields);
 export type TextFitSettings = z.infer<typeof textFitSchema>;
 export const defaultTextFit: TextFitSettings = { textTransform: "none", textFit: "clip", textFitMinScale: 0.6 };
 
+/** Shadow and outline drawn on the letters themselves, shared like `textFitFields`. */
+export const textEffectFields = {
+  /** CSS text-shadow; "none" for no shadow. */
+  textShadow: z.string().default("none"),
+  /** Outline drawn outside the letters, in px; 0 for none. */
+  textStrokeWidth: z.number().min(0).max(20).default(0),
+  textStrokeColor: z.string().default("#000000")
+};
+
+const textEffectSchema = z.object(textEffectFields);
+export type TextEffectSettings = z.infer<typeof textEffectSchema>;
+export const defaultTextEffects: TextEffectSettings = { textShadow: "none", textStrokeWidth: 0, textStrokeColor: "#000000" };
+
 function migrateLegacyFrame(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return input;
@@ -110,7 +123,8 @@ const textComponentBaseSchema = commonFrameBaseSchema.extend({
   textAlign: z.enum(["left", "center", "right"]),
   letterSpacing: z.number(),
   lineHeight: z.number().positive(),
-  ...textFitFields
+  ...textFitFields,
+  ...textEffectFields
 });
 
 export const textComponentSchema = z.preprocess(migrateLegacyFrame, textComponentBaseSchema);
@@ -193,6 +207,7 @@ const teamEventOverlayGeneralSchema = z.object({
   textAlign: z.enum(["left", "center", "right"]).default("center"),
   shadow: z.string().default("none"),
   ...textFitFields,
+  ...textEffectFields,
   animationPreset: z.enum(concedeAnimationValues).default("slide-vertical"),
   durationMs: z.number().positive().default(2000),
   followTarget: z.enum(teamOverlayFollowTargetValues).default("none")
@@ -436,7 +451,8 @@ const momentCardSchema = z.object({
   paddingX: z.number().min(0).default(0),
   paddingY: z.number().min(0).default(0),
   shadow: z.string().default("none"),
-  ...textFitFields
+  ...textFitFields,
+  ...textEffectFields
 });
 
 export const momentOverlaysSchema = z.object({

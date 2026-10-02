@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); step 1 (text fitting) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–2 (text fitting, shadows and text effects) built
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -120,13 +120,16 @@ Export and import **only tokens, text styles and surface styles**, with no layou
 
 ## 4. Styling
 
-### 4.1 Shadow and text effects editor
+### 4.1 Shadow and text effects editor (built, step 2)
 
-- **Box shadow:** a visual editor with X, Y, blur, spread, colour (token-bindable) and inset. Layers can be stacked.
-  - Presets: **None**, **Soft**, **Lifted**, **Hard drop**, **Glow**.
-  - Storage stays the existing CSS string, so the schema is unchanged. The editor parses and writes the string. A string it can't parse falls back to the raw text field labelled "Custom CSS".
-- **Text shadow** (new field `textShadow: string`, default `none`). It uses the same editor and has its own presets for legibility over video.
-- **Text outline** (new `textStroke: { width, color }`), rendered with `-webkit-text-stroke` and `paint-order: stroke fill` so the outline doesn't eat into the letters.
+- **Box shadow:** a visual editor (`ShadowInput` in `src/client/components/editor/ShadowInput.tsx`) with a preset, a live sample, and one card per layer: across, down, blur, spread, colour and "inside the box". Layers can be stacked, added and removed.
+  - Presets: **None**, **Soft**, **Lifted**, **Hard drop**, **Glow**. A shadow that matches no preset shows as "Custom".
+  - Storage stays the existing CSS string, so the schema is unchanged. `src/shared/shadow.ts` reads and writes it: px lengths, hex, `rgb()`/`rgba()`, black, white and transparent. Anything else (other units, variables, named colours) is kept as is and shown as an editable "Custom CSS" field.
+  - Replaces the "Shadow (CSS)" text field on pieces (its own Shadow section), event cards and moment cards.
+- **Text effects** (shared `textEffectFields`, on the same objects as text fitting):
+  - `textShadow` (CSS string, default `none`), using the same editor with text presets: **None**, **Soft**, **Halo** (for legibility over video), **Hard drop**, **Glow**.
+  - `textStrokeWidth` (px, default 0) and `textStrokeColor`. Rendered as `-webkit-text-stroke` at twice the width with `paint-order: stroke fill`, so the outline sits outside the letters and they keep their weight.
+  - **vMix check:** `paint-order` on HTML text needs a recent Chromium. On an older vMix browser source the outline is drawn over the letters instead, so they look bolder. Check it in Rehearsal before relying on thick outlines.
 
 ### 4.2 Gradient fills
 
@@ -261,7 +264,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | Step | Scope | Schema impact |
 |---|---|---|
 | **1. Text fitting** — built | Case, fit (clip / ellipsis / shrink) and minimum size (4.3); stress-test preview presets (W3) | Additive shared `textFit` fields on every text-bearing object |
-| **2. Shadows and text effects** | Visual box-shadow editor with presets (4.1); text shadow and outline | Box shadow unchanged (CSS string); additive `textShadow`, `textStroke` |
+| **2. Shadows and text effects** — built | Visual box-shadow editor with presets (4.1); text shadow and outline | Box shadow unchanged (CSS string); additive `textShadow`, `textStroke` |
 | **3. Motion model** | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
 | **4. Value-change motion** | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
 | **5. Entrance and exit** | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
