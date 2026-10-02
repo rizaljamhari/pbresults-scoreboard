@@ -262,6 +262,15 @@ details[open]:not(.editor-section-card) > summary::after {
   text-overflow: ellipsis;
 }
 
+/* A shape layer's box: fill, border, corners, shadow and slant, inside its slot. */
+.shape-body {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* Wraps a clock's content during its last-seconds warning; lays out exactly like the content box it sits in. */
 .clock-pulse {
   display: flex;
@@ -1849,6 +1858,25 @@ details[open]:not(.editor-section-card) > summary::after {
 }
 
 .te-shadow > .te-mini-btn {
+  justify-self: start;
+}
+
+/* Fill editor: type, a gradient preview strip, then one card per stop. */
+.te-fill {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.te-fill-preview {
+  display: block;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--te-line);
+  background-color: var(--te-hover);
+}
+
+.te-fill-add {
   justify-self: start;
 }
 

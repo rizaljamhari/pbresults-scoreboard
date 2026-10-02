@@ -1,6 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
+import { FillInput } from "./FillInput";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
@@ -198,7 +199,14 @@ export function MomentCardProperties({
       </PanelSection>
 
       <PanelSection title="Card">
-        <ColorInput label="Fill" value={card.backgroundColor} swatches={swatches} onChange={(value) => set((draft) => (draft.backgroundColor = value))} />
+        <FillInput
+          label="Fill"
+          color={card.backgroundColor}
+          fill={card.fill}
+          swatches={swatches}
+          onColor={(value) => set((draft) => (draft.backgroundColor = value))}
+          onFill={(next) => set((draft) => Object.assign(draft.fill, next))}
+        />
         <Field label="Background image">
           <div className="te-asset-row">
             <AssetLibraryPicker
@@ -255,7 +263,14 @@ export function MomentCardProperties({
             />
           </FieldRow>
         ) : null}
-        <ColorInput label="Tint" value={card.backgroundOverlayColor} swatches={swatches} onChange={(value) => set((draft) => (draft.backgroundOverlayColor = value))} />
+        <FillInput
+          label="Tint"
+          color={card.backgroundOverlayColor}
+          fill={card.tintFill}
+          swatches={swatches}
+          onColor={(value) => set((draft) => (draft.backgroundOverlayColor = value))}
+          onFill={(next) => set((draft) => Object.assign(draft.tintFill, next))}
+        />
         <Field label="Tint strength">
           <NumberInput
             label="Tint strength"

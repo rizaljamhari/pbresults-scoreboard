@@ -1,6 +1,30 @@
 import { z } from "zod";
 import { changeMotionPresetValues, enterOrderValues, motionEasingValues, motionPresetValues, type ChangeMotionSettings, type MotionSettings } from "./motion.js";
+import { defaultFill, fillTypeValues, type FillSettings } from "./fill.js";
 import { randomUuid } from "./randomId.js";
+
+/** A surface's solid colour or gradient (see `./fill.ts`); solid by default, so `backgroundColor` keeps working. */
+function fillField(defaults: FillSettings = defaultFill) {
+  return z
+    .object({
+      type: z.enum(fillTypeValues).default(defaults.type),
+      angle: z.number().min(0).max(360).default(defaults.angle),
+      stops: z
+        .array(z.object({ color: z.string(), position: z.number().min(0).max(1) }))
+        .min(2)
+        .max(8)
+        .default(defaults.stops)
+    })
+    .default({});
+}
+
+/** Fill for the box and for the tint over its background image. */
+export const surfaceFillFields = {
+  fill: fillField(),
+  tintFill: fillField()
+};
+
+export const defaultSurfaceFill = { fill: { ...defaultFill, stops: [...defaultFill.stops] }, tintFill: { ...defaultFill, stops: [...defaultFill.stops] } };
 
 /** Pieces don't animate in or out unless the theme says so. */
 export const defaultPieceMotion: MotionSettings = { preset: "none", durationMs: 400, easing: "snappy", delayMs: 0 };
@@ -161,7 +185,8 @@ const commonFrameBaseSchema = z.object({
   /** Plays as the piece arrives: when the overlay loads, when it is shown, and on the operator's Play entrance. */
   enterMotion: motionField(defaultPieceMotion),
   /** Plays as the piece is hidden. */
-  exitMotion: motionField(defaultPieceMotion)
+  exitMotion: motionField(defaultPieceMotion),
+  ...surfaceFillFields
 });
 
 export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBaseSchema);
@@ -208,7 +233,20 @@ const freeImageComponentBaseSchema = imageComponentBaseSchema.extend({
 
 export const freeTextComponentSchema = z.preprocess(migrateLegacyFrame, freeTextComponentBaseSchema);
 export const freeImageComponentSchema = z.preprocess(migrateLegacyFrame, freeImageComponentBaseSchema);
-export const freeComponentSchema = z.union([freeTextComponentSchema, freeImageComponentSchema]);
+export const shapeValues = ["rectangle", "pill", "ellipse"] as const;
+
+/** A plain box: a bar, plate, badge or divider, styled with the usual fill, border and shadow. */
+const freeShapeComponentBaseSchema = commonFrameBaseSchema.extend({
+  kind: z.literal("shape"),
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(80),
+  shape: z.enum(shapeValues).default("rectangle"),
+  /** Slants the box sideways, in degrees, for the angled plates common in sports graphics. */
+  skewX: z.number().min(-30).max(30).default(0)
+});
+
+export const freeShapeComponentSchema = z.preprocess(migrateLegacyFrame, freeShapeComponentBaseSchema);
+export const freeComponentSchema = z.union([freeTextComponentSchema, freeImageComponentSchema, freeShapeComponentSchema]);
 
 const defaultImageComponentValue = {
   kind: "image" as const,
@@ -295,7 +333,8 @@ const teamEventOverlayEventSchema = z.object({
   backgroundColor: z.string(),
   backgroundImageAssetId: z.string().nullable().default(null),
   backgroundOverlayColor: z.string().default("#000000"),
-  backgroundOverlayOpacity: z.number().min(0).max(1).default(0)
+  backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
+  ...surfaceFillFields
 });
 
 const nestedTeamEventOverlaySchema = z.object({
@@ -547,7 +586,8 @@ const momentCardSchema = z.object({
   paddingY: z.number().min(0).default(0),
   shadow: z.string().default("none"),
   ...textFitFields,
-  ...textEffectFields
+  ...textEffectFields,
+  ...surfaceFillFields
 });
 
 export const momentOverlaysSchema = z.object({
@@ -1048,6 +1088,7 @@ export type TextThemeComponent = z.infer<typeof textComponentSchema>;
 export type ImageThemeComponent = z.infer<typeof imageComponentSchema>;
 export type FreeTextComponent = z.infer<typeof freeTextComponentSchema>;
 export type FreeImageComponent = z.infer<typeof freeImageComponentSchema>;
+export type FreeShapeComponent = z.infer<typeof freeShapeComponentSchema>;
 export type FreeComponent = z.infer<typeof freeComponentSchema>;
 export type ThemeDefinition = z.infer<typeof themeSchema>;
 export type AppSettings = z.infer<typeof settingsSchema>;

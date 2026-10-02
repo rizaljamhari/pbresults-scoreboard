@@ -12,6 +12,7 @@ import {
   type ChangeMotionSettings,
   type MotionSettings
 } from "../../shared/motion";
+import { gradientCss, type FillSettings } from "../../shared/fill";
 import { formatClock } from "../../shared/normalize";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
@@ -128,7 +129,12 @@ function textLook(settings: TextFitSettings & TextEffectSettings): CSSProperties
   return style;
 }
 
-function frameStyles(component: ThemeDefinition["components"][ComponentId]): CSSProperties {
+function frameStyles(
+  component: Pick<
+    ThemeDefinition["components"]["homeName"],
+    "x" | "y" | "width" | "height" | "zIndex" | "opacity" | "visible" | "borderWidth" | "borderColor" | "borderRadius" | "shadow"
+  >
+): CSSProperties {
   return {
     left: component.x,
     top: component.y,
@@ -155,7 +161,7 @@ function surfaceStyles(
     | "backgroundImagePosition"
     | "backgroundOverlayColor"
     | "backgroundOverlayOpacity"
-  > & { backgroundImageMode?: "asset" | "homeTeamLogo" | "awayTeamLogo" },
+  > & { backgroundImageMode?: "asset" | "homeTeamLogo" | "awayTeamLogo"; fill?: FillSettings; tintFill?: FillSettings },
   assets: StoredAsset[],
   theme: ThemeDefinition,
   live: NormalizedLiveState | null
@@ -171,18 +177,28 @@ function surfaceStyles(
       : null;
   }
 
+  const gradient = component.fill ? gradientCss(component.fill) : null;
+  const tintGradient = component.tintFill ? gradientCss(component.tintFill) : null;
+  // A gradient fill sits under the background image, as the solid colour does.
+  const layers = [
+    backgroundAsset
+      ? { image: `url("${backgroundAsset.url}")`, size: resolveBackgroundSize(component.backgroundImageFit), position: resolveBackgroundPosition(component.backgroundImagePosition) }
+      : null,
+    gradient ? { image: gradient, size: "100% 100%", position: "center center" } : null
+  ].filter((layer): layer is { image: string; size: string; position: string } => layer !== null);
+
   return {
     background: {
-      backgroundColor: component.backgroundColor,
-      backgroundImage: backgroundAsset ? `url("${backgroundAsset.url}")` : undefined,
-      backgroundSize: backgroundAsset ? resolveBackgroundSize(component.backgroundImageFit) : undefined,
-      backgroundPosition: backgroundAsset ? resolveBackgroundPosition(component.backgroundImagePosition) : undefined,
+      backgroundColor: gradient ? "transparent" : component.backgroundColor,
+      backgroundImage: layers.length ? layers.map((layer) => layer.image).join(", ") : undefined,
+      backgroundSize: gradient ? layers.map((layer) => layer.size).join(", ") : backgroundAsset ? layers[0].size : undefined,
+      backgroundPosition: gradient ? layers.map((layer) => layer.position).join(", ") : backgroundAsset ? layers[0].position : undefined,
       backgroundRepeat: "no-repeat"
     },
     overlay:
       component.backgroundOverlayOpacity > 0
         ? {
-            background: component.backgroundOverlayColor,
+            background: tintGradient ?? component.backgroundOverlayColor,
             opacity: component.backgroundOverlayOpacity
           }
         : null
@@ -918,7 +934,9 @@ export function OverlayRenderer({
           backgroundImageFit: overlayGeneral.backgroundImageFit,
           backgroundImagePosition: overlayGeneral.backgroundImagePosition,
           backgroundOverlayColor: activeConcedeTheme.backgroundOverlayColor,
-          backgroundOverlayOpacity: activeConcedeTheme.backgroundOverlayOpacity
+          backgroundOverlayOpacity: activeConcedeTheme.backgroundOverlayOpacity,
+          fill: activeConcedeTheme.fill,
+          tintFill: activeConcedeTheme.tintFill
         },
         assets,
         theme,
@@ -935,7 +953,9 @@ export function OverlayRenderer({
       backgroundImageFit: overlayGeneral.backgroundImageFit,
       backgroundImagePosition: overlayGeneral.backgroundImagePosition,
       backgroundOverlayColor: winnerTheme.backgroundOverlayColor,
-      backgroundOverlayOpacity: winnerTheme.backgroundOverlayOpacity
+      backgroundOverlayOpacity: winnerTheme.backgroundOverlayOpacity,
+      fill: winnerTheme.fill,
+      tintFill: winnerTheme.tintFill
     },
     assets,
     theme,
@@ -1344,6 +1364,44 @@ export function OverlayRenderer({
                     <span>{component.label}</span>
                   ) : null}
                 </span>
+              </span>
+            </button>
+          );
+        }
+
+        if (component.kind === "shape") {
+          const motion = slotMotion(component.id, component);
+          const radius =
+            component.shape === "pill" ? "9999px" : component.shape === "ellipse" ? "50%" : component.borderRadius.map((v) => `${v}px`).join(" ");
+          return (
+            <button
+              key={motion.key}
+              type="button"
+              className={commonClass}
+              style={{
+                ...frameStyles(component),
+                // The box is drawn by the shape body, so the slant never fights an entrance's transform.
+                border: "none",
+                borderRadius: 0,
+                boxShadow: "none",
+                overflow: "visible",
+                ...motion.style,
+                display: component.visible || motion.exiting ? "block" : "none"
+              }}
+              onClick={() => onSelectComponent?.(component.id)}
+            >
+              <span
+                className="shape-body"
+                style={{
+                  border: `${component.borderWidth}px solid ${component.borderColor}`,
+                  borderRadius: radius,
+                  boxShadow: component.shadow,
+                  // Positive leans the top to the right, like italic type.
+                  transform: component.skewX ? `skewX(${-component.skewX}deg)` : undefined
+                }}
+              >
+                <span className="component-surface" style={surface.background} />
+                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
               </span>
             </button>
           );

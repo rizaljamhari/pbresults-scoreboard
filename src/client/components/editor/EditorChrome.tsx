@@ -60,6 +60,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["H", "Hand tool (or hold Space)"],
   ["T", "Add text"],
   ["I", "Add image"],
+  ["R", "Add shape"],
   ["S", "Snap on or off"],
   ["Drag empty canvas", "Select everything in the box (Shift adds)"],
   ["⌘/Ctrl + drag", "Move without snapping"],

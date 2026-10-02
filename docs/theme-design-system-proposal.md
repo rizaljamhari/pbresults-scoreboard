@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–5 (text fitting, shadows and text effects, motion model, value-change motion, entrances) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–6 (text fitting, shadows and text effects, motion model, value-change motion, entrances, gradients and shapes) built
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -131,20 +131,16 @@ Export and import **only tokens, text styles and surface styles**, with no layou
   - `textStrokeWidth` (px, default 0) and `textStrokeColor`. Rendered as `-webkit-text-stroke` at twice the width with `paint-order: stroke fill`, so the outline sits outside the letters and they keep their weight.
   - **vMix check:** `paint-order` on HTML text needs a recent Chromium. On an older vMix browser source the outline is drawn over the letters instead, so they look bolder. Check it in Rehearsal before relying on thick outlines.
 
-### 4.2 Gradient fills
+### 4.2 Gradient fills (built, step 6)
 
 ```ts
-fill: z.discriminatedUnion("type", [
-  z.object({ type: z.literal("solid") }),                                  // uses backgroundColor (current behaviour)
-  z.object({ type: z.literal("linear"), angle: z.number(), stops: Stop[] }),
-  z.object({ type: z.literal("radial"), stops: Stop[] })
-]).default({ type: "solid" })
-// Stop = { color: string, position: 0..1 }, colour token-bindable
+fill     = { type: "solid" | "linear" | "radial", angle, stops: [{ color, position 0..1 }] }   // src/shared/fill.ts
+tintFill = same shape, for the tint over a background image
 ```
 
-- `backgroundColor` stays as the solid value and as the fallback.
-- The tint over a background image can also be a gradient. That gives the common "logo art fading to transparent" edge.
-- The editor uses a stop bar on top of the existing `react-colorful` picker.
+- Shared `surfaceFillFields` on every piece, moment cards and each event card (towel, base, winner). Solid by default, which keeps `backgroundColor` as the colour, so older themes are unchanged.
+- **Rendering:** a gradient sits under the background image, as the solid colour does. A gradient tint uses the tint strength as before, which gives the "logo art fading to transparent" edge.
+- **Editor:** `FillInput` replaces the Fill / Background / Tint colour fields: Solid, Linear or Radial; angle for linear; 2–8 stops, each with a colour and position; a preview strip. Switching to a gradient starts from the solid colour fading to transparent.
 
 ### 4.3 Text fitting (built, step 1)
 
@@ -162,13 +158,13 @@ Shared fields (`textFitFields` in `src/shared/theme.ts`) on every text-bearing o
 - **Preview data:** Stress tests (W3): Long names, No logos, Unmatched teams, Big scores, Wide clocks, Everything.
 - **Rehearsal:** the long-name cases' expected result now follows each name's setting.
 
-### 4.4 Shape layer
+### 4.4 Shape layer (built, step 6)
 
-A third custom layer kind next to text and image, `kind: "shape"`:
-
-- Shapes: rectangle (with the existing per-corner radius), pill, line or divider.
-- **Skew** (−30° to 30°) for the slanted plates common in sports graphics.
-- It uses surface styles, gradients and shadows like any frame.
+- A third custom layer kind, `kind: "shape"`: Rectangle (with the usual per-corner radius), Pill or Ellipse, plus **Slant** (−30° to 30°; positive leans the top to the right).
+- It uses the fill (solid or gradient), border, shadow, background image, entrance and exit like any other piece.
+- **Rendering:** the box, border, corners, shadow and slant are drawn on an inner `.shape-body`, so the slant never fights an entrance's transform.
+- **Editor:** "Add shape" (R) on the toolbar and in the right-click menu, a Shape section with shape and slant, and a square icon in Layers.
+- A divider line is a thin rectangle; there's no separate line kind.
 
 ### 4.5 Blend and blur
 
@@ -272,7 +268,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **3. Motion model** — built | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
 | **4. Value-change motion** — built | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
 | **5. Entrance and exit** — built | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
-| **6. Gradients and shapes** | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
+| **6. Gradients and shapes** — built | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
 | **7. Image effects, blend and blur** | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
 | **8. Tokens and styles** | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
 | **9. Brand and team** | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |

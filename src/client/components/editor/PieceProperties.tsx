@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, Play, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, type LiveTextSettings, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, type LiveTextSettings, type shapeValues, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
 import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
+import { FillInput } from "./FillInput";
 import { MotionFields } from "./MotionFields";
+import type { FillSettings } from "../../../shared/fill";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { changeMotionPresetLabels, changeMotionPresetValues, exitMotionPresetValues, type MotionSettings } from "../../../shared/motion";
 import {
@@ -82,7 +84,7 @@ function bindingFor(entry: ThemeComponentEntry) {
   if (component.kind === "text") {
     return component.contentMode === "operator" ? "Operator text, set live on Operations" : "Static text";
   }
-  return "Image";
+  return component.kind === "shape" ? "Shape" : "Image";
 }
 
 /** Colours already used in the theme, offered as one-click swatches. */
@@ -183,6 +185,7 @@ export function PieceProperties({
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
   const liveText = component as unknown as LiveTextSettings;
   const motion = component as unknown as { enterMotion: MotionSettings; exitMotion: MotionSettings };
+  const surface = component as unknown as { fill: FillSettings; tintFill: FillSettings };
   const imageAsset = isImage
     ? logoContext?.effectiveAsset ?? assets.find((asset) => asset.id === component.assetId) ?? null
     : null;
@@ -317,6 +320,24 @@ export function PieceProperties({
           </Group>
           <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} />
         </>
+      ) : null}
+
+      {component.kind === "shape" ? (
+        <Group title="Shape">
+          <Segmented
+            label="Shape"
+            value={String(component.shape) as (typeof shapeValues)[number]}
+            options={[
+              { value: "rectangle", label: "Rectangle" },
+              { value: "pill", label: "Pill" },
+              { value: "ellipse", label: "Ellipse" }
+            ]}
+            onChange={(value) => patch((draft) => (draft.shape = value))}
+          />
+          <Field label="Slant" hint="Leans the shape sideways; positive leans the top to the right.">
+            <NumberInput label="Slant" value={Number(component.skewX)} min={-30} max={30} unit="°" onChange={(value) => patch((draft) => (draft.skewX = Math.min(30, Math.max(-30, value))))} />
+          </Field>
+        </Group>
       ) : null}
 
       {isText && (entry.id === "homeScore" || entry.id === "awayScore" || isFree) ? (
@@ -462,7 +483,14 @@ export function PieceProperties({
 
       {centreLine}
 
-      <ColorInput label="Fill" value={String(component.backgroundColor)} swatches={swatches} onChange={(value) => patch((draft) => (draft.backgroundColor = value))} />
+      <FillInput
+        label="Fill"
+        color={String(component.backgroundColor)}
+        fill={surface.fill}
+        swatches={swatches}
+        onColor={(value) => patch((draft) => (draft.backgroundColor = value))}
+        onFill={(next) => patch((draft) => Object.assign(draft.fill as FillSettings, next))}
+      />
 
       <Group title="Position and size">
         <div className="te-grid-2">
@@ -631,7 +659,14 @@ export function PieceProperties({
             <NumberInput label="Vertical offset" prefix="Y" value={Number(component.offsetY)} onChange={(value) => patch((draft) => (draft.offsetY = value))} />
           </div>
         </Field>
-        <ColorInput label="Tint over background" value={String(component.backgroundOverlayColor)} swatches={swatches} onChange={(value) => patch((draft) => (draft.backgroundOverlayColor = value))} />
+        <FillInput
+          label="Tint over background"
+          color={String(component.backgroundOverlayColor)}
+          fill={surface.tintFill}
+          swatches={swatches}
+          onColor={(value) => patch((draft) => (draft.backgroundOverlayColor = value))}
+          onFill={(next) => patch((draft) => Object.assign(draft.tintFill as FillSettings, next))}
+        />
         <PercentSlider
           label="Tint strength"
           value={Math.round(Number(component.backgroundOverlayOpacity) * 100)}

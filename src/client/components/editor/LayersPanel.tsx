@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Eye, EyeOff, Flag, Hash, Hourglass, Image as ImageIcon, Lock, LockOpen, PanelRightClose, Timer, Type } from "lucide-react";
+import { Eye, EyeOff, Flag, Hash, Hourglass, Image as ImageIcon, Lock, LockOpen, PanelRightClose, Square, Timer, Type } from "lucide-react";
 import type { ThemeDefinition } from "../../../shared/theme";
 import { getThemeComponentEntry, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { IconButton } from "./EditorChrome";
@@ -70,7 +70,7 @@ function iconFor(entry: ThemeComponentEntry) {
   if (entry.id === "gameTime" || entry.id === "breakTime") {
     return <Timer aria-hidden />;
   }
-  return entry.component.kind === "image" ? <ImageIcon aria-hidden /> : <Type aria-hidden />;
+  return entry.component.kind === "image" ? <ImageIcon aria-hidden /> : entry.component.kind === "shape" ? <Square aria-hidden /> : <Type aria-hidden />;
 }
 
 function tagFor(entry: ThemeComponentEntry) {

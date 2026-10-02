@@ -3,6 +3,7 @@ import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react"
 import type { MotionSettings } from "../../../shared/motion";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
+import { FillInput } from "./FillInput";
 import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
@@ -81,7 +82,14 @@ export function EventOverlayProperties({
         <SwitchRow label={`Show the ${EVENT_NAMES[kind].toLowerCase()} card`} checked={settings.enabled} onChange={(checked) => patchEvent((draft) => (draft.enabled = checked))} />
         <TextInput label="Text" value={settings.text} maxLength={60} onChange={(value) => patchEvent((draft) => (draft.text = value))} />
         <ColorInput label="Text colour" value={settings.color} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.color = value))} />
-        <ColorInput label="Background" value={settings.backgroundColor} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.backgroundColor = value))} />
+        <FillInput
+          label="Background"
+          color={settings.backgroundColor}
+          fill={settings.fill}
+          swatches={swatches}
+          onColor={(value) => patchEvent((draft) => (draft.backgroundColor = value))}
+          onFill={(next) => patchEvent((draft) => Object.assign(draft.fill, next))}
+        />
         <Field label="Background image">
           <div className="te-asset-row">
             <AssetLibraryPicker
@@ -110,7 +118,14 @@ export function EventOverlayProperties({
             </label>
           </div>
         </Field>
-        <ColorInput label="Tint" value={settings.backgroundOverlayColor} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.backgroundOverlayColor = value))} />
+        <FillInput
+          label="Tint"
+          color={settings.backgroundOverlayColor}
+          fill={settings.tintFill}
+          swatches={swatches}
+          onColor={(value) => patchEvent((draft) => (draft.backgroundOverlayColor = value))}
+          onFill={(next) => patchEvent((draft) => Object.assign(draft.tintFill, next))}
+        />
         <Field label="Tint strength">
             <NumberInput
               label="Tint strength"

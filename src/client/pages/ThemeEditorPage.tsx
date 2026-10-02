@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
 import { builtinThemes } from "../../shared/builtinThemes";
 import { fontFamilies } from "../../shared/theme";
+import { freeShapeComponentSchema } from "../../shared/theme";
 import type { ComponentId, FreeImageComponent, FreeTextComponent, NormalizedLiveState, TeamMatchResult, TeamRecord, TextThemeComponent, ThemeDefinition } from "../../shared/theme";
 import {
   createFreeComponentId,
@@ -42,6 +43,7 @@ import {
   Plus,
   Redo2,
   RefreshCw,
+  Square,
   SquareDashedMousePointer,
   Sun,
   Type,
@@ -1268,6 +1270,41 @@ export function ThemeEditorPage() {
     selectComponent(id);
   }
 
+  function addFreeShapeComponent() {
+    if (!themeResource.data) {
+      return;
+    }
+    const id = createFreeComponentId();
+    patchTheme((draft) => {
+      const width = 360;
+      const height = 60;
+      draft.freeComponents.push(
+        freeShapeComponentSchema.parse({
+          kind: "shape",
+          id,
+          label: nextFreeComponentLabel("Shape"),
+          x: Math.round((draft.canvas.width - width) / 2),
+          y: Math.round((draft.canvas.height - height) / 2),
+          width,
+          height,
+          zIndex: getNextComponentZIndex(draft),
+          visible: true,
+          opacity: 1,
+          backgroundColor: "#1b1b1b",
+          borderColor: "#00000000",
+          borderWidth: 0,
+          borderRadius: [0, 0, 0, 0],
+          paddingX: 0,
+          paddingY: 0,
+          offsetX: 0,
+          offsetY: 0,
+          shadow: "none"
+        })
+      );
+    });
+    selectComponent(id);
+  }
+
   function addFreeImageComponent() {
     if (!themeResource.data) {
       return;
@@ -1713,6 +1750,11 @@ export function ThemeEditorPage() {
           addFreeImageComponent();
           return;
         }
+        if (key === "r") {
+          event.preventDefault();
+          addFreeShapeComponent();
+          return;
+        }
       }
 
       if (event.key === "Tab") {
@@ -1960,6 +2002,9 @@ export function ThemeEditorPage() {
               <IconButton label="Add image" shortcut="I" onClick={addFreeImageComponent}>
                 <ImageIcon />
               </IconButton>
+              <IconButton label="Add shape" shortcut="R" onClick={addFreeShapeComponent}>
+                <Square />
+              </IconButton>
               <span className="te-sep" aria-hidden />
               <IconButton
                 label={canvas.snapSettings.enabled ? "Snapping on" : "Snapping off"}
@@ -2150,6 +2195,10 @@ export function ThemeEditorPage() {
               <ContextMenu.Item className="te-menu-item" onSelect={addFreeImageComponent}>
                 <ImageIcon /> <span className="te-menu-label">Add image</span>
                 <kbd className="te-menu-kbd">I</kbd>
+              </ContextMenu.Item>
+              <ContextMenu.Item className="te-menu-item" onSelect={addFreeShapeComponent}>
+                <Square /> <span className="te-menu-label">Add shape</span>
+                <kbd className="te-menu-kbd">R</kbd>
               </ContextMenu.Item>
             </>
           )}
