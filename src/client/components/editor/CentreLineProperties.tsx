@@ -1,5 +1,6 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2 } from "lucide-react";
 import { fontFamilies, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { MotionFields } from "./MotionFields";
 import { TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput } from "./fields";
 
@@ -20,14 +21,6 @@ const PLAY_OPTIONS: ReadonlyArray<{ value: LineMode; label: string }> = [
   { value: "hidden", label: "Hidden" },
   { value: "staticText", label: "Text" },
   { value: "timer", label: "Break clock" }
-];
-
-const TRANSITION_OPTIONS: ReadonlyArray<{ value: CentreLine["transition"]["animation"]; label: string }> = [
-  { value: "none", label: "None" },
-  { value: "fade", label: "Fade" },
-  { value: "slide-up", label: "Slide up" },
-  { value: "slide-left", label: "Slide left" },
-  { value: "slide-right", label: "Slide right" }
 ];
 
 const FONT_OPTIONS = fontFamilies.map((font) => ({ value: font as FontFamily, label: font }));
@@ -171,17 +164,12 @@ export function CentreLineProperties({
       </PanelSection>
 
       <Group title="Change animation">
-        <FieldRow>
-          <SelectInput
-            label="Animation"
-            value={line.transition.animation}
-            options={TRANSITION_OPTIONS}
-            onChange={(value) => patch((draft) => (draft.transition.animation = value))}
-          />
-          <Field label="Duration">
-            <NumberInput label="Change duration" value={line.transition.durationMs} min={0} step={50} unit="ms" onChange={(value) => patch((draft) => (draft.transition.durationMs = value))} />
-          </Field>
-        </FieldRow>
+        <MotionFields
+          name="Centre line"
+          value={line.motion}
+          presets={["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "scale"]}
+          onChange={(next) => patch((draft) => Object.assign(draft.motion, next))}
+        />
       </Group>
 
       <Group title="Cards that cover this line">

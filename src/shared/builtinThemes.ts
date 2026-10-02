@@ -1,4 +1,4 @@
-import { defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
+import { defaultEventCardMotion, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
 
 /** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
 function momentCard(x: number, y: number, width: number, height: number) {
@@ -151,8 +151,7 @@ function teamEventOverlay(
       letterSpacing: 1,
       textAlign: "center",
       shadow: "none",
-      animationPreset: "slide-vertical",
-      durationMs: 2000,
+      motion: { ...defaultEventCardMotion },
       followTarget: "none",
       ...defaultTextFit,
       ...defaultTextEffects,
@@ -200,6 +199,7 @@ export const builtinThemes: ThemeDefinition[] = [
     "updatedAt": null,
     "acronym": "",
     "archived": false,
+    "motion": { "teamSwitch": { ...defaultTeamSwitchMotion } },
     "canvas": {
       "width": 1920,
       "height": 1080,
@@ -516,8 +516,7 @@ export const builtinThemes: ThemeDefinition[] = [
         fontWeight: 700,
         letterSpacing: 1.5,
         textAlign: "center",
-        animationPreset: "slide-horizontal",
-        durationMs: 2000,
+        motion: { ...defaultEventCardMotion, preset: "glide-in" },
         followTarget: "none"
       },
       concede: {
@@ -554,10 +553,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "fontWeight": 700,
         "color": "#f6f1e8"
       },
-      "transition": {
-        "animation": "fade",
-        "durationMs": 250
-      }
+      "motion": { "preset": "fade", "durationMs": 250, "easing": "ease", "delayMs": 0 }
     },
     "momentOverlays": {
       "timeout": {
@@ -589,6 +585,7 @@ export const builtinThemes: ThemeDefinition[] = [
     "updatedAt": null,
     "acronym": "",
     "archived": false,
+    "motion": { "teamSwitch": { ...defaultTeamSwitchMotion } },
     "canvas": {
       "width": 1920,
       "height": 1080,
@@ -905,8 +902,7 @@ export const builtinThemes: ThemeDefinition[] = [
         fontWeight: 700,
         letterSpacing: 1.1,
         textAlign: "center",
-        animationPreset: "slide-horizontal",
-        durationMs: 2000,
+        motion: { ...defaultEventCardMotion, preset: "glide-in" },
         followTarget: "none"
       },
       concede: {
@@ -943,10 +939,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "fontWeight": 700,
         "color": "#21e25b"
       },
-      "transition": {
-        "animation": "fade",
-        "durationMs": 220
-      }
+      "motion": { "preset": "fade", "durationMs": 220, "easing": "ease", "delayMs": 0 }
     },
     "momentOverlays": {
       "timeout": {

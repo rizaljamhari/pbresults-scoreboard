@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { motionEnter, motionLeave, motionLoop, motionSwap, motionTotalMs } from "../../shared/motion";
 import { formatClock } from "../../shared/normalize";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
@@ -32,7 +33,6 @@ type OverlaySnapshot = {
   rightScore: number;
 };
 
-const TEAM_SWITCH_ANIMATION_MS = 600;
 const TEAM_SWITCH_COOLDOWN_MS = 2200;
 
 function resolveBackgroundPosition(position: ThemeDefinition["components"]["homeName"]["backgroundImagePosition"]) {
@@ -431,6 +431,10 @@ export function OverlayRenderer({
   previewTimeout = null
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
+  const teamSwitchMotion = theme.motion.teamSwitch;
+  const teamSwitchSwap = motionSwap(teamSwitchMotion);
+  const teamSwitchMs = motionTotalMs(teamSwitchMotion);
+  const centreLineMotion = theme.centerSecondary.motion;
   const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; eventType: "towel" | "base"; until: number; token: string } | null>(null);
   const [teamSwitchToken, setTeamSwitchToken] = useState<number | null>(null);
   const [teamSwitchPayload, setTeamSwitchPayload] = useState<{
@@ -487,7 +491,7 @@ export function OverlayRenderer({
   const breakTimeoutToken = useTimeoutToken(live, theme.momentOverlays.timeout, majorAnimationActive);
 
   useEffect(() => {
-    if (!overlayGeneral.teamSwitchEnabled) {
+    if (!overlayGeneral.teamSwitchEnabled || teamSwitchMs === 0) {
       if (teamSwitchClearTimeoutRef.current !== null) {
         clearTimeout(teamSwitchClearTimeoutRef.current);
         teamSwitchClearTimeoutRef.current = null;
@@ -544,8 +548,8 @@ export function OverlayRenderer({
       setTeamSwitchToken((current) => (current === now ? null : current));
       setTeamSwitchPayload((current) => (current?.token === now ? null : current));
       teamSwitchClearTimeoutRef.current = null;
-    }, TEAM_SWITCH_ANIMATION_MS);
-  }, [live, majorAnimationActive, overlayGeneral.teamSwitchEnabled]);
+    }, teamSwitchMs);
+  }, [live, majorAnimationActive, overlayGeneral.teamSwitchEnabled, teamSwitchMs]);
 
   // Repeating towel animation logic
   useEffect(() => {
@@ -559,8 +563,8 @@ export function OverlayRenderer({
     }
     // If already running, do nothing
     if (towelIntervalRef.current !== null) return;
-    // Animation duration: match teamEventOverlay.durationMs or use a default
-    const duration = overlayGeneral.durationMs || 1200;
+    // One tick per loop of the event card's motion.
+    const duration = overlayGeneral.motion.durationMs || 1200;
     towelIntervalRef.current = window.setInterval(() => {
       setTowelAnimationTick((tick) => tick + 1);
     }, duration);
@@ -572,7 +576,7 @@ export function OverlayRenderer({
         towelIntervalRef.current = null;
       }
     };
-  }, [currentTeamEvent, live, majorAnimationActive, overlayGeneral.durationMs]);
+  }, [currentTeamEvent, live, majorAnimationActive, overlayGeneral.motion.durationMs]);
 
   useEffect(() => {
     if (!live || !overlayGeneral.enabled || majorAnimationActive) {
@@ -647,13 +651,13 @@ export function OverlayRenderer({
       centerSecondaryExitTimerRef.current = window.setTimeout(() => {
         centerSecondaryExitTimerRef.current = null;
         setCenterSecondaryExitActive(false);
-      }, theme.centerSecondary.transition.durationMs);
+      }, centreLineMotion.preset === "none" ? 0 : centreLineMotion.durationMs);
     } else {
       setCenterSecondaryAnimationTick((current) => current + 1);
       setCenterSecondaryExitActive(false);
       previousCenterSecondaryPresentationRef.current = centerSecondaryPresentation;
     }
-  }, [centerSecondaryPresentation, theme.centerSecondary.transition.durationMs]);
+  }, [centerSecondaryPresentation, centreLineMotion.preset, centreLineMotion.durationMs]);
 
   const concedeLabel = useMemo(() => {
     const activeConcedeTheme = activeConcede?.eventType === "base" ? theme.teamEventOverlay.base : theme.teamEventOverlay.concede;
@@ -845,7 +849,7 @@ export function OverlayRenderer({
                       style={{
                         padding: resolveComponentPadding(component),
                         ...resolveComponentOffset(component),
-                        animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
+                        animation: teamSwitchSwap?.out,
                         position: "absolute",
                         inset: 0,
                         zIndex: 2,
@@ -870,7 +874,7 @@ export function OverlayRenderer({
                       style={{
                         padding: resolveComponentPadding(component),
                         ...resolveComponentOffset(component),
-                        animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
+                        animation: teamSwitchSwap?.in,
                         position: "absolute",
                         inset: 0,
                         zIndex: 3,
@@ -945,18 +949,6 @@ export function OverlayRenderer({
                 ? theme.centerSecondary.staticStyle
                 : null
             : null;
-        const centerSecondaryAnimationName =
-          componentId === "breakTime"
-            ? theme.centerSecondary.transition.animation === "fade"
-              ? "center-secondary-fade"
-              : theme.centerSecondary.transition.animation === "slide-up"
-                ? "center-secondary-slide-up"
-                : theme.centerSecondary.transition.animation === "slide-left"
-                  ? "center-secondary-slide-left"
-                  : theme.centerSecondary.transition.animation === "slide-right"
-                    ? "center-secondary-slide-right"
-                    : "none"
-            : "none";
         const contentKey =
           componentId === "breakTime"
             ? centerSecondaryExitActive
@@ -964,10 +956,10 @@ export function OverlayRenderer({
               : `${activeVariant}:${centerSecondaryAnimationTick}`
             : undefined;
         const contentAnimation =
-          componentId === "breakTime" && centerSecondaryExitActive && centerSecondaryAnimationName !== "none"
-            ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease reverse`
-            : componentId === "breakTime" && centerSecondaryAnimationTick > 0 && centerSecondaryAnimationName !== "none"
-              ? `${centerSecondaryAnimationName} ${theme.centerSecondary.transition.durationMs}ms ease`
+          componentId === "breakTime" && centerSecondaryExitActive
+            ? motionLeave(centreLineMotion)
+            : componentId === "breakTime" && centerSecondaryAnimationTick > 0
+              ? motionEnter(centreLineMotion)
               : undefined;
 
         return (
@@ -1002,7 +994,7 @@ export function OverlayRenderer({
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
                       ...textLook(component),
-                      animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
+                      animation: teamSwitchSwap?.out,
                       position: "absolute",
                       inset: 0,
                       zIndex: 2,
@@ -1027,7 +1019,7 @@ export function OverlayRenderer({
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
                       ...textLook(component),
-                      animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
+                      animation: teamSwitchSwap?.in,
                       position: "absolute",
                       inset: 0,
                       zIndex: 3,
@@ -1172,14 +1164,7 @@ export function OverlayRenderer({
           <div
             className="concede-label-motion"
             style={{
-              animation:
-                overlayGeneral.animationPreset === "none"
-                  ? undefined
-                  : `${
-                      overlayGeneral.animationPreset === "slide-horizontal"
-                        ? "concede-slide-horizontal"
-                        : "concede-slide-vertical"
-                    } ${overlayGeneral.durationMs}ms ease-in-out infinite alternate`
+              animation: motionLoop(overlayGeneral.motion)
             }}
           >
             <span className="component-surface" style={winnerLabel ? winnerSurface.background : activeConcedeSurface?.background} />

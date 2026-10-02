@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–2 (text fitting, shadows and text effects) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–3 (text fitting, shadows and text effects, motion model) built
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -188,22 +188,25 @@ On image pieces (team logos, event logo, custom images):
 
 ## 5. Motion
 
-### 5.1 One motion model
+### 5.1 One motion model (built, step 3)
 
 ```ts
-motion = z.object({
-  preset: z.enum(["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "scale", "wipe-left", "wipe-right", "pop"]),
-  durationMs: z.number().min(0).max(3000),
-  easing: z.enum(["linear", "ease-out", "ease-in-out", "back-out", "spring"]),
-  delayMs: z.number().min(0).max(3000).default(0)
-})
+motion = { preset, durationMs, easing, delayMs }   // src/shared/motion.ts, schema in theme.ts (motionField)
 ```
 
-The three existing systems migrate onto this model in `preprocess`. Each one keeps its current preset and duration, so existing themes behave the same.
+- **Presets:** None, Fade, Slide up / down / left / right (an 8px nudge), Drop in (full height, from above), Glide in (from the left), Scale.
+- **Easings:** Ease, Linear, Ease in, Ease out, Ease in-out, Snappy (`cubic-bezier(0, 0, 0.2, 1)`), Strong ease out (`cubic-bezier(0.16, 1, 0.3, 1)`).
+- **How it plays belongs to the thing, not the setting:** `motionEnter` (once, as content arrives), `motionLeave` (reversed, never delayed), `motionLoop` (enter, hold, leave, repeating) and `motionSwap` (old content out while new comes in). Keyframes are `motion-<preset>` and `motion-<preset>-loop` in the overlay stylesheet.
+- **Migrated in `preprocess`, with identical timing:**
 
-- `teamEventOverlay.general.animationPreset` and `durationMs`.
-- `centerSecondary.transition`.
-- The team switch, which becomes `theme.motion.teamSwitch` with today's constant as its default.
+| Was | Now | Default |
+|---|---|---|
+| `teamEventOverlay.general.animationPreset` + `durationMs` | `teamEventOverlay.general.motion` (loop) | Drop in, 2000 ms, Ease in-out (`slide-vertical` → Drop in, `slide-horizontal` → Glide in) |
+| `centerSecondary.transition` | `centerSecondary.motion` (enter, reversed to leave) | Fade, 250 ms, Ease |
+| the fixed team-switch animation | `theme.motion.teamSwitch` (swap) | Scale, 600 ms, Snappy |
+
+- **Editor:** one `MotionFields` control (animation, duration, easing, delay) in the centre line's Change animation group and the event cards' shared section, plus a team-switch motion under "Animate team switches".
+- **Rollback note:** a theme saved by this version and opened by an older one loses its event-card and centre-line motion choices, which fall back to the old defaults. Nothing breaks.
 
 ### 5.2 Entrance and exit for each piece
 
@@ -265,7 +268,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 |---|---|---|
 | **1. Text fitting** — built | Case, fit (clip / ellipsis / shrink) and minimum size (4.3); stress-test preview presets (W3) | Additive shared `textFit` fields on every text-bearing object |
 | **2. Shadows and text effects** — built | Visual box-shadow editor with presets (4.1); text shadow and outline | Box shadow unchanged (CSS string); additive `textShadow`, `textStroke` |
-| **3. Motion model** | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
+| **3. Motion model** — built | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
 | **4. Value-change motion** | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
 | **5. Entrance and exit** | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
 | **6. Gradients and shapes** | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |

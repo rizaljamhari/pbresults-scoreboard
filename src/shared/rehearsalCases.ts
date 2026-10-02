@@ -1,4 +1,5 @@
 import type { RawLiveState } from "./normalize.js";
+import { motionPresetLabels } from "./motion.js";
 import { matchTeamName } from "./teamMatching.js";
 import type { StoredAsset, TeamRecord, ThemeDefinition } from "./theme.js";
 
@@ -229,8 +230,15 @@ export function cardExpectation(kind: CardKind, side: Side, theme: ThemeDefiniti
       : general.placementMode === "top-ribbon"
         ? `as a ribbon ${general.position === "above" ? "above" : "over the top edge of"} the team`
         : `as a stamp ${general.position === "above" ? "above" : "over the top edge of"} the team`;
+  const { preset } = general.motion;
   const motion =
-    general.animationPreset === "none" ? "without motion" : general.animationPreset === "slide-horizontal" ? "sliding sideways" : "sliding up and down";
+    preset === "none"
+      ? "without motion"
+      : preset === "glide-in"
+        ? "sliding sideways"
+        : preset === "drop-in"
+          ? "sliding up and down"
+          : `repeating a ${motionPresetLabels[preset].toLowerCase()}`;
   const text = card.text.trim() || (kind === "winner" ? "WINNER" : "");
   return `“${text}” card over the ${sideWord(side)} team, ${placement}, ${motion}.`;
 }
@@ -266,9 +274,9 @@ function centreLineExpectation(theme: ThemeDefinition, period: "play" | "break")
 }
 
 function changeAnimation(theme: ThemeDefinition) {
-  const { animation, durationMs } = theme.centerSecondary.transition;
-  const names: Record<string, string> = { none: "", fade: "a fade", "slide-up": "a slide up", "slide-left": "a slide left", "slide-right": "a slide right" };
-  return animation === "none" ? "straight away (no change animation)" : `with ${names[animation]} over ${durationMs} ms`;
+  const { preset, durationMs, delayMs } = theme.centerSecondary.motion;
+  const delay = delayMs > 0 ? ` after ${delayMs} ms` : "";
+  return preset === "none" ? "straight away (no change animation)" : `with a ${motionPresetLabels[preset].toLowerCase()} over ${durationMs} ms${delay}`;
 }
 
 function momentPlacement(theme: ThemeDefinition, kind: "timeout" | "gameFinished") {
@@ -561,7 +569,7 @@ export function buildRehearsalCases(ctx: RehearsalContext): RehearsalCase[] {
       group: "Transitions",
       title: "Game → break → game",
       expectation: `The centre line changes ${changeAnimation(theme)} each time: ${centreLineExpectation(theme, "play").replace(/\.$/, "")} in play, then ${centreLineExpectation(theme, "break").charAt(0).toLowerCase()}${centreLineExpectation(theme, "break").slice(1).replace(/\.$/, "")}, then back.`,
-      source: `Centre line · change animation: ${theme.centerSecondary.transition.animation}, ${theme.centerSecondary.transition.durationMs} ms`,
+      source: `Centre line · change animation: ${theme.centerSecondary.motion.preset}, ${theme.centerSecondary.motion.durationMs} ms`,
       frames: [
         typical([3, 2], { gameClock: 12 }, { holdMs: 3_000, countdown: "game" }),
         typical([3, 2], { period: "BREAK", state: "STOPPED", gameClock: 0, breakClock: 90 }, { holdMs: 4_000, countdown: "break" }),

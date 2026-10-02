@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
+import type { MotionSettings } from "../../../shared/motion";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
+import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
@@ -34,6 +36,7 @@ export function EventOverlayProperties({
   presets,
   patchGeneral,
   patchEvent,
+  patchTeamSwitchMotion,
   onApplyPreset,
   onUpload,
   onSelectFollowed
@@ -46,6 +49,7 @@ export function EventOverlayProperties({
   presets: Array<{ id: string; label: string }>;
   patchGeneral: (update: (general: General) => void) => void;
   patchEvent: (update: (settings: EventSettings) => void) => void;
+  patchTeamSwitchMotion: (next: Partial<MotionSettings>) => void;
   onApplyPreset: (presetId: string) => void;
   onUpload: (file: File) => void;
   onSelectFollowed: () => void;
@@ -240,26 +244,28 @@ export function EventOverlayProperties({
             onChange={(value) => patchGeneral((draft) => (draft.borderRadius = [value, value, value, value]))}
           />
         </Field>
-        <FieldRow>
-          <SelectInput
-            label="Entrance"
-            value={general.animationPreset}
-            options={[
-              { value: "slide-vertical", label: "Slide up" },
-              { value: "slide-horizontal", label: "Slide sideways" },
-              { value: "none", label: "Appear" }
-            ]}
-            onChange={(value) => patchGeneral((draft) => (draft.animationPreset = value))}
-          />
-          <Field label="Duration">
-            <NumberInput label="Animation duration" value={general.durationMs} min={100} step={100} unit="ms" onChange={(value) => patchGeneral((draft) => (draft.durationMs = value))} />
-          </Field>
-        </FieldRow>
+        <p className="te-field-hint">Motion repeats while the card is on screen: it comes in, holds, then goes out.</p>
+        <MotionFields
+          name="Event card"
+          value={general.motion}
+          durationLabel="Loop length"
+          onChange={(next) => patchGeneral((draft) => Object.assign(draft.motion, next))}
+        />
         <SwitchRow
           label="Animate team switches"
+          hint="Old names and logos leave as the new ones arrive."
           checked={general.teamSwitchEnabled}
           onChange={(checked) => patchGeneral((draft) => (draft.teamSwitchEnabled = checked))}
         />
+        {general.teamSwitchEnabled ? (
+          <MotionFields
+            name="Team switch"
+            value={theme.motion.teamSwitch}
+            presets={["none", "fade", "scale", "slide-up", "slide-down", "slide-left", "slide-right"]}
+            showDelay={false}
+            onChange={patchTeamSwitchMotion}
+          />
+        ) : null}
         <FieldRow>
           <Field label="Background image fit">
             <Segmented

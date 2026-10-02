@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { motionEasingValues, motionPresetValues, type MotionSettings } from "./motion.js";
 import { randomUuid } from "./randomId.js";
 
 export const componentIds = [
@@ -29,7 +30,6 @@ export const backgroundImageModeValues = ["asset", "homeTeamLogo", "awayTeamLogo
 export const teamLogoFallbackModeValues = ["none", "eventLogo", "slotFallback", "slotFallbackThenEventLogo"] as const;
 export const imageContentModeValues = ["full-canvas", "visible-pixels"] as const;
 export const concedePositionValues = ["above", "overlapping-top"] as const;
-export const concedeAnimationValues = ["slide-horizontal", "slide-vertical", "none"] as const;
 export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ribbon"] as const;
 export const teamOverlayFollowTargetValues = ["none", "logo", "name"] as const;
 export const centerSecondaryModeValues = ["timer", "staticText", "hidden"] as const;
@@ -60,6 +60,22 @@ export const textEffectFields = {
   textStrokeWidth: z.number().min(0).max(20).default(0),
   textStrokeColor: z.string().default("#000000")
 };
+
+/** A motion setting (see `./motion.ts`); every field falls back to the given default. */
+function motionField(defaults: MotionSettings) {
+  return z
+    .object({
+      preset: z.enum(motionPresetValues).default(defaults.preset),
+      durationMs: z.number().min(0).max(10000).default(defaults.durationMs),
+      easing: z.enum(motionEasingValues).default(defaults.easing),
+      delayMs: z.number().min(0).max(5000).default(defaults.delayMs)
+    })
+    .default({});
+}
+
+export const defaultEventCardMotion: MotionSettings = { preset: "drop-in", durationMs: 2000, easing: "ease-in-out", delayMs: 0 };
+export const defaultCentreLineMotion: MotionSettings = { preset: "fade", durationMs: 250, easing: "ease", delayMs: 0 };
+export const defaultTeamSwitchMotion: MotionSettings = { preset: "scale", durationMs: 600, easing: "snappy", delayMs: 0 };
 
 const textEffectSchema = z.object(textEffectFields);
 export type TextEffectSettings = z.infer<typeof textEffectSchema>;
@@ -186,7 +202,7 @@ const defaultImageComponentValue = {
   visibleContentPaddingPct: 0
 };
 
-const teamEventOverlayGeneralSchema = z.object({
+const teamEventOverlayGeneralObjectSchema = z.object({
   enabled: z.boolean().default(true),
   teamSwitchEnabled: z.boolean().default(true),
   placementMode: z.enum(teamOverlayPlacementValues).default("center-stamp"),
@@ -208,10 +224,32 @@ const teamEventOverlayGeneralSchema = z.object({
   shadow: z.string().default("none"),
   ...textFitFields,
   ...textEffectFields,
-  animationPreset: z.enum(concedeAnimationValues).default("slide-vertical"),
-  durationMs: z.number().positive().default(2000),
+  /** Loops while the card is on screen: enters, holds, leaves, over `durationMs`. */
+  motion: motionField(defaultEventCardMotion),
   followTarget: z.enum(teamOverlayFollowTargetValues).default("none")
 });
+
+/** The event card's animation used to be its own preset and duration; it now uses the shared motion setting. */
+function migrateEventCardMotion(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+  const { animationPreset, durationMs, ...rest } = input as Record<string, unknown>;
+  if ("motion" in rest || (animationPreset === undefined && durationMs === undefined)) {
+    return rest;
+  }
+  return {
+    ...rest,
+    motion: {
+      preset: animationPreset === "none" ? "none" : animationPreset === "slide-horizontal" ? "glide-in" : "drop-in",
+      durationMs: typeof durationMs === "number" ? durationMs : defaultEventCardMotion.durationMs,
+      easing: defaultEventCardMotion.easing,
+      delayMs: 0
+    }
+  };
+}
+
+const teamEventOverlayGeneralSchema = z.preprocess(migrateEventCardMotion, teamEventOverlayGeneralObjectSchema);
 
 const teamEventOverlayEventSchema = z.object({
   enabled: z.boolean().default(true),
@@ -388,7 +426,7 @@ function migrateLegacyTeamEventOverlay(input: unknown): unknown {
 
 export const teamEventOverlaySchema = z.preprocess(migrateLegacyTeamEventOverlay, nestedTeamEventOverlaySchema);
 
-export const centerSecondarySchema = z.object({
+const centerSecondaryObjectSchema = z.object({
   gameMode: z.enum(centerSecondaryModeValues).default("staticText"),
   gameText: z.string().default(""),
   breakMode: z.enum(centerSecondaryModeValues).default("timer"),
@@ -409,13 +447,33 @@ export const centerSecondarySchema = z.object({
       color: z.string().default("#f6f1e8")
     })
     .default({}),
-  transition: z
-    .object({
-      animation: z.enum(centerSecondaryTransitionValues).default("fade"),
-      durationMs: z.number().positive().default(250)
-    })
-    .default({})
+  /** Plays when the line's content changes; reversed as it goes blank. */
+  motion: motionField(defaultCentreLineMotion)
 });
+
+/** The centre line's `transition` (animation and duration) became the shared motion setting. */
+function migrateCentreLineMotion(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+  const { transition, ...rest } = input as Record<string, unknown>;
+  if ("motion" in rest || !transition || typeof transition !== "object") {
+    return rest;
+  }
+  const legacy = transition as { animation?: unknown; durationMs?: unknown };
+  const preset = (centerSecondaryTransitionValues as readonly unknown[]).includes(legacy.animation) ? legacy.animation : defaultCentreLineMotion.preset;
+  return {
+    ...rest,
+    motion: {
+      preset,
+      durationMs: typeof legacy.durationMs === "number" ? legacy.durationMs : defaultCentreLineMotion.durationMs,
+      easing: defaultCentreLineMotion.easing,
+      delayMs: 0
+    }
+  };
+}
+
+export const centerSecondarySchema = z.preprocess(migrateCentreLineMotion, centerSecondaryObjectSchema);
 
 export const momentPlacementValues = ["centreLine", "free"] as const;
 
@@ -469,8 +527,8 @@ export const momentOverlaysSchema = z.object({
 const legacyCentreLineMomentsSchema = z.object({
   breakMode: z.enum(centerSecondaryModeValues).default("timer"),
   gameFinished: z.object({ enabled: z.boolean().default(true) }).default({}),
-  timerStyle: centerSecondarySchema.shape.timerStyle,
-  staticStyle: centerSecondarySchema.shape.staticStyle,
+  timerStyle: centerSecondaryObjectSchema.shape.timerStyle,
+  staticStyle: centerSecondaryObjectSchema.shape.staticStyle,
   timeout: z
     .object({
       enabled: z.boolean().default(true),
@@ -582,7 +640,14 @@ const themeObjectSchema = z.object({
   freeComponents: z.array(freeComponentSchema).default([]),
   teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({}),
-  momentOverlays: momentOverlaysSchema.default({})
+  momentOverlays: momentOverlaysSchema.default({}),
+  /** Motion that belongs to the whole scoreboard rather than one piece. */
+  motion: z
+    .object({
+      /** Old names and logos leave as the new ones arrive when the teams change. */
+      teamSwitch: motionField(defaultTeamSwitchMotion)
+    })
+    .default({})
 });
 
 export const themeSchema = z.preprocess(migrateMomentOverlays, themeObjectSchema);

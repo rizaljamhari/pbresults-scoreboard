@@ -145,9 +145,9 @@ const concedePresets = {
         fontWeight: 700,
         letterSpacing: 1.5,
         height: 56,
-        padding: 10,
-        animationPreset: "slide-vertical" as const
+        padding: 10
       },
+      motionPreset: "drop-in" as const,
       concede: {
         backgroundColor: "#171311dd",
         color: "#ffffff"
@@ -165,9 +165,9 @@ const concedePresets = {
         fontWeight: 700,
         letterSpacing: 1.1,
         height: 48,
-        padding: 8,
-        animationPreset: "slide-horizontal" as const
+        padding: 8
       },
+      motionPreset: "glide-in" as const,
       concede: {
         backgroundColor: "#f6f1e8",
         color: "#111111"
@@ -185,9 +185,9 @@ const concedePresets = {
         fontWeight: 700,
         letterSpacing: 1.8,
         height: 64,
-        padding: 14,
-        animationPreset: "slide-horizontal" as const
+        padding: 14
       },
+      motionPreset: "glide-in" as const,
       concede: {
         backgroundColor: "#181311d6",
         color: "#fff7ed"
@@ -996,6 +996,7 @@ export function ThemeEditorPage() {
     const preset = concedePresets[presetId].values;
     patchTeamEventOverlay((overlay) => {
       Object.assign(overlay.general, preset.general);
+      overlay.general.motion.preset = preset.motionPreset;
       Object.assign(overlay.concede, preset.concede);
     });
   }
@@ -2267,6 +2268,7 @@ export function ThemeEditorPage() {
                 presets={Object.entries(concedePresets).map(([presetId, preset]) => ({ id: presetId, label: preset.label }))}
                 patchGeneral={patchOverlayGeneral}
                 patchEvent={patchEventSettings}
+                patchTeamSwitchMotion={(next) => patchTheme((draft) => Object.assign(draft.motion.teamSwitch, next))}
                 onApplyPreset={(presetId) => applyConcedePreset(presetId as keyof typeof concedePresets)}
                 onUpload={(file) => void uploadAssetIntoTarget(file, eventKind)}
                 onSelectFollowed={() => eventCard?.onBadgeClick?.()}

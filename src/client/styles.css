@@ -475,34 +475,219 @@ details[open]:not(.editor-section-card) > summary::after {
   }
 }
 
-@keyframes overlay-team-switch-out {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.88);
-  }
-}
+/*
+ * Shared motion presets (src/shared/motion.ts). "motion-<preset>" plays as content arrives (reversed as it leaves);
+ * "motion-<preset>-loop" enters, holds and leaves, for things that repeat while on screen.
+ */
 
-@keyframes overlay-team-switch-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.88);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes center-secondary-fade {
+@keyframes motion-fade {
   from {
     opacity: 0;
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes motion-fade-loop {
+  0% {
+    opacity: 0;
+  }
+  16%,
+  84% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-slide-up-loop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes motion-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-slide-down-loop {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes motion-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes motion-slide-left-loop {
+  0% {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+@keyframes motion-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes motion-slide-right-loop {
+  0% {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+@keyframes motion-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motion-drop-in-loop {
+  0% {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes motion-glide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes motion-glide-in-loop {
+  0% {
+    opacity: 0;
+    transform: translateX(-12%);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(12%);
+  }
+}
+
+@keyframes motion-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-scale-loop {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88);
   }
 }
 
@@ -514,28 +699,6 @@ details[open]:not(.editor-section-card) > summary::after {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes center-secondary-slide-left {
-  from {
-    opacity: 0;
-    transform: translateX(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes center-secondary-slide-right {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
   }
 }
 
@@ -567,38 +730,6 @@ details[open]:not(.editor-section-card) > summary::after {
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes concede-slide-vertical {
-  0% {
-    opacity: 0;
-    transform: translateY(-100%);
-  }
-  16%,
-  84% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-100%);
-  }
-}
-
-@keyframes concede-slide-horizontal {
-  0% {
-    opacity: 0;
-    transform: translateX(-12%);
-  }
-  16%,
-  84% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(12%);
   }
 }
 
