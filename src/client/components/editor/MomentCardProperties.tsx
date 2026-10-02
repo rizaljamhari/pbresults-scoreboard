@@ -1,7 +1,9 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
-import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, type ColorToken, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { FillInput } from "./FillInput";
+import { StylePicker } from "./DesignSystemProperties";
+import { surfaceStyleFields, textStyleFields } from "../../../shared/design";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
@@ -48,6 +50,15 @@ export function MomentCardProperties({
   const timeout = theme.momentOverlays.timeout;
   const name = MOMENT_NAMES[kind];
   const set = (update: (draft: Card) => void) => patch((draft) => update(draft[kind]));
+  /** Binding props for a colour field: picking a theme colour links the field to it. */
+  const bindColor = (field: "color" | "backgroundColor" | "backgroundOverlayColor" | "borderColor") => ({
+    tokenId: card.design.tokenBindings[field] ?? null,
+    onToken: (token: ColorToken) =>
+      set((draft) => {
+        draft[field] = token.value;
+        draft.design.tokenBindings[field] = token.id;
+      })
+  });
   const following = card.placement === "centreLine";
   const lineHidden = !theme.components.breakTime.visible;
   const radius = card.borderRadius;
@@ -152,6 +163,14 @@ export function MomentCardProperties({
       </PanelSection>
 
       <PanelSection title="Type">
+        <StylePicker
+          label="Text style"
+          styles={theme.styles.text}
+          styleId={card.design.textStyleId}
+          overrides={card.design.overrides.filter((field) => (textStyleFields as readonly string[]).includes(field))}
+          onChoose={(styleId) => set((draft) => (draft.design.textStyleId = styleId))}
+          onReset={() => set((draft) => (draft.design.overrides = draft.design.overrides.filter((field) => !(textStyleFields as readonly string[]).includes(field))))}
+        />
         <FieldRow>
           <SelectInput
             label="Font"
@@ -195,16 +214,25 @@ export function MomentCardProperties({
         </Field>
         <TextFitFields value={card} onChange={(next) => set((draft) => Object.assign(draft, next))} />
         <TextEffectFields value={card} swatches={swatches} onChange={(next) => set((draft) => Object.assign(draft, next))} />
-        <ColorInput label="Text colour" value={card.color} swatches={swatches} onChange={(value) => set((draft) => (draft.color = value))} />
+        <ColorInput label="Text colour" value={card.color} swatches={swatches} onChange={(value) => set((draft) => (draft.color = value))} {...bindColor("color")} />
       </PanelSection>
 
       <PanelSection title="Card">
+        <StylePicker
+          label="Surface style"
+          styles={theme.styles.surface}
+          styleId={card.design.surfaceStyleId}
+          overrides={card.design.overrides.filter((field) => (surfaceStyleFields as readonly string[]).includes(field))}
+          onChoose={(styleId) => set((draft) => (draft.design.surfaceStyleId = styleId))}
+          onReset={() => set((draft) => (draft.design.overrides = draft.design.overrides.filter((field) => !(surfaceStyleFields as readonly string[]).includes(field))))}
+        />
         <FillInput
           label="Fill"
           color={card.backgroundColor}
           fill={card.fill}
           swatches={swatches}
           onColor={(value) => set((draft) => (draft.backgroundColor = value))}
+          {...bindColor("backgroundColor")}
           onFill={(next) => set((draft) => Object.assign(draft.fill, next))}
         />
         <Field label="Background image">
@@ -269,6 +297,7 @@ export function MomentCardProperties({
           fill={card.tintFill}
           swatches={swatches}
           onColor={(value) => set((draft) => (draft.backgroundOverlayColor = value))}
+          {...bindColor("backgroundOverlayColor")}
           onFill={(next) => set((draft) => Object.assign(draft.tintFill, next))}
         />
         <Field label="Tint strength">
@@ -281,7 +310,7 @@ export function MomentCardProperties({
             onChange={(value) => set((draft) => (draft.backgroundOverlayOpacity = value / 100))}
           />
         </Field>
-        <ColorInput label="Border" value={card.borderColor} swatches={swatches} onChange={(value) => set((draft) => (draft.borderColor = value))} />
+        <ColorInput label="Border" value={card.borderColor} swatches={swatches} onChange={(value) => set((draft) => (draft.borderColor = value))} {...bindColor("borderColor")} />
         <FieldRow>
           <Field label="Border width">
             <NumberInput label="Card border width" value={card.borderWidth} min={0} unit="px" onChange={(value) => set((draft) => (draft.borderWidth = value))} />

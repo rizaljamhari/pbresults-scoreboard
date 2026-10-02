@@ -1880,6 +1880,50 @@ details[open]:not(.editor-section-card) > summary::after {
   justify-self: start;
 }
 
+/* Theme colours sit above the colours found in the theme, with a ring marking the bound one. */
+.te-token-row .te-token-swatch span {
+  border-radius: 50%;
+}
+
+.te-token-tag {
+  color: var(--te-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/* Design system on the theme panel: colour rows, usage lines, style pickers. */
+.te-token {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.te-token-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.te-usage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--te-muted);
+  font-size: 11px;
+}
+
+.te-style-picker {
+  display: grid;
+  gap: 4px;
+}
+
+.te-danger-btn {
+  justify-self: start;
+  color: var(--tone-critical, #b3261e);
+}
+
 /* "Aa / AA / Ab" letter-case choices read as type samples. */
 .te-case-glyph {
   font-size: 13px;

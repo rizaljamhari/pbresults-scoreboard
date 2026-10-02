@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import type { MotionSettings } from "../../../shared/motion";
-import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, type ColorToken, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { FillInput } from "./FillInput";
+import { StylePicker } from "./DesignSystemProperties";
+import { textStyleFields } from "../../../shared/design";
 import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
@@ -64,6 +66,23 @@ export function EventOverlayProperties({
   const followed = general.followTarget === "logo" ? logo : general.followTarget === "name" ? name : null;
   const followFallsBack = followed !== null && !followed.visible;
   const radius = general.borderRadius;
+  /** Binding props for colour fields: picking a theme colour links the field to it. */
+  const bindEventColor = (field: "color" | "backgroundColor" | "backgroundOverlayColor") => ({
+    tokenId: settings.design.tokenBindings[field] ?? null,
+    onToken: (token: ColorToken) =>
+      patchEvent((draft) => {
+        draft[field] = token.value;
+        draft.design.tokenBindings[field] = token.id;
+      })
+  });
+  const bindGeneralColor = (field: "borderColor") => ({
+    tokenId: general.design.tokenBindings[field] ?? null,
+    onToken: (token: ColorToken) =>
+      patchGeneral((draft) => {
+        draft[field] = token.value;
+        draft.design.tokenBindings[field] = token.id;
+      })
+  });
 
   return (
     <div className="te-piece">
@@ -81,13 +100,14 @@ export function EventOverlayProperties({
       <PanelSection title={`${EVENT_NAMES[kind]} only`}>
         <SwitchRow label={`Show the ${EVENT_NAMES[kind].toLowerCase()} card`} checked={settings.enabled} onChange={(checked) => patchEvent((draft) => (draft.enabled = checked))} />
         <TextInput label="Text" value={settings.text} maxLength={60} onChange={(value) => patchEvent((draft) => (draft.text = value))} />
-        <ColorInput label="Text colour" value={settings.color} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.color = value))} />
+        <ColorInput label="Text colour" value={settings.color} swatches={swatches} onChange={(value) => patchEvent((draft) => (draft.color = value))} {...bindEventColor("color")} />
         <FillInput
           label="Background"
           color={settings.backgroundColor}
           fill={settings.fill}
           swatches={swatches}
           onColor={(value) => patchEvent((draft) => (draft.backgroundColor = value))}
+          {...bindEventColor("backgroundColor")}
           onFill={(next) => patchEvent((draft) => Object.assign(draft.fill, next))}
         />
         <Field label="Background image">
@@ -124,6 +144,7 @@ export function EventOverlayProperties({
           fill={settings.tintFill}
           swatches={swatches}
           onColor={(value) => patchEvent((draft) => (draft.backgroundOverlayColor = value))}
+          {...bindEventColor("backgroundOverlayColor")}
           onFill={(next) => patchEvent((draft) => Object.assign(draft.tintFill, next))}
         />
         <Field label="Tint strength">
@@ -210,6 +231,14 @@ export function EventOverlayProperties({
           </>
         ) : null}
 
+        <StylePicker
+          label="Text style"
+          styles={theme.styles.text}
+          styleId={general.design.textStyleId}
+          overrides={general.design.overrides.filter((field) => (textStyleFields as readonly string[]).includes(field))}
+          onChoose={(styleId) => patchGeneral((draft) => (draft.design.textStyleId = styleId))}
+          onReset={() => patchGeneral((draft) => (draft.design.overrides = draft.design.overrides.filter((field) => !(textStyleFields as readonly string[]).includes(field))))}
+        />
         <FieldRow>
           <SelectInput
             label="Font"
@@ -246,7 +275,7 @@ export function EventOverlayProperties({
         </Field>
         <TextFitFields value={general} onChange={(next) => patchGeneral((draft) => Object.assign(draft, next))} />
         <TextEffectFields value={general} swatches={swatches} onChange={(next) => patchGeneral((draft) => Object.assign(draft, next))} />
-        <ColorInput label="Border" value={general.borderColor} swatches={swatches} onChange={(value) => patchGeneral((draft) => (draft.borderColor = value))} />
+        <ColorInput label="Border" value={general.borderColor} swatches={swatches} onChange={(value) => patchGeneral((draft) => (draft.borderColor = value))} {...bindGeneralColor("borderColor")} />
         <Field label="Border width">
             <NumberInput label="Card border width" value={general.borderWidth} min={0} unit="px" onChange={(value) => patchGeneral((draft) => (draft.borderWidth = value))} />
           </Field>

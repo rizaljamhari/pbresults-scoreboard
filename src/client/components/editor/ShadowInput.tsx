@@ -9,6 +9,7 @@ import {
   type ShadowKind,
   type ShadowLayer
 } from "../../../shared/shadow";
+import type { ColorToken } from "../../../shared/theme";
 import { IconButton } from "./EditorChrome";
 import { ColorInput, Field, NumberInput, SelectInput, SwitchRow, TextInput } from "./fields";
 
@@ -109,11 +110,16 @@ export function ShadowInput({
 export function TextEffectFields({
   value,
   swatches,
-  onChange
+  onChange,
+  strokeTokenId = null,
+  onStrokeToken
 }: {
   value: { textShadow: string; textStrokeWidth: number; textStrokeColor: string };
   swatches: string[];
   onChange: (next: Partial<{ textShadow: string; textStrokeWidth: number; textStrokeColor: string }>) => void;
+  /** Theme colour binding for the outline colour. */
+  strokeTokenId?: string | null;
+  onStrokeToken?: (token: ColorToken) => void;
 }) {
   return (
     <>
@@ -122,7 +128,14 @@ export function TextEffectFields({
         <NumberInput label="Outline width" value={value.textStrokeWidth} min={0} max={20} step={0.5} precision={1} unit="px" onChange={(textStrokeWidth) => onChange({ textStrokeWidth })} />
       </Field>
       {value.textStrokeWidth > 0 ? (
-        <ColorInput label="Outline colour" value={value.textStrokeColor} swatches={swatches} onChange={(textStrokeColor) => onChange({ textStrokeColor })} />
+        <ColorInput
+          label="Outline colour"
+          value={value.textStrokeColor}
+          swatches={swatches}
+          onChange={(textStrokeColor) => onChange({ textStrokeColor })}
+          tokenId={strokeTokenId}
+          onToken={onStrokeToken}
+        />
       ) : null}
     </>
   );

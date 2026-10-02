@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–7 (styling and motion) built; steps 8–10 open
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–8 built; steps 9–10 open
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -35,67 +35,44 @@ The theme editor's mechanics are mature: full-window canvas, moveable snapping, 
 
 ## 3. Design system
 
-### 3.1 Storage model: bind and bake
+### 3.1 Storage model: bind and bake (built, step 8)
 
-There are two ways for a piece to use a token:
-
-- **Resolve when rendering:** fields hold a reference like `token:primary`, and the renderer looks it up.
-- **Bind and bake:** fields keep a concrete value, and the piece also records which token or style it's bound to. When the token changes, the editor writes the new value into every bound piece.
-
-**Recommendation: bind and bake** for theme tokens and styles.
-
-| | Resolve when rendering | Bind and bake |
-|---|---|---|
-| Renderer changes | Every colour, font and shadow read goes through a resolver | None for theme tokens |
-| Older app versions and imports | Show invalid CSS (`token:primary`) | Render the last baked values correctly |
-| Exported theme | Depends on the token table | Self-contained |
-| Editor complexity | Low | Has to propagate changes to bound pieces (one shared helper, unit-tested) |
-
-Bind and bake can't express values that change at runtime, so **team colours** (§3.5) are the one exception and are resolved by the renderer.
-
-Binding shape, added to every styled object (piece, moment card, event card, centre-line style):
+Objects keep concrete values, so the renderer, exports, backups and older app versions never need the token table. Each styled object (every piece, both moment cards, the event cards' shared settings and each event card) has:
 
 ```ts
-bindings: z.object({
-  textStyle: z.string().nullable().default(null),      // text style id
-  surfaceStyle: z.string().nullable().default(null),   // surface style id
-  colors: z.record(z.string(), z.string()).default({}) // field name -> colour token id, e.g. { color: "ink", backgroundColor: "primary" }
-}).default({})
+design: {
+  tokenBindings: Record<field, colourId>,   // colour fields linked to a theme colour
+  textStyleId: string | null,
+  surfaceStyleId: string | null,
+  overrides: string[]                       // style fields changed on this object, left alone by the style
+}
 ```
 
-**Override rule:** while a piece is bound to a style, editing one of the style's fields on that piece **detaches that field only**. It's recorded in `overrides: string[]`, shown with a "reset to style" dot, and skipped by later propagation. "Detach style" clears the binding but keeps the values.
+`src/shared/design.ts` holds the logic, and the editor runs every change through it in its single update path (`updateTheme`), so undo, redo and save need nothing extra:
 
-### 3.2 Colour tokens
+1. **`reconcileDesign(previous, next)`** notices manual edits. A linked colour typed by hand is unlinked. A styled field changed by hand becomes an override, and stops being one when set back to the style's value. Choosing a colour or style in the same change counts as linking, not as an edit. Styles' own linked colours are unlinked the same way.
+2. **`bakeDesign(theme)`** writes theme colours into styles, then styles (minus overrides) and colours into every linked object.
 
-```ts
-tokens: z.object({
-  colors: z.array(z.object({
-    id: z.string(),            // stable, e.g. "c-1a2b"
-    name: z.string().max(40),  // "Primary", "Accent", "Ink"
-    value: z.string()          // #rrggbb or #rrggbbaa
-  })).default([])
-}).default({})
-```
+It only runs when the theme has colours or styles, so drags in themes without them cost nothing. **Decided:** overrides are per field.
 
-- **New theme:** starts with a small default set: Primary, Accent, Ink, Surface, Muted.
-- **Existing themes:** a "Create palette from this theme" action builds tokens from the current `themeSwatches` output. Nothing is created automatically, so existing themes don't change.
-- **Colour picker:** a **Theme colours** row (named, bound) sits above the existing swatches. Picking one binds the field; typing a hex value unbinds it.
-- **Theme panel (no selection):** a **Palette** section to add, rename, reorder and edit tokens. Editing a token updates every bound field in one undo step.
+### 3.2 Theme colours (built, step 8)
 
-### 3.3 Text styles
+- `theme.tokens.colors: [{ id, name, value }]`.
+- **Theme panel → Theme colours:** add, rename, recolour (picker) and remove; **From this theme** starts a palette from the colours already in use. Each colour shows where it's used ("Used by 2 pieces · Select" selects them on the canvas).
+- **Every colour picker** shows the theme colours first. Where the editor can link the field, picking one links it, and a note says so: "Linked to theme colour “Ink”. Typing a colour unlinks it." That covers text colour, fill, border, tint and outline on pieces; text, fill, tint and border on moment cards; and text, background, tint and border on event cards. Elsewhere (style fields aside) picking one just copies the value.
+- **Removing** a colour asks first when it's in use; users keep their current look, unlinked.
 
-A named bundle of text settings: `fontFamily`, `fontSize`, `fontWeight`, `letterSpacing`, `lineHeight`, `textTransform`, `color` (optionally token-bound) and text effects (§4.1).
+### 3.3 Text styles (built, step 8)
 
-- Suggested starter set for a new theme: **Team name**, **Score**, **Clock**, **Caption**, **Card**.
-- Any text-bearing object can use a text style: pieces, event cards (shared section), moment cards, and the centre line's timer and static styles. This collapses the six copies in §1.2 into one concept in the UI, even though the stored fields stay where they are.
-- Properties shows a style picker at the top of the Text group, plus the familiar fields underneath (overrides show a dot).
-- **"Create style from selection"** captures the current piece's text settings as a new style and binds the piece to it.
+- `theme.styles.text`: font, size, weight, letter spacing, line height, colour (linkable), case, long-text fit and text effects.
+- **Theme panel → Text styles:** add, edit, remove, with where-used.
+- **Text style picker** at the top of a piece's Text group, the moment cards' Type section, and the event cards' shared section. When fields differ from the style it says "2 settings changed here · Reset to style". Choosing "No text style" detaches and keeps the look.
+- **Save as style** on a piece captures its type as a new style and links the piece.
 
-### 3.4 Surface styles
+### 3.4 Surface styles (built, step 8)
 
-A named bundle of the box's appearance: fill (colour or gradient, §4.2), border colour and width, corner radius, box shadow and backdrop blur. Examples: **Plate**, **Card**, **Glass**, **Badge**.
-
-This uses the same picker, override and "create from selection" behaviour as text styles. It applies to frame pieces, shapes (§4.4), moment cards and event cards.
+- `theme.styles.surface`: fill (solid or gradient, colour linkable), border colour (linkable) and width, corner radius, box shadow and backdrop blur.
+- **Surface style picker** above a piece's Fill and at the top of a moment card's Card section, with Save as style on pieces. Event cards split their box between shared and per-event settings, so they don't take surface styles.
 
 ### 3.5 Team colours (resolved when rendering)
 
@@ -240,13 +217,13 @@ Shared `liveTextFields` on text pieces (fixed and custom), off by default:
 
 | # | Proposal | Detail |
 |---|---|---|
-| W1 | **Copy and paste style** | Cmd+Alt+C / Cmd+Alt+V, and in the right-click menu. It copies the text, surface, effects and motion settings (and their bindings), not position or content. It also works across object kinds where the fields match, for example from a piece to a moment card. |
+| W1 | **Copy and paste style** (built, step 8) | ⌘/Ctrl+Alt+C, then ⌘/Ctrl+Alt+V onto one or more selected pieces, and in the right-click menu. It copies type, box, effects, motion and linked colours and styles, not content or position, field by field where the target has the field (e.g. text to image pieces only takes the box). Pasting onto cards isn't built. |
 | W2 | **Linked mirror (symmetry)** | An optional link between a left-team piece and its right-team counterpart. While linked, size and style edits apply to both, and position is mirrored across the frame centre. This needs a persisted `mirrorOf` field; the brief kept mirroring copy-once to avoid a schema change. The copy-once action stays. |
 | W3 | **Stress-test preview presets** | One-click data sets in the preview bar: **Long names** (24+ characters), **No logos**, **Double-digit scores**, **Overtime clock**, **Unresolved team**. Pairs with text fitting (§4.3). |
 | W4 | **Diff against on air** | Before Save to air, list what changes compared with the published version ("Left team name: font size 56 → 60; new layer: Sponsor bar"), with each item clickable on the canvas. |
 | W5 | **Named versions** | Save a named version, then preview, restore or duplicate it. Stored with the theme, so it's included in backups. |
 | W6 | **Groups for custom layers** | Move, hide, lock and animate a set of custom layers together. Groups appear in Layers. Fixed slots stay ungrouped. |
-| W7 | **Show where a token or style is used** | In the Palette and Styles sections, hovering a token or style highlights its bound pieces on the canvas, and clicking selects them. |
+| W7 | **Show where a token or style is used** (built, step 8) | Each colour and style shows "Used by N pieces, M cards"; **Select** selects those pieces on the canvas. Highlighting on hover isn't built. |
 | W8 | **Starter templates** | "New theme" offers the built-in themes plus a blank theme with default tokens and styles, rather than only duplicating. |
 
 ---
@@ -269,7 +246,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **5. Entrance and exit** — built | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
 | **6. Gradients and shapes** — built | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
 | **7. Image effects, blend and blur** — built | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
-| **8. Tokens and styles** | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
+| **8. Tokens and styles** — built | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
 | **9. Brand and team** | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |
 | **10. Workflow** | Diff against on air (W4), named versions (W5), groups (W6), linked mirror (W2), starter templates (W8) | Additive (`versions`, `groups`, `mirrorOf`) |
 
@@ -293,8 +270,8 @@ Every styling and motion step adds a Rehearsal case, so the result is checked in
 
 ## 10. Open decisions
 
-1. **Storage model:** confirm bind and bake (recommended) over resolving tokens when rendering (§3.1).
-2. **Override granularity:** detach per field (recommended) or detach the whole style on any edit (simpler, and coarser for designers).
+1. ~~Storage model~~: bind and bake, built in step 8.
+2. ~~Override granularity~~: per field, built in step 8.
 3. **Linked mirror (W2):** accept the persisted `mirrorOf` field that the redesign brief avoided?
 4. **Custom font licensing:** fonts are bundled into theme exports. Do we warn on export, or leave licensing to the event?
 5. **Reduce motion scope:** on the Operations page per session, or saved in settings?

@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
 import { builtinThemes } from "../../shared/builtinThemes";
 import { fontFamilies } from "../../shared/theme";
-import { freeShapeComponentSchema } from "../../shared/theme";
+import { freeShapeComponentSchema, surfaceStyleDefaults, textStyleDefaults, type DesignBinding } from "../../shared/theme";
 import type { ComponentId, FreeImageComponent, FreeTextComponent, NormalizedLiveState, TeamMatchResult, TeamRecord, TextThemeComponent, ThemeDefinition } from "../../shared/theme";
 import {
   createFreeComponentId,
@@ -24,6 +24,7 @@ import {
   AlignHorizontalJustifyCenter,
   ArrowLeft,
   ChevronDown,
+  ClipboardPaste,
   Copy,
   Crosshair,
   ExternalLink,
@@ -51,6 +52,8 @@ import {
 } from "lucide-react";
 import { SnapOptionsPanel, ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
 import { reconcileServerTheme } from "./themeAdminUtils";
+import { ThemeColorsContext } from "../components/editor/fields";
+import { bakeDesign, captureStyle, copyStyle, createDesignId, pasteStyle, reconcileDesign, surfaceStyleFields, textStyleFields } from "../../shared/design";
 import { IconButton, Island, ShortcutsHelp } from "../components/editor/EditorChrome";
 import { ArrangeMenuItems, ArrangePanel, type ArrangeActions } from "../components/editor/ArrangeControls";
 import { LayersPanel } from "../components/editor/LayersPanel";
@@ -72,6 +75,7 @@ import {
 import { CentreLineProperties } from "../components/editor/CentreLineProperties";
 import { PreviewDataProperties, type PreviewEventMode, type PreviewLogoMode, type PreviewNameMode, type PreviewPeriodMode, type PreviewSwitchMode } from "../components/editor/PreviewDataProperties";
 import { showToast } from "../toast";
+import { pieceName } from "../components/editor/pieceNames";
 import { useAppEvents } from "../appEvents";
 import { useAppearance } from "../appearance";
 import { ResourceRefreshCoordinator } from "../resourceRefresh";
@@ -859,7 +863,10 @@ export function ThemeEditorPage() {
   }, [appEvents?.subscribe, id]);
 
   function updateTheme(next: ThemeDefinition, options?: { recordHistory?: boolean }) {
-    const normalizedNext = clampThemeToCanvas(next);
+    // Theme colours and styles: a manual edit unbinds or overrides, then bound values follow their colour or style.
+    const usesDesign = (theme: ThemeDefinition) => theme.tokens.colors.length > 0 || theme.styles.text.length > 0 || theme.styles.surface.length > 0;
+    const designed = themeResource.data && (usesDesign(themeResource.data) || usesDesign(next)) ? bakeDesign(reconcileDesign(themeResource.data, next)) : next;
+    const normalizedNext = clampThemeToCanvas(designed);
     if (themeResource.data && sameTheme(themeResource.data, normalizedNext)) {
       return;
     }
@@ -892,6 +899,60 @@ export function ThemeEditorPage() {
         mutator(component);
       }
     });
+  }
+
+  const copiedStyleRef = useRef<Record<string, unknown> | null>(null);
+  const [hasCopiedStyle, setHasCopiedStyle] = useState(false);
+
+  /** Copies the selected piece's look (type, box, effects, motion and linked styles), not its content or position. */
+  function copySelectedStyle() {
+    const component = selected && themeResource.data ? getThemeComponent(themeResource.data, selected) : null;
+    if (!component) {
+      return;
+    }
+    copiedStyleRef.current = copyStyle(component as unknown as Record<string, unknown>);
+    setHasCopiedStyle(true);
+    showToast({ kind: "success", message: "Style copied. Select pieces and paste with ⌘/Ctrl Alt V." });
+  }
+
+  /** Pastes the copied look onto every selected piece, field by field where the piece has the field. */
+  function pasteStyleToSelection() {
+    const style = copiedStyleRef.current;
+    const ids = selectedIds.length ? selectedIds : selected ? [selected] : [];
+    if (!style || ids.length === 0) {
+      return;
+    }
+    patchTheme((draft) => {
+      for (const id of ids) {
+        const component = getThemeComponent(draft, id);
+        if (component) {
+          pasteStyle(component as unknown as Record<string, unknown>, style);
+        }
+      }
+    });
+  }
+
+  /** Saves the selected piece's type or box as a new style and links the piece to it. */
+  function saveSelectedAsStyle(kind: "text" | "surface") {
+    if (!selected || !selectedEntry) {
+      return;
+    }
+    const id = createDesignId(kind);
+    const name = `${pieceName(selectedEntry)} ${kind === "text" ? "type" : "box"}`.slice(0, 40);
+    patchTheme((draft) => {
+      const component = getThemeComponent(draft, selected) as unknown as (Record<string, unknown> & { design: DesignBinding }) | null;
+      if (!component) {
+        return;
+      }
+      if (kind === "text") {
+        draft.styles.text.push(captureStyle(textStyleDefaults(id, name), component, textStyleFields));
+        component.design.textStyleId = id;
+      } else {
+        draft.styles.surface.push(captureStyle(surfaceStyleDefaults(id, name), component, surfaceStyleFields));
+        component.design.surfaceStyleId = id;
+      }
+    });
+    showToast({ kind: "success", message: `Saved “${name}”. Edit it under Text styles or Surface styles on the theme panel.` });
   }
 
   function patchTeamEventOverlay(mutator: (overlay: ThemeDefinition["teamEventOverlay"]) => void) {
@@ -1717,6 +1778,18 @@ export function ThemeEditorPage() {
         return;
       }
 
+      // Prefer event.code: Alt changes the typed character on macOS. Fall back to the key when no code is given.
+      const styleKey = event.code ? event.code.replace(/^Key/, "").toLowerCase() : event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && event.altKey && (styleKey === "c" || styleKey === "v")) {
+        event.preventDefault();
+        if (styleKey === "c") {
+          copySelectedStyle();
+        } else {
+          pasteStyleToSelection();
+        }
+        return;
+      }
+
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "d") {
         event.preventDefault();
         duplicateSelectedFreeComponent();
@@ -2185,7 +2258,18 @@ export function ThemeEditorPage() {
       <ContextMenu.Portal>
         <ContextMenu.Content className="te-menu" onCloseAutoFocus={(event) => event.preventDefault()}>
           {arrangeActions ? (
-            <ArrangeMenuItems actions={arrangeActions} />
+            <>
+              <ArrangeMenuItems actions={arrangeActions} />
+              <ContextMenu.Separator className="te-menu-sep" />
+              <ContextMenu.Item className="te-menu-item" disabled={!selected} onSelect={copySelectedStyle}>
+                <Copy /> <span className="te-menu-label">Copy style</span>
+                <kbd className="te-menu-kbd">⌥⌘C</kbd>
+              </ContextMenu.Item>
+              <ContextMenu.Item className="te-menu-item" disabled={!hasCopiedStyle} onSelect={pasteStyleToSelection}>
+                <ClipboardPaste /> <span className="te-menu-label">Paste style</span>
+                <kbd className="te-menu-kbd">⌥⌘V</kbd>
+              </ContextMenu.Item>
+            </>
           ) : (
             <>
               <ContextMenu.Item className="te-menu-item" onSelect={selectAllComponents}>
@@ -2252,6 +2336,7 @@ export function ThemeEditorPage() {
         </aside>
       )}
 
+      <ThemeColorsContext.Provider value={theme.tokens.colors}>
       <aside className="te-island te-props" aria-label="Properties">
         {propsView !== "auto" ? (
           <div className="te-subview">
@@ -2348,6 +2433,7 @@ export function ThemeEditorPage() {
                 onResetToSaved={resetSelectedPieceToSaved}
                 onBringIntoFrame={bringSelectedIntoView}
                 onReplayChange={() => setReplayChange({ id: selectedEntry.id, token: Date.now() })}
+                onSaveStyle={saveSelectedAsStyle}
                 onPlayEntrance={() => setEntranceToken(Date.now())}
                 onPreviewLastSeconds={(seconds) => {
                   setPreviewEnabled(true);
@@ -2390,11 +2476,13 @@ export function ThemeEditorPage() {
                 onOpenEventOverlay={() => applyPreviewMode("towel")}
                 onOpenPreviewData={() => setPropsView("preview")}
                 onPlayEntrance={() => setEntranceToken(Date.now())}
+                onSelectPieces={(ids) => selectComponents(ids)}
               />
             )}
           </>
         )}
       </aside>
+      </ThemeColorsContext.Provider>
     </div>
     </Tooltip.Provider>
   );

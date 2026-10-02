@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronRight, Play } from "lucide-react";
 import { enterOrderLabels, enterOrderValues } from "../../../shared/motion";
+import { DesignSystemProperties } from "./DesignSystemProperties";
+import { themeSwatches } from "./PieceProperties";
 import type { ThemeDefinition } from "../../../shared/theme";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
@@ -14,7 +16,8 @@ export function ThemeProperties({
   onApplyPreset,
   onOpenEventOverlay,
   onOpenPreviewData,
-  onPlayEntrance
+  onPlayEntrance,
+  onSelectPieces
 }: {
   theme: ThemeDefinition;
   patchTheme: (update: (draft: ThemeDefinition) => void) => void;
@@ -26,6 +29,8 @@ export function ThemeProperties({
   onOpenPreviewData: () => void;
   /** Plays every piece's entrance on the canvas, built in as on air. */
   onPlayEntrance: () => void;
+  /** Selects these pieces on the canvas (from a colour's or style's "Select"). */
+  onSelectPieces: (pieceIds: string[]) => void;
 }) {
   const entering = [...Object.values(theme.components), ...theme.freeComponents].filter(
     (component) => component.visible && component.enterMotion.preset !== "none"
@@ -75,6 +80,8 @@ export function ThemeProperties({
           onChange={(checked) => patchTheme((draft) => (draft.canvas.transparentPreview = checked))}
         />
       </Group>
+
+      <DesignSystemProperties theme={theme} swatches={themeSwatches(theme)} patchTheme={patchTheme} onSelectPieces={onSelectPieces} />
 
       <PanelSection title="Build-in" defaultOpen={entering > 0}>
         <p className="te-field-hint">

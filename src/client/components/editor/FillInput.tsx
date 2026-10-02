@@ -1,5 +1,6 @@
 import { Plus, X } from "lucide-react";
 import { fillTypeLabels, fillTypeValues, gradientCss, gradientFromColor, type FillSettings } from "../../../shared/fill";
+import type { ColorToken } from "../../../shared/theme";
 import { IconButton } from "./EditorChrome";
 import { ColorInput, Field, NumberInput, Segmented } from "./fields";
 
@@ -15,7 +16,9 @@ export function FillInput({
   fill,
   swatches,
   onColor,
-  onFill
+  onFill,
+  tokenId = null,
+  onToken
 }: {
   label: string;
   /** The solid colour, used when the fill is solid. */
@@ -24,6 +27,9 @@ export function FillInput({
   swatches: string[];
   onColor: (color: string) => void;
   onFill: (next: Partial<FillSettings>) => void;
+  /** Theme colour binding for the solid colour. */
+  tokenId?: string | null;
+  onToken?: (token: ColorToken) => void;
 }) {
   const gradient = gradientCss(fill);
   const setStop = (index: number, patch: Partial<FillSettings["stops"][number]>) =>
@@ -41,7 +47,7 @@ export function FillInput({
       </Field>
 
       {fill.type === "solid" ? (
-        <ColorInput label={`${label} colour`} value={color} swatches={swatches} onChange={onColor} />
+        <ColorInput label={`${label} colour`} value={color} swatches={swatches} onChange={onColor} tokenId={tokenId} onToken={onToken} />
       ) : (
         <>
           <span className="te-fill-preview" aria-hidden style={{ backgroundImage: gradient ?? undefined }} />

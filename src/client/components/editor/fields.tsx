@@ -1,11 +1,14 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import * as Slider from "@radix-ui/react-slider";
 import * as Switch from "@radix-ui/react-switch";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { HexAlphaColorPicker, HexColorInput } from "react-colorful";
 import { ChevronRight } from "lucide-react";
-import type { TextFitSettings } from "../../../shared/theme";
+import type { ColorToken, TextFitSettings } from "../../../shared/theme";
+
+/** The open theme's named colours, offered first in every colour picker. */
+export const ThemeColorsContext = createContext<ColorToken[]>([]);
 
 /** A collapsible group of properties. Native <details> keeps it keyboard- and screen-reader-friendly. */
 export function PanelSection({
@@ -256,13 +259,21 @@ export function ColorInput({
   label,
   value,
   onChange,
-  swatches = []
+  swatches = [],
+  tokenId = null,
+  onToken
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   swatches?: string[];
+  /** The theme colour this field is bound to, if any. */
+  tokenId?: string | null;
+  /** Binds the field to a theme colour; without it, picking a theme colour just copies its value. */
+  onToken?: (token: ColorToken) => void;
 }) {
+  const themeColors = useContext(ThemeColorsContext);
+  const boundToken = tokenId ? themeColors.find((token) => token.id === tokenId) ?? null : null;
   // Themes may also hold CSS keywords such as "transparent"; those are shown and edited as written.
   const isHex = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test((value || "").trim());
   const color = isHex ? normaliseHex(value) : value?.trim().toLowerCase() === "transparent" ? "#00000000" : "#000000";
@@ -272,6 +283,23 @@ export function ColorInput({
 
   return (
     <Field label={label}>
+      {themeColors.length > 0 ? (
+        <div className="te-swatch-row te-token-row" role="group" aria-label={`${label}: theme colours`}>
+          {themeColors.map((token) => (
+            <button
+              key={token.id}
+              type="button"
+              className="te-color-swatch te-color-swatch--small te-token-swatch"
+              aria-label={`Theme colour ${token.name}`}
+              title={onToken ? `${token.name} (stays linked)` : token.name}
+              aria-pressed={token.id === tokenId}
+              onClick={() => (onToken ? onToken(token) : onChange(token.value))}
+            >
+              <span style={{ background: token.value }} />
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="te-swatch-row" role="group" aria-label={`${label}: colours in this theme`}>
         {presets.map((swatch) => (
           <button
@@ -314,6 +342,7 @@ export function ColorInput({
           <input aria-label={`${label} value`} value={value} onChange={(event) => onChange(event.target.value)} />
         )}
       </label>
+      {boundToken ? <span className="te-token-tag">Linked to theme colour “{boundToken.name}”. Typing a colour unlinks it.</span> : null}
     </Field>
   );
 }

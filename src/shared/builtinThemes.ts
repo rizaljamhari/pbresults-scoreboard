@@ -1,4 +1,4 @@
-import { defaultEventCardMotion, defaultFrameLook, defaultImageEffects, defaultLiveText, defaultPieceMotion, defaultSurfaceFill, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
+import { defaultDesign, defaultEventCardMotion, defaultFrameLook, defaultImageEffects, defaultLiveText, defaultPieceMotion, defaultSurfaceFill, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
 
 /** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
 function momentCard(x: number, y: number, width: number, height: number) {
@@ -26,7 +26,8 @@ function momentCard(x: number, y: number, width: number, height: number) {
     shadow: "none",
     ...defaultTextFit,
     ...defaultTextEffects,
-    ...structuredClone(defaultSurfaceFill)
+    ...structuredClone(defaultSurfaceFill),
+    design: defaultDesign()
   };
 }
 
@@ -43,6 +44,7 @@ function textBox(
     exitMotion: { ...defaultPieceMotion },
     ...structuredClone(defaultSurfaceFill),
     ...defaultFrameLook,
+    design: defaultDesign(),
     x,
     y,
     width,
@@ -95,6 +97,7 @@ function logoBox(overrides: Partial<ThemeDefinition["components"]["eventLogo"]>)
     exitMotion: { ...defaultPieceMotion },
     ...structuredClone(defaultSurfaceFill),
     ...defaultFrameLook,
+    design: defaultDesign(),
     x: 900,
     y: 24,
     width: 120,
@@ -166,6 +169,7 @@ function teamEventOverlay(
       followTarget: "none",
       ...defaultTextFit,
       ...defaultTextEffects,
+      design: defaultDesign(),
       ...(overrides.general ?? {})
     },
     concede: {
@@ -177,6 +181,7 @@ function teamEventOverlay(
       backgroundOverlayColor: "#000000",
       backgroundOverlayOpacity: 0,
       ...structuredClone(defaultSurfaceFill),
+      design: defaultDesign(),
       ...(overrides.concede ?? {})
     },
     base: {
@@ -188,6 +193,7 @@ function teamEventOverlay(
       backgroundOverlayColor: "#000000",
       backgroundOverlayOpacity: 0,
       ...structuredClone(defaultSurfaceFill),
+      design: defaultDesign(),
       ...(overrides.base ?? {})
     },
     winner: {
@@ -199,6 +205,7 @@ function teamEventOverlay(
       backgroundOverlayColor: "#000000",
       backgroundOverlayOpacity: 0,
       ...structuredClone(defaultSurfaceFill),
+      design: defaultDesign(),
       ...(overrides.winner ?? {})
     }
   };
@@ -213,6 +220,8 @@ export const builtinThemes: ThemeDefinition[] = [
     "updatedAt": null,
     "acronym": "",
     "archived": false,
+    "tokens": { "colors": [] },
+    "styles": { "text": [], "surface": [] },
     "motion": { "teamSwitch": { ...defaultTeamSwitchMotion }, "enterStaggerMs": 0, "enterOrder": "left-to-right" },
     "canvas": {
       "width": 1920,
@@ -250,6 +259,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 26,
         "fontWeight": 700,
@@ -290,6 +300,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": null,
         "teamLogoFallbackMode": "eventLogo",
         "imageContentMode": "full-canvas",
@@ -323,6 +334,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Arial Narrow",
         "fontSize": 70,
         "fontWeight": 700,
@@ -362,6 +374,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 26,
         "fontWeight": 700,
@@ -402,6 +415,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": null,
         "teamLogoFallbackMode": "eventLogo",
         "imageContentMode": "full-canvas",
@@ -435,6 +449,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Arial Narrow",
         "fontSize": 70,
         "fontWeight": 700,
@@ -474,6 +489,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 38,
         "fontWeight": 700,
@@ -513,6 +529,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Barlow Condensed",
         "fontSize": 24,
         "fontWeight": 700,
@@ -553,6 +570,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": "asset-56610d6a-81e8-4118-a4ff-740214176d01",
         "teamLogoFallbackMode": "slotFallback",
         "imageContentMode": "full-canvas",
@@ -644,6 +662,8 @@ export const builtinThemes: ThemeDefinition[] = [
     "updatedAt": null,
     "acronym": "",
     "archived": false,
+    "tokens": { "colors": [] },
+    "styles": { "text": [], "surface": [] },
     "motion": { "teamSwitch": { ...defaultTeamSwitchMotion }, "enterStaggerMs": 0, "enterOrder": "left-to-right" },
     "canvas": {
       "width": 1920,
@@ -681,6 +701,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 54,
         "fontWeight": 700,
@@ -721,6 +742,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": null,
         "teamLogoFallbackMode": "none",
         "imageContentMode": "full-canvas",
@@ -754,6 +776,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 96,
         "fontWeight": 700,
@@ -793,6 +816,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 54,
         "fontWeight": 700,
@@ -833,6 +857,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": null,
         "teamLogoFallbackMode": "none",
         "imageContentMode": "full-canvas",
@@ -866,6 +891,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 96,
         "fontWeight": 700,
@@ -905,6 +931,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Bebas Neue",
         "fontSize": 44,
         "fontWeight": 700,
@@ -944,6 +971,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "fontFamily": "Barlow Condensed",
         "fontSize": 24,
         "fontWeight": 700,
@@ -984,6 +1012,7 @@ export const builtinThemes: ThemeDefinition[] = [
         "exitMotion": { ...defaultPieceMotion },
         ...structuredClone(defaultSurfaceFill),
         ...defaultFrameLook,
+        design: defaultDesign(),
         "assetId": null,
         "teamLogoFallbackMode": "slotFallback",
         "imageContentMode": "full-canvas",

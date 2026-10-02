@@ -53,6 +53,23 @@ export const imageEffectsField = z
   .default({});
 export const defaultImageEffects = { shadow: "none", grayscale: 0, dim: 0, when: "always" as const };
 
+/**
+ * Which theme colours and styles an object uses ("bind and bake", see docs/theme-design-system-proposal.md §3.1).
+ * The object keeps concrete values; these records say where they come from, so the editor can rewrite them when a
+ * colour or style changes. Fields listed in `overrides` were changed on the object and are left alone.
+ */
+export const designField = z
+  .object({
+    /** Colour field name → theme colour id. */
+    tokenBindings: z.record(z.string(), z.string()).default({}),
+    textStyleId: z.string().nullable().default(null),
+    surfaceStyleId: z.string().nullable().default(null),
+    overrides: z.array(z.string()).default([])
+  })
+  .default({});
+export type DesignBinding = z.infer<typeof designField>;
+export const defaultDesign = (): DesignBinding => ({ tokenBindings: {}, textStyleId: null, surfaceStyleId: null, overrides: [] });
+
 /** Pieces don't animate in or out unless the theme says so. */
 export const defaultPieceMotion: MotionSettings = { preset: "none", durationMs: 400, easing: "snappy", delayMs: 0 };
 
@@ -214,7 +231,8 @@ const commonFrameBaseSchema = z.object({
   /** Plays as the piece is hidden. */
   exitMotion: motionField(defaultPieceMotion),
   ...surfaceFillFields,
-  ...frameLookFields
+  ...frameLookFields,
+  design: designField
 });
 
 export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBaseSchema);
@@ -330,7 +348,8 @@ const teamEventOverlayGeneralObjectSchema = z.object({
   ...textEffectFields,
   /** Loops while the card is on screen: enters, holds, leaves, over `durationMs`. */
   motion: motionField(defaultEventCardMotion),
-  followTarget: z.enum(teamOverlayFollowTargetValues).default("none")
+  followTarget: z.enum(teamOverlayFollowTargetValues).default("none"),
+  design: designField
 });
 
 /** The event card's animation used to be its own preset and duration; it now uses the shared motion setting. */
@@ -363,7 +382,8 @@ const teamEventOverlayEventSchema = z.object({
   backgroundImageAssetId: z.string().nullable().default(null),
   backgroundOverlayColor: z.string().default("#000000"),
   backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
-  ...surfaceFillFields
+  ...surfaceFillFields,
+  design: designField
 });
 
 const nestedTeamEventOverlaySchema = z.object({
@@ -616,7 +636,8 @@ const momentCardSchema = z.object({
   shadow: z.string().default("none"),
   ...textFitFields,
   ...textEffectFields,
-  ...surfaceFillFields
+  ...surfaceFillFields,
+  design: designField
 });
 
 export const momentOverlaysSchema = z.object({
@@ -714,6 +735,41 @@ export function migrateMomentOverlays(input: unknown): unknown {
   };
 }
 
+/** A named bundle of type settings that text pieces, event cards and moment cards can use. */
+const textStyleSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(40),
+  fontFamily: z.enum(fontFamilies).default("Oswald"),
+  fontSize: z.number().positive().default(32),
+  fontWeight: z.number().min(100).max(900).default(700),
+  letterSpacing: z.number().default(0),
+  lineHeight: z.number().positive().default(1),
+  color: z.string().default("#ffffff"),
+  ...textFitFields,
+  ...textEffectFields,
+  tokenBindings: z.record(z.string(), z.string()).default({})
+});
+
+/** A named bundle of box settings that pieces and moment cards can use. */
+const surfaceStyleSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(40),
+  backgroundColor: z.string().default("#111111"),
+  fill: fillField(),
+  borderColor: z.string().default("#00000000"),
+  borderWidth: z.number().min(0).default(0),
+  borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([0, 0, 0, 0]),
+  shadow: z.string().default("none"),
+  backdropBlur: z.number().min(0).max(40).default(0),
+  tokenBindings: z.record(z.string(), z.string()).default({})
+});
+
+export type TextStyle = z.infer<typeof textStyleSchema>;
+export type SurfaceStyle = z.infer<typeof surfaceStyleSchema>;
+export type ColorToken = { id: string; name: string; value: string };
+export const textStyleDefaults = (id: string, name: string): TextStyle => textStyleSchema.parse({ id, name });
+export const surfaceStyleDefaults = (id: string, name: string): SurfaceStyle => surfaceStyleSchema.parse({ id, name });
+
 const themeObjectSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -747,6 +803,19 @@ const themeObjectSchema = z.object({
   teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({}),
   momentOverlays: momentOverlaysSchema.default({}),
+  /** Named colours the theme's pieces and styles can use. */
+  tokens: z
+    .object({
+      colors: z.array(z.object({ id: z.string().min(1), name: z.string().trim().min(1).max(40), value: z.string() })).default([])
+    })
+    .default({}),
+  /** Reusable looks: text styles (type) and surface styles (the box). */
+  styles: z
+    .object({
+      text: z.array(textStyleSchema).default([]),
+      surface: z.array(surfaceStyleSchema).default([])
+    })
+    .default({}),
   /** Motion that belongs to the whole scoreboard rather than one piece. */
   motion: z
     .object({

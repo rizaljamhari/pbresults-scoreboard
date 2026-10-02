@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, Play, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, defaultImageEffects, type blendModeValues, type LiveTextSettings, type shapeValues, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, defaultDesign, defaultImageEffects, type blendModeValues, type ColorToken, type DesignBinding, type LiveTextSettings, type shapeValues, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
@@ -8,6 +8,8 @@ import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
 import { FillInput } from "./FillInput";
 import { MotionFields } from "./MotionFields";
+import { StylePicker } from "./DesignSystemProperties";
+import { surfaceStyleFields, textStyleFields } from "../../../shared/design";
 import type { FillSettings } from "../../../shared/fill";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
 import { changeMotionPresetLabels, changeMotionPresetValues, exitMotionPresetValues, type MotionSettings } from "../../../shared/motion";
@@ -158,6 +160,7 @@ export function PieceProperties({
   onReplayChange,
   onPreviewLastSeconds,
   onPlayEntrance,
+  onSaveStyle,
   centreLine
 }: {
   entry: ThemeComponentEntry;
@@ -175,6 +178,8 @@ export function PieceProperties({
   onPreviewLastSeconds: (seconds: number) => void;
   /** Plays the scoreboard's entrance on the canvas. */
   onPlayEntrance: () => void;
+  /** Saves this piece's type or box as a new style and links it. */
+  onSaveStyle: (kind: "text" | "surface") => void;
   centreLine?: ReactNode;
 }) {
   const component = entry.component as AnyComponent;
@@ -186,6 +191,16 @@ export function PieceProperties({
   const radius = component.borderRadius as [number, number, number, number];
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
   const liveText = component as unknown as LiveTextSettings;
+  const design = (component as unknown as { design?: DesignBinding }).design ?? defaultDesign();
+  /** Binding props for a colour field: the bound theme colour, and picking one binds the field to it. */
+  const bindColor = (field: string) => ({
+    tokenId: design.tokenBindings[field] ?? null,
+    onToken: (token: ColorToken) =>
+      patch((draft) => {
+        draft[field] = token.value;
+        (draft.design as DesignBinding).tokenBindings[field] = token.id;
+      })
+  });
   const motion = component as unknown as { enterMotion: MotionSettings; exitMotion: MotionSettings };
   const surface = component as unknown as { fill: FillSettings; tintFill: FillSettings };
   const look = component as unknown as { blendMode: (typeof blendModeValues)[number]; backdropBlur: number };
@@ -291,6 +306,20 @@ export function PieceProperties({
       {isText && entry.id !== "breakTime" ? (
         <>
           <Group title="Text">
+            <StylePicker
+              label="Text style"
+              styles={theme.styles.text}
+              styleId={design.textStyleId}
+              overrides={design.overrides.filter((field) => (textStyleFields as readonly string[]).includes(field))}
+              onChoose={(styleId) => patch((draft) => ((draft.design as DesignBinding).textStyleId = styleId))}
+              onReset={() =>
+                patch((draft) => {
+                  const binding = draft.design as DesignBinding;
+                  binding.overrides = binding.overrides.filter((field) => !(textStyleFields as readonly string[]).includes(field));
+                })
+              }
+              onSave={() => onSaveStyle("text")}
+            />
             <div className="te-row te-row--font">
               <SelectInput
                 label="Font"
@@ -322,7 +351,7 @@ export function PieceProperties({
             </div>
             <TextFitFields value={component as unknown as TextFitSettings} onChange={(next) => patch((draft) => Object.assign(draft, next))} />
           </Group>
-          <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} />
+          <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} {...bindColor("color")} />
         </>
       ) : null}
 
@@ -487,6 +516,20 @@ export function PieceProperties({
 
       {centreLine}
 
+      <StylePicker
+        label="Surface style"
+        styles={theme.styles.surface}
+        styleId={design.surfaceStyleId}
+        overrides={design.overrides.filter((field) => (surfaceStyleFields as readonly string[]).includes(field))}
+        onChoose={(styleId) => patch((draft) => ((draft.design as DesignBinding).surfaceStyleId = styleId))}
+        onReset={() =>
+          patch((draft) => {
+            const binding = draft.design as DesignBinding;
+            binding.overrides = binding.overrides.filter((field) => !(surfaceStyleFields as readonly string[]).includes(field));
+          })
+        }
+        onSave={() => onSaveStyle("surface")}
+      />
       <FillInput
         label="Fill"
         color={String(component.backgroundColor)}
@@ -494,6 +537,7 @@ export function PieceProperties({
         swatches={swatches}
         onColor={(value) => patch((draft) => (draft.backgroundColor = value))}
         onFill={(next) => patch((draft) => Object.assign(draft.fill as FillSettings, next))}
+        {...bindColor("backgroundColor")}
       />
 
       <Group title="Position and size">
@@ -557,7 +601,7 @@ export function PieceProperties({
       </PanelSection>
 
       <PanelSection title="Border" defaultOpen={false}>
-        <ColorInput label="Colour" value={String(component.borderColor)} swatches={swatches} onChange={(value) => patch((draft) => (draft.borderColor = value))} />
+        <ColorInput label="Colour" value={String(component.borderColor)} swatches={swatches} onChange={(value) => patch((draft) => (draft.borderColor = value))} {...bindColor("borderColor")} />
         <Field label="Width">
             <NumberInput label="Border width" value={Number(component.borderWidth)} min={0} unit="px" onChange={(value) => patch((draft) => (draft.borderWidth = value))} />
           </Field>
@@ -690,7 +734,13 @@ export function PieceProperties({
 
       {isText && entry.id !== "breakTime" ? (
         <PanelSection title="Text effects" defaultOpen={false}>
-          <TextEffectFields value={component as unknown as TextEffectSettings} swatches={swatches} onChange={(next) => patch((draft) => Object.assign(draft, next))} />
+          <TextEffectFields
+            value={component as unknown as TextEffectSettings}
+            swatches={swatches}
+            onChange={(next) => patch((draft) => Object.assign(draft, next))}
+            strokeTokenId={bindColor("textStrokeColor").tokenId}
+            onStrokeToken={bindColor("textStrokeColor").onToken}
+          />
         </PanelSection>
       ) : null}
 
@@ -724,6 +774,7 @@ export function PieceProperties({
           swatches={swatches}
           onColor={(value) => patch((draft) => (draft.backgroundOverlayColor = value))}
           onFill={(next) => patch((draft) => Object.assign(draft.tintFill as FillSettings, next))}
+          {...bindColor("backgroundOverlayColor")}
         />
         <PercentSlider
           label="Tint strength"
