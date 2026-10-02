@@ -29,6 +29,21 @@ const LOGO_OPTIONS: ReadonlyArray<{ value: PreviewLogoMode; label: string }> = [
   { value: "unmatched", label: "Unmatched team" }
 ];
 
+const LONG_NAMES: Partial<PreviewData> = { names: "long" };
+const NO_LOGOS: Partial<PreviewData> = { leftLogo: "missing", rightLogo: "missing" };
+const BIG_SCORES: Partial<PreviewData> = { leftScore: 12, rightScore: 10 };
+const WIDE_CLOCKS: Partial<PreviewData> = { gameClock: 6000, breakClock: 600 };
+
+/** One-click edge cases a theme should survive before it goes on air. */
+const STRESS_TESTS: ReadonlyArray<{ label: string; hint: string; data: Partial<PreviewData> }> = [
+  { label: "Long names", hint: "About 30 characters per team", data: LONG_NAMES },
+  { label: "No logos", hint: "Both teams without a logo", data: NO_LOGOS },
+  { label: "Unmatched teams", hint: "Names not found in the team registry", data: { leftLogo: "unmatched", rightLogo: "unmatched" } },
+  { label: "Big scores", hint: "Double-digit scores, 12–10", data: BIG_SCORES },
+  { label: "Wide clocks", hint: "Game clock 100:00, break clock 10:00", data: WIDE_CLOCKS },
+  { label: "Everything", hint: "Long names, no logos, big scores and wide clocks together", data: { ...LONG_NAMES, ...NO_LOGOS, ...BIG_SCORES, ...WIDE_CLOCKS } }
+];
+
 /**
  * Stand-in scoreboard data for designing: long names, missing logos, scores and clocks. Only the canvas uses it;
  * the live overlay never does.
@@ -51,6 +66,16 @@ export function PreviewDataProperties({
         checked={data.enabled}
         onChange={(enabled) => onChange({ enabled })}
       />
+
+      <Group title="Stress tests">
+        <div className="te-button-pair">
+          {STRESS_TESTS.map((test) => (
+            <button key={test.label} type="button" className="te-mini-btn" title={test.hint} onClick={() => onChange({ enabled: true, ...test.data })}>
+              {test.label}
+            </button>
+          ))}
+        </div>
+      </Group>
 
       <fieldset className="te-fieldset" disabled={off}>
         <Group title="Match">

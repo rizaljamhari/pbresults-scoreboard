@@ -34,6 +34,23 @@ export const teamOverlayPlacementValues = ["full-panel", "center-stamp", "top-ri
 export const teamOverlayFollowTargetValues = ["none", "logo", "name"] as const;
 export const centerSecondaryModeValues = ["timer", "staticText", "hidden"] as const;
 export const centerSecondaryTransitionValues = ["none", "fade", "slide-up", "slide-left", "slide-right"] as const;
+export const textTransformValues = ["none", "uppercase", "capitalize"] as const;
+export const textFitValues = ["clip", "ellipsis", "shrink"] as const;
+
+/**
+ * How text behaves when it is longer than its box. Shared by every text-bearing object (pieces, event cards,
+ * moment cards); the defaults keep older themes rendering exactly as before.
+ */
+export const textFitFields = {
+  textTransform: z.enum(textTransformValues).default("none"),
+  textFit: z.enum(textFitValues).default("clip"),
+  /** Smallest size shrink may reach, as a share of the font size; past it the text ends in an ellipsis. */
+  textFitMinScale: z.number().min(0.3).max(1).default(0.6)
+};
+
+const textFitSchema = z.object(textFitFields);
+export type TextFitSettings = z.infer<typeof textFitSchema>;
+export const defaultTextFit: TextFitSettings = { textTransform: "none", textFit: "clip", textFitMinScale: 0.6 };
 
 function migrateLegacyFrame(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -92,7 +109,8 @@ const textComponentBaseSchema = commonFrameBaseSchema.extend({
   color: z.string(),
   textAlign: z.enum(["left", "center", "right"]),
   letterSpacing: z.number(),
-  lineHeight: z.number().positive()
+  lineHeight: z.number().positive(),
+  ...textFitFields
 });
 
 export const textComponentSchema = z.preprocess(migrateLegacyFrame, textComponentBaseSchema);
@@ -174,6 +192,7 @@ const teamEventOverlayGeneralSchema = z.object({
   letterSpacing: z.number().default(1),
   textAlign: z.enum(["left", "center", "right"]).default("center"),
   shadow: z.string().default("none"),
+  ...textFitFields,
   animationPreset: z.enum(concedeAnimationValues).default("slide-vertical"),
   durationMs: z.number().positive().default(2000),
   followTarget: z.enum(teamOverlayFollowTargetValues).default("none")
@@ -416,7 +435,8 @@ const momentCardSchema = z.object({
   borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([0, 0, 0, 0]),
   paddingX: z.number().min(0).default(0),
   paddingY: z.number().min(0).default(0),
-  shadow: z.string().default("none")
+  shadow: z.string().default("none"),
+  ...textFitFields
 });
 
 export const momentOverlaysSchema = z.object({

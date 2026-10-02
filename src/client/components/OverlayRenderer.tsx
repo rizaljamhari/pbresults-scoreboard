@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { formatClock } from "../../shared/normalize";
-import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId } from "../../shared/theme";
+import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
+import { FitText } from "./FitText";
 import { useTimeoutToken } from "./momentTriggers";
 
 type OverlayRendererProps = {
@@ -58,6 +59,10 @@ function resolveBackgroundSize(fit: ThemeDefinition["components"]["homeName"]["b
     default:
       return "cover";
   }
+}
+
+function textCase(settings: TextFitSettings): CSSProperties["textTransform"] {
+  return settings.textTransform === "none" ? undefined : settings.textTransform;
 }
 
 function frameStyles(component: ThemeDefinition["components"][ComponentId]): CSSProperties {
@@ -757,10 +762,11 @@ export function OverlayRenderer({
             fontSize: card.fontSize,
             fontWeight: card.fontWeight,
             letterSpacing: card.letterSpacing,
-            lineHeight: frame.following ? breakTime.lineHeight : 1
+            lineHeight: frame.following ? breakTime.lineHeight : 1,
+            textTransform: textCase(card)
           }}
         >
-          {card.text}
+          <FitText settings={card}>{card.text}</FitText>
         </span>
       </div>
     );
@@ -982,6 +988,7 @@ export function OverlayRenderer({
                       fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
+                      textTransform: textCase(component),
                       animation: `overlay-team-switch-out ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0.42, 0, 1, 1) both`,
                       position: "absolute",
                       inset: 0,
@@ -991,7 +998,7 @@ export function OverlayRenderer({
                       backfaceVisibility: "hidden"
                     }}
                   >
-                    {previousSwitchContent}
+                    <FitText settings={component}>{previousSwitchContent}</FitText>
                   </span>
                   <span
                     className="component-content text-content"
@@ -1006,6 +1013,7 @@ export function OverlayRenderer({
                       fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                       letterSpacing: component.letterSpacing,
                       lineHeight: component.lineHeight,
+                      textTransform: textCase(component),
                       animation: `overlay-team-switch-in ${TEAM_SWITCH_ANIMATION_MS}ms cubic-bezier(0, 0, 0.2, 1) both`,
                       position: "absolute",
                       inset: 0,
@@ -1015,7 +1023,7 @@ export function OverlayRenderer({
                       backfaceVisibility: "hidden"
                     }}
                   >
-                    {nextSwitchContent}
+                    <FitText settings={component}>{nextSwitchContent}</FitText>
                   </span>
                 </>
               ) : (
@@ -1033,10 +1041,11 @@ export function OverlayRenderer({
                     fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
                     letterSpacing: component.letterSpacing,
                     lineHeight: component.lineHeight,
+                    textTransform: textCase(component),
                     animation: contentAnimation
                   }}
                 >
-                  {content}
+                  <FitText settings={component}>{content}</FitText>
                 </span>
               )}
             </span>
@@ -1115,11 +1124,14 @@ export function OverlayRenderer({
                   fontWeight: component.fontWeight,
                   letterSpacing: component.letterSpacing,
                   lineHeight: component.lineHeight,
+                  textTransform: textCase(component),
                   whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
                   overflow: "hidden"
                 }}
               >
-                {content}
+                <FitText settings={component} multiline={component.multiline} textAlign={component.textAlign}>
+                  {content}
+                </FitText>
               </span>
             </span>
           </button>
@@ -1178,10 +1190,11 @@ export function OverlayRenderer({
                 fontSize: overlayGeneral.fontSize,
                 fontWeight: overlayGeneral.fontWeight,
                 letterSpacing: overlayGeneral.letterSpacing,
-                lineHeight: 1
+                lineHeight: 1,
+                textTransform: textCase(overlayGeneral)
               }}
             >
-              {winnerLabel ? winnerText : concedeText}
+              <FitText settings={overlayGeneral}>{winnerLabel ? winnerText : concedeText}</FitText>
             </span>
           </div>
         </div>

@@ -2299,6 +2299,8 @@ export function ThemeEditorPage() {
                       notShownNow={centreLineEmpty}
                       patch={(update) => patchTheme((draft) => update(draft.centerSecondary))}
                       onAlign={(value) => patchTheme((draft) => (draft.components.breakTime.textAlign = value))}
+                      fit={theme.components.breakTime}
+                      onFit={(next) => patchTheme((draft) => Object.assign(draft.components.breakTime, next))}
                       onPreviewBreak={previewLive.period !== "BREAK" && theme.centerSecondary.breakMode !== "hidden" ? () => applyPreviewMode("break") : undefined}
                       onOpenMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
                     />

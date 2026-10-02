@@ -12,3 +12,5 @@
   - detailed SSE invalidation protocol, server event hub, client refresh coordination, draft safety, rollout, and qualification criteria
 - [remote-access-technical-plan.md](./remote-access-technical-plan.md)
   - detailed ngrok session lifecycle, Basic Auth boundary, Windows secret storage, API, failure handling, and qualification matrix
+- [theme-design-system-proposal.md](./theme-design-system-proposal.md)
+  - proposed theme tokens, text and surface styles, richer styling (shadows, gradients, text fitting), unified motion, and designer workflow, with phasing

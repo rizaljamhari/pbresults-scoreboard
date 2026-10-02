@@ -241,6 +241,20 @@ function cardSource(kind: CardKind, theme: ThemeDefinition) {
   return `Event cards ${general.enabled ? "on" : "off"} · ${CARD_NAMES[kind]} card ${card.enabled ? "on" : "off"} · Card sits: ${general.followTarget === "none" ? "Free" : `On ${general.followTarget}`}`;
 }
 
+/** What a too-long team name should look like, from each name piece's long-text setting. */
+export function longNameExpectation(theme: ThemeDefinition): string {
+  const describe = (fit: ThemeDefinition["components"]["homeName"]) =>
+    fit.textFit === "shrink"
+      ? `gets smaller to fit (down to ${Math.round(fit.textFitMinScale * 100)}% of its size), then ends in “…”`
+      : fit.textFit === "ellipsis"
+        ? "ends in “…”"
+        : "is cut off at the edge of its box";
+  const left = describe(theme.components.homeName);
+  const right = describe(theme.components.awayName);
+  const how = left === right ? `A name too long for its box ${left}` : `A left name too long for its box ${left}; a right one ${right}`;
+  return `Names never overlap the score. ${how}.`;
+}
+
 function centreLineExpectation(theme: ThemeDefinition, period: "play" | "break"): string {
   const line = theme.centerSecondary;
   if (!theme.components.breakTime.visible) return "The centre line is hidden in this theme.";
@@ -342,7 +356,7 @@ export function buildRehearsalCases(ctx: RehearsalContext): RehearsalCase[] {
       key: "names-long",
       group: "Names",
       title: "Long names",
-      expectation: "Names fit their box without overlapping the score, or are clipped neatly.",
+      expectation: longNameExpectation(theme),
       source: `Longest scoreboard names in Teams: ${nameLengths(samples.longest)}`,
       frames: [pinned(samples.longest[0], samples.longest[1], [2, 1])]
     },

@@ -7,6 +7,7 @@ import {
   buildRehearsalCases,
   cardExpectation,
   logoExpectation,
+  longNameExpectation,
   makePossibleName,
   pickRehearsalSamples,
   type RehearsalContext,
@@ -278,5 +279,19 @@ describe("expectations from theme settings", () => {
   it("says the timeout card is off when it is", () => {
     const cases = buildRehearsalCases(context((theme) => (theme.momentOverlays.timeout.enabled = false)));
     expect(cases.find((item) => item.id === "timeout")!.expectation).toBe("No timeout card: it is switched off in this theme.");
+  });
+});
+
+describe("long name expectation", () => {
+  it("follows each name's long-text setting", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    expect(longNameExpectation(theme)).toBe("Names never overlap the score. A name too long for its box is cut off at the edge of its box.");
+
+    theme.components.homeName.textFit = "shrink";
+    theme.components.homeName.textFitMinScale = 0.7;
+    theme.components.awayName.textFit = "ellipsis";
+    expect(longNameExpectation(theme)).toBe(
+      "Names never overlap the score. A left name too long for its box gets smaller to fit (down to 70% of its size), then ends in “…”; a right one ends in “…”."
+    );
   });
 });

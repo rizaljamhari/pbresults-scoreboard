@@ -1,6 +1,6 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2 } from "lucide-react";
-import { fontFamilies, type ThemeDefinition } from "../../../shared/theme";
-import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextInput } from "./fields";
+import { fontFamilies, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput } from "./fields";
 
 type CentreLine = ThemeDefinition["centerSecondary"];
 type Moments = ThemeDefinition["momentOverlays"];
@@ -95,10 +95,12 @@ export function CentreLineProperties({
   line,
   moments,
   align,
+  fit,
   swatches,
   notShownNow,
   patch,
   onAlign,
+  onFit,
   onPreviewBreak,
   onOpenMoment
 }: {
@@ -106,11 +108,14 @@ export function CentreLineProperties({
   moments: Moments;
   /** Alignment belongs to the piece and applies to both looks. */
   align: Align;
+  /** Case and long-text handling also belong to the piece. */
+  fit: TextFitSettings;
   swatches: string[];
   /** The line has nothing to show in the previewed state. */
   notShownNow: boolean;
   patch: (update: (line: CentreLine) => void) => void;
   onAlign: (value: Align) => void;
+  onFit: (next: Partial<TextFitSettings>) => void;
   /** Present when previewing a break would show the clock. */
   onPreviewBreak?: () => void;
   /** Previews that moment and selects its card. */
@@ -155,6 +160,10 @@ export function CentreLineProperties({
           <LineStyleFields name="Text" style={line.staticStyle} swatches={swatches} patch={(update) => patch((draft) => update(draft.staticStyle))} />
         </Group>
       ) : null}
+
+      <Group title="Long text">
+        <TextFitFields value={fit} onChange={onFit} />
+      </Group>
 
       <Group title="Change animation">
         <FieldRow>

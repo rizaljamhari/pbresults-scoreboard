@@ -1,7 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
 export type MomentKind = "timeout" | "gameFinished";
 
@@ -191,6 +191,7 @@ export function MomentCardProperties({
             onChange={(value) => set((draft) => (draft.letterSpacing = value))}
           />
         </Field>
+        <TextFitFields value={card} onChange={(next) => set((draft) => Object.assign(draft, next))} />
         <ColorInput label="Text colour" value={card.color} swatches={swatches} onChange={(value) => set((draft) => (draft.color = value))} />
       </PanelSection>
 

@@ -5,6 +5,7 @@ import * as Switch from "@radix-ui/react-switch";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { HexAlphaColorPicker, HexColorInput } from "react-colorful";
 import { ChevronRight } from "lucide-react";
+import type { TextFitSettings } from "../../../shared/theme";
 
 /** A collapsible group of properties. Native <details> keeps it keyboard- and screen-reader-friendly. */
 export function PanelSection({
@@ -314,5 +315,52 @@ export function ColorInput({
         )}
       </label>
     </Field>
+  );
+}
+
+const CASE_OPTIONS = [
+  { value: "none", label: "As typed", icon: <span className="te-case-glyph">Aa</span> },
+  { value: "uppercase", label: "All capitals", icon: <span className="te-case-glyph">AA</span> },
+  { value: "capitalize", label: "Capitalise each word", icon: <span className="te-case-glyph">Ab</span> }
+] as const;
+
+const FIT_OPTIONS = [
+  { value: "clip", label: "Cut off" },
+  { value: "ellipsis", label: "Ellipsis" },
+  { value: "shrink", label: "Shrink" }
+] as const;
+
+/** Case and what happens to text longer than its box. Shared by pieces, the centre line, event and moment cards. */
+export function TextFitFields({ value, onChange }: { value: TextFitSettings; onChange: (next: Partial<TextFitSettings>) => void }) {
+  return (
+    <>
+      <Field label="Case">
+        <Segmented label="Letter case" value={value.textTransform} options={CASE_OPTIONS} onChange={(textTransform) => onChange({ textTransform })} />
+      </Field>
+      <Field
+        label="Long text"
+        hint={
+          value.textFit === "shrink"
+            ? "Gets smaller to fit, then ends in “…” at the smallest size."
+            : value.textFit === "ellipsis"
+              ? "Ends in “…” when it does not fit."
+              : "Text past the edge of the box is cut off."
+        }
+      >
+        <Segmented label="When text is too long" value={value.textFit} options={FIT_OPTIONS} onChange={(textFit) => onChange({ textFit })} />
+      </Field>
+      {value.textFit === "shrink" ? (
+        <Field label="Smallest size">
+          <NumberInput
+            label="Smallest size, as a share of the font size"
+            value={Math.round(value.textFitMinScale * 100)}
+            min={30}
+            max={100}
+            unit="%"
+            onChange={(percent) => onChange({ textFitMinScale: Math.min(100, Math.max(30, percent)) / 100 })}
+          />
+        </Field>
+      ) : null}
+    </>
   );
 }

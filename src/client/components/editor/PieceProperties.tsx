@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, type StoredAsset, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
@@ -17,6 +17,7 @@ import {
   Segmented,
   SelectInput,
   SwitchRow,
+  TextFitFields,
   TextInput
 } from "./fields";
 
@@ -298,6 +299,7 @@ export function PieceProperties({
                 onChange={(value) => patch((draft) => (draft.textAlign = value))}
               />
             </div>
+            <TextFitFields value={component as unknown as TextFitSettings} onChange={(next) => patch((draft) => Object.assign(draft, next))} />
           </Group>
           <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} />
         </>

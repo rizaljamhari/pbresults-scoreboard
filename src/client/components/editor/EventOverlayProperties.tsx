@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Link2, Upload } from "lucide-react";
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
 
 export type EventKind = "concede" | "base" | "winner";
 
@@ -224,6 +224,7 @@ export function EventOverlayProperties({
         <Field label="Letter spacing">
           <NumberInput label="Card letter spacing" value={general.letterSpacing} step={0.1} precision={1} unit="px" onChange={(value) => patchGeneral((draft) => (draft.letterSpacing = value))} />
         </Field>
+        <TextFitFields value={general} onChange={(next) => patchGeneral((draft) => Object.assign(draft, next))} />
         <ColorInput label="Border" value={general.borderColor} swatches={swatches} onChange={(value) => patchGeneral((draft) => (draft.borderColor = value))} />
         <Field label="Border width">
             <NumberInput label="Card border width" value={general.borderWidth} min={0} unit="px" onChange={(value) => patchGeneral((draft) => (draft.borderWidth = value))} />

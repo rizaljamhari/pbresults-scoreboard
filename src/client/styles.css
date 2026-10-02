@@ -262,6 +262,19 @@ details[open]:not(.editor-section-card) > summary::after {
   text-overflow: ellipsis;
 }
 
+/* Text that ends in an ellipsis or shrinks to fit its box (the theme's "Long text" setting). */
+.text-fit {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-fit--multiline {
+  max-height: 100%;
+}
+
 .image-content {
   justify-content: center;
 }
@@ -1578,6 +1591,12 @@ details[open]:not(.editor-section-card) > summary::after {
 .te-segmented-item svg {
   width: 15px;
   height: 15px;
+}
+
+/* "Aa / AA / Ab" letter-case choices read as type samples. */
+.te-case-glyph {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .te-segmented-item[data-state="on"] {

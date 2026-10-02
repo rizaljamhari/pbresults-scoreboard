@@ -170,6 +170,6 @@ describe("report", () => {
     const report = rehearsalReport(runner.getStatus(), new Date("2026-10-02T10:00:00.000Z"));
     expect(report).toContain(`1 passed · 1 issue · ${REHEARSAL_CASE_COUNT - 2} not marked`);
     expect(report).toContain("3. Names · Long names — Right name clips the score");
-    expect(report).toContain("Expected: Names fit their box");
+    expect(report).toContain("Expected: Names never overlap the score.");
   });
 });
