@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, Play, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, type LiveTextSettings, type shapeValues, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { fontFamilies, defaultImageEffects, type blendModeValues, type LiveTextSettings, type shapeValues, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
@@ -88,6 +88,8 @@ function bindingFor(entry: ThemeComponentEntry) {
 }
 
 /** Colours already used in the theme, offered as one-click swatches. */
+type ImageEffects = ThemeDefinition["components"]["eventLogo"]["imageEffects"];
+
 export function themeSwatches(theme: ThemeDefinition) {
   const colours = new Set<string>();
   for (const { component } of listThemeComponentEntries(theme)) {
@@ -186,6 +188,8 @@ export function PieceProperties({
   const liveText = component as unknown as LiveTextSettings;
   const motion = component as unknown as { enterMotion: MotionSettings; exitMotion: MotionSettings };
   const surface = component as unknown as { fill: FillSettings; tintFill: FillSettings };
+  const look = component as unknown as { blendMode: (typeof blendModeValues)[number]; backdropBlur: number };
+  const imageEffects = (component as unknown as { imageEffects?: ImageEffects }).imageEffects ?? defaultImageEffects;
   const imageAsset = isImage
     ? logoContext?.effectiveAsset ?? assets.find((asset) => asset.id === component.assetId) ?? null
     : null;
@@ -624,6 +628,60 @@ export function PieceProperties({
             Play entrance
           </button>
         ) : null}
+      </PanelSection>
+
+      {isImage ? (
+        <PanelSection title="Image effects" defaultOpen={imageEffects.shadow !== "none" || imageEffects.grayscale > 0 || imageEffects.dim > 0}>
+          <ShadowInput
+            label="Drop shadow"
+            kind="text"
+            value={imageEffects.shadow}
+            swatches={swatches}
+            onChange={(value) => patch((draft) => ((draft.imageEffects as ImageEffects).shadow = value))}
+          />
+          <p className="te-field-hint">Follows the image's shape. Leave some padding so it isn't cut off at the edge of the box.</p>
+          <PercentSlider
+            label="Grey out"
+            value={Math.round(imageEffects.grayscale * 100)}
+            onChange={(value) => patch((draft) => ((draft.imageEffects as ImageEffects).grayscale = value / 100))}
+          />
+          <PercentSlider label="Dim" value={Math.round(imageEffects.dim * 100)} onChange={(value) => patch((draft) => ((draft.imageEffects as ImageEffects).dim = value / 100))} />
+          {isTeamLogo && (imageEffects.grayscale > 0 || imageEffects.dim > 0) ? (
+            <Field label="Grey out and dim" hint={imageEffects.when === "lost" ? "Applies once the match is over, to the team that lost." : undefined}>
+              <Segmented
+                label="When to grey out and dim"
+                value={imageEffects.when}
+                options={[
+                  { value: "always", label: "Always" },
+                  { value: "lost", label: "When the team loses" }
+                ]}
+                onChange={(value) => patch((draft) => ((draft.imageEffects as ImageEffects).when = value))}
+              />
+            </Field>
+          ) : null}
+        </PanelSection>
+      ) : null}
+
+      <PanelSection title="Blend" defaultOpen={look.blendMode !== "normal" || look.backdropBlur > 0}>
+        <p className="te-field-hint">Mixes with overlay pieces beneath this one. vMix adds the video afterwards, so the video is never blended or blurred.</p>
+        <FieldRow>
+          <SelectInput
+            label="Blend mode"
+            value={look.blendMode}
+            options={[
+              { value: "normal", label: "Normal" },
+              { value: "multiply", label: "Multiply" },
+              { value: "screen", label: "Screen" },
+              { value: "overlay", label: "Overlay" },
+              { value: "soft-light", label: "Soft light" }
+            ]}
+            onChange={(value) => patch((draft) => (draft.blendMode = value))}
+          />
+          <Field label="Backdrop blur">
+            <NumberInput label="Backdrop blur" value={look.backdropBlur} min={0} max={40} unit="px" onChange={(value) => patch((draft) => (draft.backdropBlur = Math.min(40, Math.max(0, value))))} />
+          </Field>
+        </FieldRow>
+        {look.backdropBlur > 0 ? <p className="te-field-hint">Shows through a see-through fill. Check it in Rehearsal: blur costs the production machine more than other effects.</p> : null}
       </PanelSection>
 
       <PanelSection title="Shadow" defaultOpen={false}>

@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–6 (text fitting, shadows and text effects, motion model, value-change motion, entrances, gradients and shapes) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–7 (styling and motion) built; steps 8–10 open
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -166,19 +166,18 @@ Shared fields (`textFitFields` in `src/shared/theme.ts`) on every text-bearing o
 - **Editor:** "Add shape" (R) on the toolbar and in the right-click menu, a Shape section with shape and slant, and a square icon in Layers.
 - A divider line is a thin rectangle; there's no separate line kind.
 
-### 4.5 Blend and blur
+### 4.5 Blend and blur (built, step 7)
 
-- `blendMode` (normal, multiply, screen, overlay, soft light) on frames and shapes.
-- `backdropBlur` (px) on surfaces, for frosted plates.
+- `blendMode` (Normal, Multiply, Screen, Overlay, Soft light) and `backdropBlur` (0–40 px) on every piece, in a "Blend" section. Shapes put the blur on their slanted body.
+- **Limit, stated in the editor:** vMix adds the camera video *after* the browser source, so blending and blur only affect overlay pieces beneath this one, never the video. Blur shows through a see-through fill.
+- **vMix check still needed:** blur costs GPU time on the production machine; check it in Rehearsal before relying on it.
 
-vMix's browser source is Chromium-based, so both render. Before release, check both on the real vMix browser source in Rehearsal, because blur costs GPU time on a production machine.
+### 4.6 Image effects (built, step 7)
 
-### 4.6 Image effects
+On image pieces (team logos, event logo, custom images), in an "Image effects" section:
 
-On image pieces (team logos, event logo, custom images):
-
-- **Alpha drop shadow** (`filter: drop-shadow`), which follows the visible pixels instead of the box. Background-removed logos need this.
-- **Grayscale and dim**, with an optional condition such as "when this team lost" for the winner state.
+- **Drop shadow** that follows the visible pixels: the text-shadow editor, rendered as chained `drop-shadow()` filters (`dropShadowFilter` in `src/shared/shadow.ts`). The piece's box still clips it, so leave padding.
+- **Grey out** and **Dim** (0–100%). Team logos can apply them **Always** or **When the team loses**, which takes effect once the match is over (the same finished-match result the winner card uses).
 
 ---
 
@@ -269,7 +268,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **4. Value-change motion** — built | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
 | **5. Entrance and exit** — built | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
 | **6. Gradients and shapes** — built | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
-| **7. Image effects, blend and blur** | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
+| **7. Image effects, blend and blur** — built | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
 | **8. Tokens and styles** | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
 | **9. Brand and team** | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |
 | **10. Workflow** | Diff against on air (W4), named versions (W5), groups (W6), linked mirror (W2), starter templates (W8) | Additive (`versions`, `groups`, `mirrorOf`) |

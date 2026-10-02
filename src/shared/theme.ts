@@ -26,6 +26,33 @@ export const surfaceFillFields = {
 
 export const defaultSurfaceFill = { fill: { ...defaultFill, stops: [...defaultFill.stops] }, tintFill: { ...defaultFill, stops: [...defaultFill.stops] } };
 
+export const blendModeValues = ["normal", "multiply", "screen", "overlay", "soft-light"] as const;
+export const imageEffectWhenValues = ["always", "lost"] as const;
+
+/**
+ * How a piece mixes with what is under it. The video is added by vMix after the overlay, so both only affect other
+ * overlay pieces beneath this one.
+ */
+export const frameLookFields = {
+  blendMode: z.enum(blendModeValues).default("normal"),
+  /** Blurs overlay pieces showing through this one's see-through fill, in px; 0 for none. */
+  backdropBlur: z.number().min(0).max(40).default(0)
+};
+export const defaultFrameLook = { blendMode: "normal" as const, backdropBlur: 0 };
+
+/** Effects on an image's visible pixels: a shadow that follows its shape, and greying out (always or on a loss). */
+export const imageEffectsField = z
+  .object({
+    /** Text-style CSS shadow (x y blur colour), drawn as drop-shadow filters; "none" for none. */
+    shadow: z.string().default("none"),
+    grayscale: z.number().min(0).max(1).default(0),
+    dim: z.number().min(0).max(1).default(0),
+    /** Team logos only: grey out always, or only once the team has lost the match. */
+    when: z.enum(imageEffectWhenValues).default("always")
+  })
+  .default({});
+export const defaultImageEffects = { shadow: "none", grayscale: 0, dim: 0, when: "always" as const };
+
 /** Pieces don't animate in or out unless the theme says so. */
 export const defaultPieceMotion: MotionSettings = { preset: "none", durationMs: 400, easing: "snappy", delayMs: 0 };
 
@@ -186,7 +213,8 @@ const commonFrameBaseSchema = z.object({
   enterMotion: motionField(defaultPieceMotion),
   /** Plays as the piece is hidden. */
   exitMotion: motionField(defaultPieceMotion),
-  ...surfaceFillFields
+  ...surfaceFillFields,
+  ...frameLookFields
 });
 
 export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBaseSchema);
@@ -212,7 +240,8 @@ const imageComponentBaseSchema = commonFrameBaseSchema.extend({
   assetId: z.string().nullable(),
   teamLogoFallbackMode: z.enum(teamLogoFallbackModeValues).default("slotFallback"),
   imageContentMode: z.enum(imageContentModeValues).default("full-canvas"),
-  visibleContentPaddingPct: z.number().min(0).max(25).default(0)
+  visibleContentPaddingPct: z.number().min(0).max(25).default(0),
+  imageEffects: imageEffectsField
 });
 
 export const imageComponentSchema = z.preprocess(migrateLegacyFrame, imageComponentBaseSchema);

@@ -14,6 +14,7 @@ import {
 } from "../../shared/motion";
 import { gradientCss, type FillSettings } from "../../shared/fill";
 import { formatClock } from "../../shared/normalize";
+import { dropShadowFilter } from "../../shared/shadow";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
 import { FitText } from "./FitText";
@@ -64,6 +65,23 @@ export function changedValues(before: Record<string, string>, now: Record<string
   return Object.entries(now)
     .filter(([id, value]) => before[id] !== undefined && before[id] !== "" && value !== "" && before[id] !== value)
     .map(([id]) => [id, before[id]]);
+}
+
+/**
+ * The filter for an image's visible pixels: its drop shadow, and greying out when it applies (always, or for a team
+ * logo once that team has lost).
+ */
+export function imageEffectFilter(effects: ThemeDefinition["components"]["eventLogo"]["imageEffects"], lost: boolean): string | undefined {
+  const parts: string[] = [];
+  const shadow = dropShadowFilter(effects.shadow);
+  if (shadow) {
+    parts.push(shadow);
+  }
+  if (effects.when === "always" || lost) {
+    if (effects.grayscale > 0) parts.push(`grayscale(${effects.grayscale})`);
+    if (effects.dim > 0) parts.push(`brightness(${Math.round((1 - effects.dim) * 100) / 100})`);
+  }
+  return parts.length ? parts.join(" ") : undefined;
 }
 
 /** Wraps a clock's content in its last-seconds pulse. */
@@ -133,7 +151,8 @@ function frameStyles(
   component: Pick<
     ThemeDefinition["components"]["homeName"],
     "x" | "y" | "width" | "height" | "zIndex" | "opacity" | "visible" | "borderWidth" | "borderColor" | "borderRadius" | "shadow"
-  >
+  > &
+    Partial<Pick<ThemeDefinition["components"]["homeName"], "blendMode" | "backdropBlur">>
 ): CSSProperties {
   return {
     left: component.x,
@@ -148,7 +167,9 @@ function frameStyles(
     borderRadius: `${component.borderRadius.map((v) => `${v}px`).join(" ")}`,
     boxShadow: component.shadow,
     overflow: "hidden",
-    padding: 0
+    padding: 0,
+    ...(component.blendMode && component.blendMode !== "normal" ? { mixBlendMode: component.blendMode } : {}),
+    ...(component.backdropBlur ? { backdropFilter: `blur(${component.backdropBlur}px)` } : {})
   };
 }
 
@@ -533,6 +554,9 @@ export function OverlayRenderer({
     return { token, snapshot };
   }, [live]);
   const gameFinishToken = theme.momentOverlays.gameFinished.enabled ? completedMatch?.token ?? null : null;
+  // The side that lost a finished match, for team logos set to grey out on a loss.
+  const finishedWinner = completedMatch ? winnerSideFromSnapshot(completedMatch.snapshot) : null;
+  const loserSide = finishedWinner === "left" ? "right" : finishedWinner === "right" ? "left" : null;
   const winnerReveal = useMemo(() => {
     if (!theme.teamEventOverlay.winner.enabled || !completedMatch) {
       return null;
@@ -1079,6 +1103,8 @@ export function OverlayRenderer({
               ? resolveImageAsset(componentId, component, theme, teamSwitchPayload.to, assets)
               : null;
           const motion = slotMotion(componentId, component);
+          const logoSide = componentId === "homeTeamLogo" ? "left" : componentId === "awayTeamLogo" ? "right" : null;
+          const imageFilter = imageEffectFilter(component.imageEffects, logoSide !== null && logoSide === loserSide);
           return (
             <button
               key={motion.key}
@@ -1097,6 +1123,7 @@ export function OverlayRenderer({
                       style={{
                         padding: resolveComponentPadding(component),
                         ...resolveComponentOffset(component),
+                        filter: imageFilter,
                         animation: teamSwitchSwap?.out,
                         position: "absolute",
                         inset: 0,
@@ -1122,6 +1149,7 @@ export function OverlayRenderer({
                       style={{
                         padding: resolveComponentPadding(component),
                         ...resolveComponentOffset(component),
+                        filter: imageFilter,
                         animation: teamSwitchSwap?.in,
                         position: "absolute",
                         inset: 0,
@@ -1144,7 +1172,7 @@ export function OverlayRenderer({
                     </span>
                   </>
                 ) : (
-                  <span className="component-content image-content" style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}>
+                  <span className="component-content image-content" style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component), filter: imageFilter }}>
                     {imageAsset ? (
                       <VisibleContentImage
                         asset={imageAsset}
@@ -1348,7 +1376,7 @@ export function OverlayRenderer({
                 {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
                 <span
                   className="component-content image-content"
-                  style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component) }}
+                  style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component), filter: imageEffectFilter(component.imageEffects, false) }}
                 >
                   {imageAsset ? (
                     <VisibleContentImage
@@ -1385,6 +1413,7 @@ export function OverlayRenderer({
                 borderRadius: 0,
                 boxShadow: "none",
                 overflow: "visible",
+                backdropFilter: undefined,
                 ...motion.style,
                 display: component.visible || motion.exiting ? "block" : "none"
               }}
@@ -1396,6 +1425,7 @@ export function OverlayRenderer({
                   border: `${component.borderWidth}px solid ${component.borderColor}`,
                   borderRadius: radius,
                   boxShadow: component.shadow,
+                  backdropFilter: component.backdropBlur ? `blur(${component.backdropBlur}px)` : undefined,
                   // Positive leans the top to the right, like italic type.
                   transform: component.skewX ? `skewX(${-component.skewX}deg)` : undefined
                 }}

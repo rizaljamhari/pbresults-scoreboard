@@ -126,6 +126,11 @@ export function parseShadow(value: string, kind: ShadowKind): ShadowLayer[] | nu
   return layers;
 }
 
+/** #rrggbbff written as #rrggbb. */
+function shortColor(color: string) {
+  return color.length === 9 && color.toLowerCase().endsWith("ff") ? color.slice(0, 7) : color;
+}
+
 function px(value: number) {
   return value === 0 ? "0" : `${Math.round(value * 100) / 100}px`;
 }
@@ -141,7 +146,7 @@ export function serializeShadow(layers: ShadowLayer[], kind: ShadowKind): string
       if (kind === "box") {
         parts.push(px(layer.spread));
       }
-      const color = layer.color.toLowerCase().endsWith("ff") && layer.color.length === 9 ? layer.color.slice(0, 7) : layer.color;
+      const color = shortColor(layer.color);
       return `${kind === "box" && layer.inset ? "inset " : ""}${parts.join(" ")} ${color}`;
     })
     .join(", ");
@@ -171,4 +176,16 @@ export const textShadowPresets: ShadowPreset[] = [
 export function matchShadowPreset(layers: ShadowLayer[], kind: ShadowKind, presets: ShadowPreset[]): string | null {
   const css = serializeShadow(layers, kind);
   return presets.find((preset) => serializeShadow(preset.layers, kind) === css)?.id ?? null;
+}
+
+/**
+ * A text-style shadow (x y blur colour, layered) as a CSS `filter` chain of `drop-shadow()`s, which follow an image's
+ * visible pixels rather than its box. Null for no shadow or one the editor can't read.
+ */
+export function dropShadowFilter(css: string): string | null {
+  const layers = parseShadow(css, "text");
+  if (!layers || layers.length === 0) {
+    return null;
+  }
+  return layers.map((layer) => `drop-shadow(${px(layer.x)} ${px(layer.y)} ${px(layer.blur)} ${shortColor(layer.color)})`).join(" ");
 }
