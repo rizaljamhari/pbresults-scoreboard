@@ -14,7 +14,7 @@ import {
 } from "../../../shared/theme";
 import { IconButton } from "./EditorChrome";
 import { FillInput } from "./FillInput";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, SelectInput, TextFitFields } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, SelectInput, TextFitFields, useFontOptions } from "./fields";
 import { ShadowInput } from "./ShadowInput";
 
 const FONT_WEIGHTS = [
@@ -99,6 +99,7 @@ export function DesignSystemProperties({
   onSelectPieces: (pieceIds: string[]) => void;
 }) {
   const usage = designUsage(theme);
+  const fontOptions = useFontOptions();
   const colors = theme.tokens.colors;
   const remove = (id: string, name: string) => {
     const users = usage.entries(id).length + usage.styleCount(id);
@@ -182,7 +183,7 @@ export function DesignSystemProperties({
               <SelectInput
                 label="Font"
                 value={style.fontFamily}
-                options={fontFamilies.map((font) => ({ value: font, label: font }))}
+                options={fontOptions}
                 onChange={(value) => patchText(style.id, (draft) => (draft.fontFamily = value))}
               />
               <SelectInput

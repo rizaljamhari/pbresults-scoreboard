@@ -5,10 +5,17 @@ import * as Switch from "@radix-ui/react-switch";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { HexAlphaColorPicker, HexColorInput } from "react-colorful";
 import { ChevronRight } from "lucide-react";
-import type { ColorToken, TextFitSettings } from "../../../shared/theme";
+import { fontFamilies, type ColorToken, type TextFitSettings } from "../../../shared/theme";
 
 /** The open theme's named colours, offered first in every colour picker. */
 export const ThemeColorsContext = createContext<ColorToken[]>([]);
+
+/** Font menu choices: the built-in fonts, then the open theme's custom fonts. */
+export const ThemeFontOptionsContext = createContext<Array<{ value: string; label: string }>>(fontFamilies.map((font) => ({ value: font, label: font })));
+
+export function useFontOptions() {
+  return useContext(ThemeFontOptionsContext);
+}
 
 /** A collapsible group of properties. Native <details> keeps it keyboard- and screen-reader-friendly. */
 export function PanelSection({

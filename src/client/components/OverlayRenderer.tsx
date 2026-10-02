@@ -18,6 +18,8 @@ import { dropShadowFilter } from "../../shared/shadow";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
 import { FitText } from "./FitText";
+import { useThemeFonts } from "./themeFonts";
+import { themeFontFaces } from "../../shared/fonts";
 import { useTimeoutToken } from "./momentTriggers";
 
 type OverlayRendererProps = {
@@ -521,6 +523,8 @@ export function OverlayRenderer({
   entranceToken = null
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
+  const fontFaces = useMemo(() => themeFontFaces(theme, assets), [theme.fonts, assets]);
+  const fontsReady = useThemeFonts(fontFaces);
   const teamSwitchMotion = reduceMotion ? withoutMotion(theme.motion.teamSwitch) : theme.motion.teamSwitch;
   const teamSwitchSwap = motionSwap(teamSwitchMotion);
   const teamSwitchMs = motionTotalMs(teamSwitchMotion);
@@ -1066,6 +1070,8 @@ export function OverlayRenderer({
       style={{
         width: theme.canvas.width,
         height: theme.canvas.height,
+        // On air, custom fonts load before the graphic shows, so viewers never see a fallback font.
+        ...(!editable && !fontsReady ? { visibility: "hidden" as const } : {}),
         ...(transparentBackground ? {} : { background: theme.canvas.backgroundColor })
       }}
     >

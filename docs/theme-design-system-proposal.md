@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–8 built; steps 9–10 open
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–8 and custom fonts (step 9) built; team colours, theme kits and step 10 open
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -82,12 +82,16 @@ It only runs when the theme has colours or styles, so drags in themes without th
 - **Effect:** panels, accent bars and score plates recolour themselves for each match, like the background-image modes `homeTeamLogo` and `awayTeamLogo` already do for logos.
 - **Teams page:** two colour inputs. A "Suggest from logo" button samples the dominant colours of the logo's visible pixels; the visible-content analysis already exists.
 
-### 3.6 Custom fonts
+### 3.6 Custom fonts (built, step 9)
 
-- **Upload:** accept `woff2`, `woff`, `ttf` and `otf` files in the asset library as a new font asset kind, stored locally so they work offline.
-- **Schema:** `fontFamily` becomes `z.string()`. Built-in names stay valid. A custom font is referenced by a family name registered from the asset.
-- **Loading:** the renderer injects `@font-face` rules for the fonts the theme uses and waits for `document.fonts` before the first paint, so vMix never shows a fallback flash. It keeps the last good state if a font fails to load.
-- **Export:** theme export bundles the font files, the same way it bundles images. Asset usage tracking gains a `font` location.
+- **Upload:** `POST /api/assets` also takes WOFF2, WOFF, TTF and OTF files (recognised by extension). They're stored locally like images, so they work offline, with no background removal or pixel analysis. The asset library shows them as an "Aa" tile set in the font, without the image-only actions. Image pickers don't list them.
+- **Theme data:** `theme.fonts: [{ assetId, family }]`. `fontFamily` everywhere is now a string (built-in names stay valid; quotes and backslashes are refused so a name is always safe in CSS).
+- **Theme panel → Fonts:** upload a font or add one from the library. The family name comes from the file name ("Gotham-Bold.woff2" → "Gotham Bold") and never clashes with a built-in or another font. Each font shows a sample in itself and where it's used. **Renaming** renames it in every text setting (pieces, cards, the centre line, text styles); **removing** one in use asks first and moves its text to Oswald.
+- **Font menus** everywhere list the built-in fonts, then the theme's own ("Gotham Bold (custom)").
+- **Rendering:** `useThemeFonts` (`src/client/components/themeFonts.ts`) registers each font with the page as a `FontFace` covering every weight, so the browser never fakes a bold. **On air** the graphic stays hidden until the fonts load, for at most 3 seconds, so viewers never see a fallback font; the editor canvas is never hidden. Long text re-fits when a font finishes loading.
+- **Usage and export:** fonts are asset references (`location: { type: "font", family }`), so they appear in the asset library's "Used by", block a plain delete while in use, are bundled in theme exports, and are remapped on import.
+- **Licensing:** exports include the font files. Whether a font may be shared is left to the event (open decision 4).
+- One file per family: a family with separate Regular and Bold files is two fonts here.
 
 ### 3.7 Theme kits
 
@@ -247,7 +251,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **6. Gradients and shapes** — built | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
 | **7. Image effects, blend and blur** — built | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
 | **8. Tokens and styles** — built | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
-| **9. Brand and team** | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |
+| **9. Brand and team** — custom fonts built; team colours and theme kits not started | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |
 | **10. Workflow** | Diff against on air (W4), named versions (W5), groups (W6), linked mirror (W2), starter templates (W8) | Additive (`versions`, `groups`, `mirrorOf`) |
 
 Every styling and motion step adds a Rehearsal case, so the result is checked in real vMix on Windows, not only on the admin canvas.

@@ -1891,6 +1891,26 @@ details[open]:not(.editor-section-card) > summary::after {
   line-height: 1.35;
 }
 
+/* Fonts on the theme panel: a sample in the font itself, its name, and where it is used. */
+.te-font {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.te-font-sample {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border-radius: 7px;
+  background: var(--te-hover);
+  color: var(--te-text);
+  font-size: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 /* Design system on the theme panel: colour rows, usage lines, style pickers. */
 .te-token {
   display: grid;

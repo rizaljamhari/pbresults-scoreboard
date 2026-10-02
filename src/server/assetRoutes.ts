@@ -57,6 +57,21 @@ export function resolveUploadMimeType(mimeType: string, fileName: string): strin
   return null;
 }
 
+const fontExtensions = new Map<string, string>([
+  [".woff2", "font/woff2"],
+  [".woff", "font/woff"],
+  [".ttf", "font/ttf"],
+  [".otf", "font/otf"]
+]);
+
+/**
+ * Resolves a font upload's mime type from its extension (browsers report fonts inconsistently, often as
+ * application/octet-stream), or null when it is not a WOFF2, WOFF, TTF or OTF file.
+ */
+export function resolveFontMimeType(fileName: string): string | null {
+  return fontExtensions.get(path.extname(fileName).toLowerCase()) ?? null;
+}
+
 type UploadedImage = { buffer: Buffer; fileName: string; mimeType: string };
 
 async function readImageUpload(request: FastifyRequest, reply: FastifyReply): Promise<UploadedImage | null> {
@@ -110,9 +125,19 @@ export function registerAssetRoutes(app: FastifyInstance, options: AssetRouteOpt
   app.get("/api/assets", async () => listAssets());
 
   app.post("/api/assets", async (request, reply) => {
-    const upload = await readImageUpload(request, reply);
-    if (!upload) return reply;
-    const result = await storeAsset(upload.buffer, upload.fileName, upload.mimeType);
+    const file = await request.file();
+    if (!file) {
+      return reply.code(400).send({ message: "Missing file" });
+    }
+    const imageMimeType = resolveUploadMimeType(file.mimetype, file.filename);
+    const fontMimeType = imageMimeType ? null : resolveFontMimeType(file.filename);
+    if (!imageMimeType && !fontMimeType) {
+      file.file.resume();
+      return reply.code(415).send({ code: "unsupported_media_type", message: "Upload a PNG, JPG, WebP or GIF image, or a WOFF2, WOFF, TTF or OTF font." });
+    }
+    const buffer = await file.toBuffer();
+    // Fonts are stored as they are: background removal is for images.
+    const result = await storeAsset(buffer, file.filename, (imageMimeType ?? fontMimeType) as string, fontMimeType ? { attemptBackgroundRemoval: false } : {});
     hub.publish("assets.changed", [result.asset.id]);
     return reply.code(201).send(result);
   });

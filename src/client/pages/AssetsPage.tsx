@@ -20,6 +20,8 @@ import {
 import { api, ApiError } from "../api";
 import { useAssetLibrary, useSettings } from "../hooks";
 import { showToast } from "../toast";
+import { isFontAsset } from "../../shared/fonts";
+import { useThemeFonts } from "../components/themeFonts";
 import type { AssetCleanupReport, AssetLibraryEntry, AssetUsage } from "../../shared/theme";
 import { Button, Chip, Field, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, useSlashFocus } from "../components/admin/kit";
 import { cn } from "../lib/utils";
@@ -38,6 +40,25 @@ import {
 } from "./assetAdminUtils";
 
 const ACCEPTED_IMAGES = "image/png,image/jpeg,image/webp,image/gif";
+/** The library also takes font files, for themes' custom fonts. */
+const ACCEPTED_UPLOADS = `${ACCEPTED_IMAGES},.woff2,.woff,.ttf,.otf`;
+
+/** A font's tile: "Aa" set in the font itself. */
+function FontSample({ asset, className }: { asset: Pick<AssetLibraryEntry, "id" | "url">; className?: string }) {
+  const family = `asset-${asset.id}`;
+  useThemeFonts([{ family, url: asset.url }]);
+  return (
+    <span className={cn("ad-font-sample", className)} style={{ fontFamily: `"${family}", sans-serif` }} aria-label="Font">
+      Aa
+    </span>
+  );
+}
+
+/** An asset's thumbnail: the image, a font sample, or a missing-file mark. */
+function AssetThumb({ asset }: { asset: AssetLibraryEntry }) {
+  if (asset.fileMissing) return <ImageOff aria-label="File missing" />;
+  return isFontAsset(asset) ? <FontSample asset={asset} /> : <img src={asset.url} alt="" loading="lazy" />;
+}
 const VIEW_KEY = "pbresults.assets.view";
 
 type AssetView = "grid" | "list";
@@ -224,7 +245,7 @@ export function AssetsPage() {
           hidden
           multiple
           type="file"
-          accept={ACCEPTED_IMAGES}
+          accept={ACCEPTED_UPLOADS}
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             event.currentTarget.value = "";
@@ -291,7 +312,7 @@ export function AssetsPage() {
                           }}
                         >
                           <span className="ad-asset-row-thumb ad-checker">
-                            {asset.fileMissing ? <ImageOff aria-label="File missing" /> : <img src={asset.url} alt="" loading="lazy" />}
+                            <AssetThumb asset={asset} />
                           </span>
                           <span className="ad-asset-row-name" title={assetName(asset)}>
                             {assetName(asset)}
@@ -333,7 +354,7 @@ export function AssetsPage() {
                     onClick={() => openPanel(asset.id)}
                   >
                     <span className="ad-asset-thumb ad-checker">
-                      {asset.fileMissing ? <ImageOff aria-label="File missing" /> : <img src={asset.url} alt="" loading="lazy" />}
+                      <AssetThumb asset={asset} />
                     </span>
                     <span className="ad-asset-name" title={assetName(asset)}>
                       {assetName(asset)}
@@ -524,7 +545,7 @@ function AssetInspector({
   return (
     <aside className="ad-inspector" aria-label={assetName(current)}>
       <div className="ad-insp-head">
-        <span className="ad-insp-logo ad-checker">{current.fileMissing ? null : <img src={current.url} alt="" />}</span>
+        <span className="ad-insp-logo ad-checker">{current.fileMissing ? null : isFontAsset(current) ? <FontSample asset={current} /> : <img src={current.url} alt="" />}</span>
         <div className="ad-insp-title">
           <b>{assetName(current)}</b>
           <span>{usageSummary(current.usages)}</span>
@@ -573,6 +594,8 @@ function AssetInspector({
               <span className="ad-hint">
                 <ImageOff aria-hidden /> The file for this asset is missing. Replace it to repair every place that uses it.
               </span>
+            ) : isFontAsset(current) ? (
+              <FontSample asset={current} className="ad-font-sample--large" />
             ) : (
               <img src={previewUrl} alt={preview === "original" ? "Original upload" : "Current image"} />
             )}
@@ -642,6 +665,9 @@ function AssetInspector({
 
         <section className="ad-insp-group">
           <h2>File</h2>
+          {isFontAsset(current) ? (
+            <p className="ad-hint">A font file. Add it to a theme from the Fonts section of the theme panel.</p>
+          ) : (
           <div className="ad-asset-actions">
             <Button disabled={busy !== null} onClick={() => replaceRef.current?.click()}>
               <ImageUp aria-hidden />
@@ -680,6 +706,7 @@ function AssetInspector({
               </Button>
             ) : null}
           </div>
+          )}
           <input
             ref={replaceRef}
             hidden

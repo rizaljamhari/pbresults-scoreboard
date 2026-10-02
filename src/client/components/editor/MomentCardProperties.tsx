@@ -5,7 +5,7 @@ import { FillInput } from "./FillInput";
 import { StylePicker } from "./DesignSystemProperties";
 import { surfaceStyleFields, textStyleFields } from "../../../shared/design";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 export type MomentKind = "timeout" | "gameFinished";
 
@@ -62,6 +62,7 @@ export function MomentCardProperties({
   const following = card.placement === "centreLine";
   const lineHidden = !theme.components.breakTime.visible;
   const radius = card.borderRadius;
+  const fontOptions = useFontOptions();
 
   return (
     <div className="te-piece">
@@ -175,7 +176,7 @@ export function MomentCardProperties({
           <SelectInput
             label="Font"
             value={card.fontFamily}
-            options={fontFamilies.map((font) => ({ value: font, label: font }))}
+            options={fontOptions}
             onChange={(value) => set((draft) => (draft.fontFamily = value))}
           />
           <Field label="Size">

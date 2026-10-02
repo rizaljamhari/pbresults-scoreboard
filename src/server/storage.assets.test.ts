@@ -128,6 +128,20 @@ describe("asset usage index", () => {
     );
   });
 
+  it("tracks a theme's custom font and exports it with the theme", async () => {
+    const { asset } = await storage.storeAsset(Buffer.from("wOF2-font"), "Brand.woff2", "font/woff2", { attemptBackgroundRemoval: false });
+    const theme = themeUsing("theme-font", {});
+    theme.fonts = [{ assetId: asset.id, family: "Brand" }];
+    theme.components.homeName.fontFamily = "Brand";
+    storage.saveTheme(theme);
+
+    const usages = storage.computeAssetUsageIndex().get(asset.id) ?? [];
+    expect(usages).toEqual([expect.objectContaining({ kind: "theme", themeId: "theme-font", location: { type: "font", family: "Brand" } })]);
+    const exported = await storage.exportThemePackage("theme-font");
+    expect(exported.assets.map((item) => item.asset.id)).toContain(asset.id);
+    expect(storage.getTheme("theme-font")?.components.homeName.fontFamily).toBe("Brand");
+  });
+
   it("exports winner overlay backgrounds with the theme", async () => {
     const asset = await storePlain("winner.png", { r: 9, g: 9, b: 90 });
     storage.saveTheme(themeUsing("theme-winner", { winner: asset.id }));

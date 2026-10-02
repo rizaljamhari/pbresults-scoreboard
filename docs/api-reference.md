@@ -163,7 +163,9 @@ type AssetUsage =
         | { type: "component"; key: ComponentId }
         | { type: "free"; id: string; label: string }
         | { type: "surface"; key: string; label: string } // a layer's background image
-        | { type: "eventOverlay"; which: "concede" | "base" | "winner" };
+        | { type: "eventOverlay"; which: "concede" | "base" | "winner" }
+        | { type: "momentOverlay"; which: "timeout" | "gameFinished" }
+        | { type: "font"; family: string }; // a custom font listed in the theme's fonts
     }
   | { kind: "team"; teamId: string; teamName: string; slot: "primary" | "alternate" };
 ```
@@ -986,7 +988,7 @@ Important:
 ### `POST /api/assets`
 
 Multipart form-data:
-- `file` (PNG, JPG, WebP or GIF, up to 25 MB; anything else returns `415 unsupported_media_type`)
+- `file`: a PNG, JPG, WebP or GIF image, or a WOFF2, WOFF, TTF or OTF font (recognised by extension), up to 25 MB; anything else returns `415 unsupported_media_type`. Fonts are stored as they are: no background removal, and `visibleContent` is `unsupported`.
 
 Returns:
 

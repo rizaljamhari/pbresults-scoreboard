@@ -8,7 +8,7 @@ import { StylePicker } from "./DesignSystemProperties";
 import { textStyleFields } from "../../../shared/design";
 import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 export type EventKind = "concede" | "base" | "winner";
 
@@ -66,6 +66,7 @@ export function EventOverlayProperties({
   const followed = general.followTarget === "logo" ? logo : general.followTarget === "name" ? name : null;
   const followFallsBack = followed !== null && !followed.visible;
   const radius = general.borderRadius;
+  const fontOptions = useFontOptions();
   /** Binding props for colour fields: picking a theme colour links the field to it. */
   const bindEventColor = (field: "color" | "backgroundColor" | "backgroundOverlayColor") => ({
     tokenId: settings.design.tokenBindings[field] ?? null,
@@ -243,7 +244,7 @@ export function EventOverlayProperties({
           <SelectInput
             label="Font"
             value={general.fontFamily}
-            options={fontFamilies.map((font) => ({ value: font, label: font }))}
+            options={fontOptions}
             onChange={(value) => patchGeneral((draft) => (draft.fontFamily = value))}
           />
           <Field label="Size">

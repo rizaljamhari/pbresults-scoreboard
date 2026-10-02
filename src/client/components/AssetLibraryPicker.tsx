@@ -3,6 +3,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown, CircleSlash, ImagePlus, Search } from "lucide-react";
 import type { StoredAsset } from "../../shared/theme";
 import { cn } from "../lib/utils";
+import { isFontAsset } from "../../shared/fonts";
 
 function displayName(asset: StoredAsset) {
   return asset.displayName?.trim() || asset.originalName;
@@ -36,8 +37,10 @@ export function AssetLibraryPicker({
   const [query, setQuery] = useState("");
   const selected = value ? assets.find((asset) => asset.id === value) ?? null : null;
   const shown = useMemo(() => {
+    // Font files live in the library too; this picker is for images.
+    const images = assets.filter((asset) => !isFontAsset(asset));
     const needle = query.trim().toLowerCase();
-    return needle ? assets.filter((asset) => displayName(asset).toLowerCase().includes(needle)) : assets;
+    return needle ? images.filter((asset) => displayName(asset).toLowerCase().includes(needle)) : images;
   }, [assets, query]);
 
   function choose(next: string | null) {

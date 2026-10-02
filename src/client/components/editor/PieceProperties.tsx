@@ -25,8 +25,7 @@ import {
   SelectInput,
   SwitchRow,
   TextFitFields,
-  TextInput
-} from "./fields";
+  TextInput, useFontOptions } from "./fields";
 
 type LogoContext = {
   match?: { team?: { canonicalName?: string } | null; status?: string } | null;
@@ -191,6 +190,7 @@ export function PieceProperties({
   const radius = component.borderRadius as [number, number, number, number];
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
   const liveText = component as unknown as LiveTextSettings;
+  const fontOptions = useFontOptions();
   const design = (component as unknown as { design?: DesignBinding }).design ?? defaultDesign();
   /** Binding props for a colour field: the bound theme colour, and picking one binds the field to it. */
   const bindColor = (field: string) => ({
@@ -325,7 +325,7 @@ export function PieceProperties({
                 label="Font"
                 hideLabel
                 value={String(component.fontFamily) as (typeof fontFamilies)[number]}
-                options={fontFamilies.map((font) => ({ value: font, label: font }))}
+                options={fontOptions}
                 onChange={(value) => patch((draft) => (draft.fontFamily = value))}
               />
               <NumberInput label="Font size" value={Number(component.fontSize)} min={1} unit="px" onChange={(value) => patch((draft) => (draft.fontSize = value))} />

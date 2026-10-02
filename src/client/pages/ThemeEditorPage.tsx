@@ -52,7 +52,8 @@ import {
 } from "lucide-react";
 import { SnapOptionsPanel, ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
 import { reconcileServerTheme } from "./themeAdminUtils";
-import { ThemeColorsContext } from "../components/editor/fields";
+import { ThemeColorsContext, ThemeFontOptionsContext } from "../components/editor/fields";
+import { familyFromFileName, fontOptions } from "../../shared/fonts";
 import { bakeDesign, captureStyle, copyStyle, createDesignId, pasteStyle, reconcileDesign, surfaceStyleFields, textStyleFields } from "../../shared/design";
 import { IconButton, Island, ShortcutsHelp } from "../components/editor/EditorChrome";
 import { ArrangeMenuItems, ArrangePanel, type ArrangeActions } from "../components/editor/ArrangeControls";
@@ -1663,6 +1664,26 @@ export function ThemeEditorPage() {
     navigate("/admin/themes");
   }
 
+  /** Uploads a font file to the asset library and adds it to the theme under a name taken from the file. */
+  async function uploadFont(file: File) {
+    try {
+      const result = await api.uploadAsset(file);
+      assets.setData([result.asset, ...(assets.data ?? [])]);
+      addFontToTheme(result.asset.id, file.name);
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "The font could not be uploaded." });
+    }
+  }
+
+  function addFontToTheme(assetId: string, fileName: string) {
+    let family = "";
+    patchTheme((draft) => {
+      family = familyFromFileName(fileName, draft.fonts.map((font) => font.family));
+      draft.fonts.push({ assetId, family });
+    });
+    showToast({ kind: "success", message: `Added the font “${family}”. Pick it in any font menu.` });
+  }
+
   async function uploadAssetIntoTarget(file: File, target: "logo" | "surface" | "concede" | "base" | "winner" | MomentKind) {
     const result = await api.uploadAsset(file);
     const asset = result.asset;
@@ -2337,6 +2358,7 @@ export function ThemeEditorPage() {
       )}
 
       <ThemeColorsContext.Provider value={theme.tokens.colors}>
+      <ThemeFontOptionsContext.Provider value={fontOptions(theme)}>
       <aside className="te-island te-props" aria-label="Properties">
         {propsView !== "auto" ? (
           <div className="te-subview">
@@ -2477,11 +2499,15 @@ export function ThemeEditorPage() {
                 onOpenPreviewData={() => setPropsView("preview")}
                 onPlayEntrance={() => setEntranceToken(Date.now())}
                 onSelectPieces={(ids) => selectComponents(ids)}
+                assets={assets.data ?? []}
+                onUploadFont={(file) => void uploadFont(file)}
+                onAddLibraryFont={(asset) => addFontToTheme(asset.id, asset.displayName ?? asset.originalName)}
               />
             )}
           </>
         )}
       </aside>
+      </ThemeFontOptionsContext.Provider>
       </ThemeColorsContext.Provider>
     </div>
     </Tooltip.Provider>

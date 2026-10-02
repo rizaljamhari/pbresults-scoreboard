@@ -170,6 +170,15 @@ function themeAssetRefs(theme: ThemeDefinition): Array<AssetRef<AssetThemeUsageL
       }
     });
   }
+  for (const font of theme.fonts) {
+    refs.push({
+      location: { type: "font", family: font.family },
+      assetId: font.assetId,
+      set: (assetId) => {
+        if (assetId) font.assetId = assetId;
+      }
+    });
+  }
   for (const component of theme.freeComponents) {
     if (component.kind === "image") {
       refs.push({
@@ -1002,7 +1011,9 @@ async function persistAssetRecord(
   await writeFileAtomic(filePath, buffer);
   const reusableAnalysis =
     options.visibleContent && options.visibleContent.status !== "failed" ? options.visibleContent : null;
-  const visibleContent = reusableAnalysis ?? (await analyzeVisibleContent(buffer, mimeType));
+  // Fonts have no pixels to analyse.
+  const visibleContent =
+    reusableAnalysis ?? (mimeType.startsWith("font/") ? ({ analyzerVersion: 1, status: "unsupported" } as const) : await analyzeVisibleContent(buffer, mimeType));
   const asset: StoredAssetRecord = {
     id,
     originalName,

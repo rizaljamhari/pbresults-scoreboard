@@ -3230,3 +3230,19 @@ tr[aria-selected="true"] .ad-row-open {
 .ad-rh-picks {
   margin: 0 16px 12px;
 }
+
+/* Font assets: "Aa" set in the font, in place of an image thumbnail. */
+.ad-font-sample {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ad-text, currentColor);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ad-font-sample--large {
+  min-height: 120px;
+  font-size: 64px;
+}

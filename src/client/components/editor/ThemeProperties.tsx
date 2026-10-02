@@ -3,7 +3,8 @@ import { ChevronRight, Play } from "lucide-react";
 import { enterOrderLabels, enterOrderValues } from "../../../shared/motion";
 import { DesignSystemProperties } from "./DesignSystemProperties";
 import { themeSwatches } from "./PieceProperties";
-import type { ThemeDefinition } from "../../../shared/theme";
+import type { StoredAsset, ThemeDefinition } from "../../../shared/theme";
+import { FontsProperties } from "./FontsProperties";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
 /** What Properties shows when nothing is selected: the theme and its canvas. */
@@ -17,7 +18,10 @@ export function ThemeProperties({
   onOpenEventOverlay,
   onOpenPreviewData,
   onPlayEntrance,
-  onSelectPieces
+  onSelectPieces,
+  assets,
+  onUploadFont,
+  onAddLibraryFont
 }: {
   theme: ThemeDefinition;
   patchTheme: (update: (draft: ThemeDefinition) => void) => void;
@@ -31,6 +35,9 @@ export function ThemeProperties({
   onPlayEntrance: () => void;
   /** Selects these pieces on the canvas (from a colour's or style's "Select"). */
   onSelectPieces: (pieceIds: string[]) => void;
+  assets: StoredAsset[];
+  onUploadFont: (file: File) => void;
+  onAddLibraryFont: (asset: StoredAsset) => void;
 }) {
   const entering = [...Object.values(theme.components), ...theme.freeComponents].filter(
     (component) => component.visible && component.enterMotion.preset !== "none"
@@ -82,6 +89,8 @@ export function ThemeProperties({
       </Group>
 
       <DesignSystemProperties theme={theme} swatches={themeSwatches(theme)} patchTheme={patchTheme} onSelectPieces={onSelectPieces} />
+
+      <FontsProperties theme={theme} assets={assets} patchTheme={patchTheme} onUpload={onUploadFont} onAddFromLibrary={onAddLibraryFont} />
 
       <PanelSection title="Build-in" defaultOpen={entering > 0}>
         <p className="te-field-hint">

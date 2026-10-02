@@ -77,6 +77,22 @@ describe("asset routes", () => {
     expect(await rejected.json()).toMatchObject({ code: "unsupported_media_type" });
   });
 
+  it("accepts font files by extension, stored without background removal or pixel analysis", async () => {
+    expect(routes.resolveFontMimeType("Gotham-Bold.WOFF2")).toBe("font/woff2");
+    expect(routes.resolveFontMimeType("brand.otf")).toBe("font/otf");
+    expect(routes.resolveFontMimeType("brand.zip")).toBeNull();
+
+    const form = new FormData();
+    form.append("file", new Blob([Buffer.from("wOF2-test-font-bytes")], { type: "application/octet-stream" }), "Brand-Bold.woff2");
+    const response = await fetch(`${baseUrl}/api/assets`, { method: "POST", body: form });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { asset: { mimeType: string; url: string; visibleContent: { status: string } }; processing: { status: string } };
+    expect(body.asset.mimeType).toBe("font/woff2");
+    expect(body.asset.url).toMatch(/\.woff2$/);
+    expect(body.asset.visibleContent.status).toBe("unsupported");
+    expect(body.processing.status).toBe("skipped");
+  });
+
   it("accepts octet-stream uploads by their image extension", () => {
     expect(routes.resolveUploadMimeType("application/octet-stream", "logo.JPG")).toBe("image/jpeg");
     expect(routes.resolveUploadMimeType("application/octet-stream", "notes.txt")).toBeNull();

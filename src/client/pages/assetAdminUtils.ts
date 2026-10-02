@@ -62,6 +62,8 @@ export function usagePlace(usage: AssetUsage): string {
       return `${EVENT_OVERLAY_NAMES[location.which]} background`;
     case "momentOverlay":
       return location.which === "timeout" ? "Timeout card background" : "Game finished card background";
+    case "font":
+      return `Font “${location.family}”`;
   }
 }
 

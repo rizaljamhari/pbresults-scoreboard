@@ -1,14 +1,13 @@
 import { AlignCenter, AlignLeft, AlignRight, Link2 } from "lucide-react";
-import { fontFamilies, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { MotionFields } from "./MotionFields";
 import { TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 type CentreLine = ThemeDefinition["centerSecondary"];
 type Moments = ThemeDefinition["momentOverlays"];
 type LineMode = CentreLine["gameMode"];
 type LineStyle = CentreLine["timerStyle"];
-type FontFamily = LineStyle["fontFamily"];
 type Align = ThemeDefinition["components"]["breakTime"]["textAlign"];
 
 const BREAK_OPTIONS: ReadonlyArray<{ value: LineMode; label: string }> = [
@@ -22,8 +21,6 @@ const PLAY_OPTIONS: ReadonlyArray<{ value: LineMode; label: string }> = [
   { value: "staticText", label: "Text" },
   { value: "timer", label: "Break clock" }
 ];
-
-const FONT_OPTIONS = fontFamilies.map((font) => ({ value: font as FontFamily, label: font }));
 
 const FONT_WEIGHTS = ["300", "400", "500", "600", "700", "800", "900"].map((value) => ({
   value,
@@ -46,10 +43,11 @@ function LineStyleFields({
   onAlign?: (value: Align) => void;
   patch: (update: (style: LineStyle) => void) => void;
 }) {
+  const fontOptions = useFontOptions();
   return (
     <>
       <FieldRow>
-        <SelectInput label="Font" value={style.fontFamily} options={FONT_OPTIONS} onChange={(value) => patch((draft) => (draft.fontFamily = value))} />
+        <SelectInput label="Font" value={style.fontFamily} options={fontOptions} onChange={(value) => patch((draft) => (draft.fontFamily = value))} />
         <Field label="Size">
           <NumberInput label={`${name} size`} value={style.fontSize} min={1} unit="px" onChange={(value) => patch((draft) => (draft.fontSize = value))} />
         </Field>

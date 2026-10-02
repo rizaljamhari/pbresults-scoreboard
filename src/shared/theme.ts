@@ -95,6 +95,12 @@ export const fontFamilies = [
   "Helvetica Neue"
 ] as const;
 
+/**
+ * A font family name: a built-in one or a custom font the theme registers. Quotes and backslashes are refused so
+ * the name is always safe inside CSS.
+ */
+export const fontFamilySchema = z.string().trim().min(1).max(60).regex(/^[^"\\]+$/);
+
 export const backgroundImageFitValues = ["cover", "contain", "stretch"] as const;
 export const backgroundImagePositionValues = ["center", "top", "bottom", "left", "right"] as const;
 export const backgroundImageModeValues = ["asset", "homeTeamLogo", "awayTeamLogo"] as const;
@@ -239,7 +245,7 @@ export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBas
 
 const textComponentBaseSchema = commonFrameBaseSchema.extend({
   kind: z.literal("text"),
-  fontFamily: z.enum(fontFamilies),
+  fontFamily: fontFamilySchema,
   fontSize: z.number().positive(),
   fontWeight: z.number().min(100).max(900),
   color: z.string(),
@@ -338,7 +344,7 @@ const teamEventOverlayGeneralObjectSchema = z.object({
   borderColor: z.string().default("#ffffff"),
   borderWidth: z.number().min(0).default(2),
   borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([12, 12, 12, 12]),
-  fontFamily: z.enum(fontFamilies).default("Oswald"),
+  fontFamily: fontFamilySchema.default("Oswald"),
   fontSize: z.number().positive().default(28),
   fontWeight: z.number().min(100).max(900).default(700),
   letterSpacing: z.number().default(1),
@@ -558,7 +564,7 @@ const centerSecondaryObjectSchema = z.object({
   breakText: z.string().default(""),
   timerStyle: z
     .object({
-      fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+      fontFamily: fontFamilySchema.default("Barlow Condensed"),
       fontSize: z.number().positive().default(28),
       fontWeight: z.number().min(100).max(900).default(700),
       color: z.string().default("#f6f1e8")
@@ -566,7 +572,7 @@ const centerSecondaryObjectSchema = z.object({
     .default({}),
   staticStyle: z
     .object({
-      fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+      fontFamily: fontFamilySchema.default("Barlow Condensed"),
       fontSize: z.number().positive().default(28),
       fontWeight: z.number().min(100).max(900).default(700),
       color: z.string().default("#f6f1e8")
@@ -616,7 +622,7 @@ const momentCardSchema = z.object({
   y: z.number().default(0),
   width: z.number().positive().default(240),
   height: z.number().positive().default(44),
-  fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+  fontFamily: fontFamilySchema.default("Barlow Condensed"),
   fontSize: z.number().positive().default(28),
   fontWeight: z.number().min(100).max(900).default(700),
   letterSpacing: z.number().default(1),
@@ -664,7 +670,7 @@ const legacyCentreLineMomentsSchema = z.object({
       minIncreaseSeconds: z.number().min(1).default(45),
       backgroundColor: z.string().default("#b3261ecc"),
       color: z.string().default("#ffffff"),
-      fontFamily: z.enum(fontFamilies).default("Barlow Condensed"),
+      fontFamily: fontFamilySchema.default("Barlow Condensed"),
       fontSize: z.number().positive().default(28),
       fontWeight: z.number().min(100).max(900).default(700),
       letterSpacing: z.number().default(1)
@@ -739,7 +745,7 @@ export function migrateMomentOverlays(input: unknown): unknown {
 const textStyleSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).max(40),
-  fontFamily: z.enum(fontFamilies).default("Oswald"),
+  fontFamily: fontFamilySchema.default("Oswald"),
   fontSize: z.number().positive().default(32),
   fontWeight: z.number().min(100).max(900).default(700),
   letterSpacing: z.number().default(0),
@@ -803,6 +809,8 @@ const themeObjectSchema = z.object({
   teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({}),
   momentOverlays: momentOverlaysSchema.default({}),
+  /** Custom fonts the theme uses: an uploaded font file and the family name pieces refer to it by. */
+  fonts: z.array(z.object({ assetId: z.string().min(1), family: fontFamilySchema })).default([]),
   /** Named colours the theme's pieces and styles can use. */
   tokens: z
     .object({
@@ -1048,7 +1056,8 @@ export const assetThemeUsageLocationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("free"), id: z.string(), label: z.string() }),
   z.object({ type: z.literal("surface"), key: z.string(), label: z.string() }),
   z.object({ type: z.literal("eventOverlay"), which: z.enum(["concede", "base", "winner"]) }),
-  z.object({ type: z.literal("momentOverlay"), which: z.enum(["timeout", "gameFinished"]) })
+  z.object({ type: z.literal("momentOverlay"), which: z.enum(["timeout", "gameFinished"]) }),
+  z.object({ type: z.literal("font"), family: z.string() })
 ]);
 
 export const assetUsageSchema = z.discriminatedUnion("kind", [
