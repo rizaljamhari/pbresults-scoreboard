@@ -351,6 +351,11 @@ app.post("/api/overlay/report", { bodyLimit: 4 * 1024 }, async (request, reply) 
   return reply.code(204).send();
 });
 app.get("/api/overlay/clients", async () => overlayRegistry.getState());
+app.post("/api/overlay/entrance", async () => {
+  const token = Date.now();
+  appEventHub.publishEntranceCue(token);
+  return { token };
+});
 
 app.get("/api/update/status", async () => updateService.getStatus());
 app.post("/api/update/check", async (request, reply) => {

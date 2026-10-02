@@ -16,7 +16,7 @@ export const appChangedEventTypes = [
 ] as const;
 export type AppChangedEventType = (typeof appChangedEventTypes)[number];
 
-export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state", "rehearsal.state"] as const;
+export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state", "rehearsal.state", "overlay.cue"] as const;
 export type AppRealtimeEventType = (typeof appRealtimeEventTypes)[number];
 
 export const appEventTypeToDomain: Record<AppChangedEventType, AppResourceDomain> = {
@@ -86,6 +86,12 @@ export const appRealtimeEventSchema = z.discriminatedUnion("type", [
   appEventCommonSchema.extend({
     type: z.literal("rehearsal.state"),
     state: rehearsalStatusSchema
+  }),
+  /** A one-off instruction to every overlay, e.g. play the entrance again. Not replayed on reconnect. */
+  appEventCommonSchema.extend({
+    type: z.literal("overlay.cue"),
+    cue: z.literal("entrance"),
+    token: z.number().int().nonnegative()
   })
 ]);
 

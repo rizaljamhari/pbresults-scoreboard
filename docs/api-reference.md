@@ -46,6 +46,8 @@ type AppSettings = {
   pollEnabled: boolean;
   pollIntervalMs: number;
   autoRemoveBackgroundUploads: boolean;
+  /** Operator switch: the live overlay cuts instead of animating. */
+  reduceMotion: boolean;
   updateCheckEnabled: boolean;
   updateCheckIntervalHours: number;
   updateAutoDownload: boolean;
@@ -269,6 +271,10 @@ Data-bearing real-time messages use:
 - `live.state`, containing a validated `NormalizedLiveState`
 - `operator-text.state`, containing a validated `OperatorTextState`
 
+One-off cues, not replayed when a client reconnects:
+
+- `overlay.cue` with `cue: "entrance"` and a numeric `token`: every live overlay replays its theme's entrance
+
 Example:
 
 ```text
@@ -488,6 +494,18 @@ Returns:
 Effect:
 - asks the poller to fetch immediately
 - works even if polling is paused
+
+### `POST /api/overlay/entrance`
+
+Returns:
+
+```json
+{ "token": 1790938724850 }
+```
+
+Effect:
+- publishes an `overlay.cue` event; every live overlay and the Operations on-air strip replay the published theme's entrance, built in with its stagger
+- does nothing visible when the theme has no entrances or motion is reduced
 
 ## Operator text endpoints
 

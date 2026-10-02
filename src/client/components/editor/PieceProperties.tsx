@@ -8,7 +8,7 @@ import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
 import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
-import { changeMotionPresetLabels, changeMotionPresetValues } from "../../../shared/motion";
+import { changeMotionPresetLabels, changeMotionPresetValues, exitMotionPresetValues, type MotionSettings } from "../../../shared/motion";
 import {
   ColorInput,
   Field,
@@ -153,6 +153,7 @@ export function PieceProperties({
   onBringIntoFrame,
   onReplayChange,
   onPreviewLastSeconds,
+  onPlayEntrance,
   centreLine
 }: {
   entry: ThemeComponentEntry;
@@ -168,6 +169,8 @@ export function PieceProperties({
   onReplayChange: () => void;
   /** Shows the clock in its last seconds on the canvas. */
   onPreviewLastSeconds: (seconds: number) => void;
+  /** Plays the scoreboard's entrance on the canvas. */
+  onPlayEntrance: () => void;
   centreLine?: ReactNode;
 }) {
   const component = entry.component as AnyComponent;
@@ -179,6 +182,7 @@ export function PieceProperties({
   const radius = component.borderRadius as [number, number, number, number];
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
   const liveText = component as unknown as LiveTextSettings;
+  const motion = component as unknown as { enterMotion: MotionSettings; exitMotion: MotionSettings };
   const imageAsset = isImage
     ? logoContext?.effectiveAsset ?? assets.find((asset) => asset.id === component.assetId) ?? null
     : null;
@@ -571,6 +575,27 @@ export function PieceProperties({
             </div>
           )}
         </div>
+      </PanelSection>
+
+      <PanelSection title="Entrance and exit" defaultOpen={motion.enterMotion.preset !== "none" || motion.exitMotion.preset !== "none"}>
+        <p className="te-field-hint">Enters when the overlay loads, when it is shown, and when the operator plays the entrance. Exits when it is hidden.</p>
+        <Group title="Entrance">
+          <MotionFields name="Entrance" value={motion.enterMotion} onChange={(next) => patch((draft) => Object.assign(draft.enterMotion as MotionSettings, next))} />
+        </Group>
+        <Group title="Exit">
+          <MotionFields
+            name="Exit"
+            value={motion.exitMotion}
+            presets={exitMotionPresetValues}
+            onChange={(next) => patch((draft) => Object.assign(draft.exitMotion as MotionSettings, next))}
+          />
+        </Group>
+        {motion.enterMotion.preset !== "none" ? (
+          <button type="button" className="te-mini-btn te-play-btn" onClick={onPlayEntrance}>
+            <Play aria-hidden />
+            Play entrance
+          </button>
+        ) : null}
       </PanelSection>
 
       <PanelSection title="Shadow" defaultOpen={false}>

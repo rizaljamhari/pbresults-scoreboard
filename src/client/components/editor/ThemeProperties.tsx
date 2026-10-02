@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Play } from "lucide-react";
+import { enterOrderLabels, enterOrderValues } from "../../../shared/motion";
 import type { ThemeDefinition } from "../../../shared/theme";
-import { ColorInput, Field, Group, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
+import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
 /** What Properties shows when nothing is selected: the theme and its canvas. */
 export function ThemeProperties({
@@ -12,7 +13,8 @@ export function ThemeProperties({
   onMirrorTeams,
   onApplyPreset,
   onOpenEventOverlay,
-  onOpenPreviewData
+  onOpenPreviewData,
+  onPlayEntrance
 }: {
   theme: ThemeDefinition;
   patchTheme: (update: (draft: ThemeDefinition) => void) => void;
@@ -22,7 +24,12 @@ export function ThemeProperties({
   onApplyPreset: (presetId: string) => void;
   onOpenEventOverlay: () => void;
   onOpenPreviewData: () => void;
+  /** Plays every piece's entrance on the canvas, built in as on air. */
+  onPlayEntrance: () => void;
 }) {
+  const entering = [...Object.values(theme.components), ...theme.freeComponents].filter(
+    (component) => component.visible && component.enterMotion.preset !== "none"
+  ).length;
   const [presetId, setPresetId] = useState(layoutPresets[0]?.id ?? "");
 
   return (
@@ -68,6 +75,37 @@ export function ThemeProperties({
           onChange={(checked) => patchTheme((draft) => (draft.canvas.transparentPreview = checked))}
         />
       </Group>
+
+      <PanelSection title="Build-in" defaultOpen={entering > 0}>
+        <p className="te-field-hint">
+          {entering === 0
+            ? "No piece has an entrance yet. Give pieces one under Entrance and exit, then build them in here."
+            : `${entering} ${entering === 1 ? "piece enters" : "pieces enter"} when the overlay loads and when the operator plays the entrance.`}
+        </p>
+        <FieldRow>
+          <Field label="Gap between pieces">
+            <NumberInput
+              label="Gap between pieces"
+              value={theme.motion.enterStaggerMs}
+              min={0}
+              max={2000}
+              step={20}
+              unit="ms"
+              onChange={(value) => patchTheme((draft) => (draft.motion.enterStaggerMs = value))}
+            />
+          </Field>
+          <SelectInput
+            label="Order"
+            value={theme.motion.enterOrder}
+            options={enterOrderValues.map((value) => ({ value, label: enterOrderLabels[value] }))}
+            onChange={(value) => patchTheme((draft) => (draft.motion.enterOrder = value))}
+          />
+        </FieldRow>
+        <button type="button" className="te-mini-btn te-play-btn" disabled={entering === 0} onClick={onPlayEntrance}>
+          <Play aria-hidden />
+          Play entrance
+        </button>
+      </PanelSection>
 
       <PanelSection title="Team layout" defaultOpen={false}>
         <Field label="Copy everything to the other side" hint="Layout, style, visibility and images. The copy is independent afterwards.">

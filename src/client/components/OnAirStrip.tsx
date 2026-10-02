@@ -44,6 +44,7 @@ export function OnAirStrip({
   assets,
   operatorTextValues,
   reduceMotion = false,
+  entranceToken = null,
   markers,
   summary,
   overlayUrl,
@@ -57,6 +58,8 @@ export function OnAirStrip({
   operatorTextValues: Record<string, string>;
   /** Mirrors the operator's Reduce motion switch, so the strip matches vMix. */
   reduceMotion?: boolean;
+  /** Mirrors the operator's Play entrance. */
+  entranceToken?: number | null;
   markers: StripMarker[];
   summary: ReactNode;
   overlayUrl: string;
@@ -189,7 +192,7 @@ export function OnAirStrip({
                 }}
                 aria-hidden
               >
-                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} transparentBackground />
+                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} transparentBackground />
               </div>
               {markers.map((marker) => {
                 const rect = teamSideRect(theme, marker.side);
@@ -214,7 +217,7 @@ export function OnAirStrip({
         ) : (
           <div className="ad-strip-frame">
             <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="ad-strip-frame-box" innerClassName="ad-strip-frame-stage" mode="width">
-              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} transparentBackground />
+              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} transparentBackground />
             </ScaledCanvasFrame>
           </div>
         )}

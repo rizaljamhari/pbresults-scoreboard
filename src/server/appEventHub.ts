@@ -115,6 +115,11 @@ export class AppEventHub {
     return this.publishRealtime({ type: "rehearsal.state", state });
   }
 
+  /** Every overlay plays its entrance again (the operator's Play entrance). */
+  publishEntranceCue(token: number): AppRealtimeEvent {
+    return this.publishRealtime({ type: "overlay.cue", cue: "entrance", token });
+  }
+
   hasCapacity(): boolean {
     return !this.closed && this.listeners.size < this.maxSubscribers;
   }
@@ -175,6 +180,7 @@ export class AppEventHub {
       | { type: "operator-text.state"; state: OperatorTextState }
       | { type: "overlay.state"; state: OverlayState }
       | { type: "rehearsal.state"; state: RehearsalStatus }
+      | { type: "overlay.cue"; cue: "entrance"; token: number }
   ): AppRealtimeEvent {
     this.sequence += 1;
     const event = {

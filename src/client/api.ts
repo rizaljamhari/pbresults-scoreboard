@@ -114,6 +114,11 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(settings)
     }).then(handle<AppSettings>),
+  /** Every overlay plays its entrance again. */
+  playEntrance: () =>
+    fetch("/api/overlay/entrance", {
+      method: "POST"
+    }).then(handle<{ token: number }>),
   startLivePolling: () =>
     fetch("/api/live/poll/start", {
       method: "POST"

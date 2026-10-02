@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import { useEntranceCueToken } from "../appEvents";
 import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings, useTheme } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
@@ -14,6 +15,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const operatorText = useOperatorTextState();
   const assets = useAssets();
+  const entranceToken = useEntranceCueToken();
   // Reports what this page shows so Operations can tell whether vMix's overlay is alive and current.
   useOverlayReporter(mode, themeResource.data ?? null, live.data);
 
@@ -43,6 +45,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
           assets={assets.data ?? []}
           transparentBackground={mode === "preview" && theme.canvas.transparentPreview}
           reduceMotion={mode === "live" && settings.data?.reduceMotion === true}
+          entranceToken={mode === "live" ? entranceToken : null}
           operatorTextValues={
             operatorText.data?.themeId === theme.id
               ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))

@@ -20,6 +20,7 @@ import {
   Plus,
   RefreshCw,
   Replace,
+  Sparkles,
   TriangleAlert,
   Waves
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { feedShowsRunningMatch } from "../../shared/rehearsal";
 import { RehearsalPanel } from "../components/RehearsalPanel";
 import { formatAge as formatOverlayAge, summarizeOverlays, type OverlayClient, type OverlayState } from "../../shared/overlayHealth";
 import { showToast } from "../toast";
+import { useEntranceCueToken } from "../appEvents";
 import { Button, Chip, Dot, Grow, Toolbar, type Tone } from "../components/admin/kit";
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
 
@@ -947,6 +949,8 @@ export function OperationsPage() {
   const operatorText = useOperatorTextState();
   const [togglingPoll, setTogglingPoll] = useState(false);
   const [togglingMotion, setTogglingMotion] = useState(false);
+  const [playingEntrance, setPlayingEntrance] = useState(false);
+  const entranceToken = useEntranceCueToken();
   const [refreshing, setRefreshing] = useState(false);
   const [resolvingSide, setResolvingSide] = useState<"left" | "right" | null>(null);
   const [clearingSide, setClearingSide] = useState<"left" | "right" | null>(null);
@@ -958,6 +962,10 @@ export function OperationsPage() {
   const publishedTheme = useMemo(
     () => themes.data?.find((theme) => theme.id === settings.data?.publishedThemeId) ?? null,
     [settings.data?.publishedThemeId, themes.data]
+  );
+  const themeHasEntrance = Boolean(
+    publishedTheme &&
+      [...Object.values(publishedTheme.components), ...publishedTheme.freeComponents].some((component) => component.visible && component.enterMotion.preset !== "none")
   );
 
   const browserOrigin = typeof window === "undefined" ? null : window.location.origin;
@@ -1140,6 +1148,18 @@ export function OperationsPage() {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update polling." });
     } finally {
       setTogglingPoll(false);
+    }
+  }
+
+  async function handlePlayEntrance() {
+    setPlayingEntrance(true);
+    try {
+      await api.playEntrance();
+      showToast({ kind: "success", message: "Entrance played on the live overlay." });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to play the entrance." });
+    } finally {
+      setPlayingEntrance(false);
     }
   }
 
@@ -1406,6 +1426,17 @@ export function OperationsPage() {
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
         ) : null}
+        {themeHasEntrance ? (
+          <Button
+            variant="ghost"
+            disabled={playingEntrance || settings.data.reduceMotion}
+            title={settings.data.reduceMotion ? "Motion is reduced, so pieces appear without their entrance" : "Play the scoreboard's entrance on the live overlay, e.g. as you cut to it"}
+            onClick={() => void handlePlayEntrance()}
+          >
+            <Sparkles aria-hidden />
+            Play entrance
+          </Button>
+        ) : null}
         <Button
           variant={settings.data.reduceMotion ? "default" : "ghost"}
           aria-pressed={settings.data.reduceMotion}
@@ -1442,6 +1473,7 @@ export function OperationsPage() {
             assets={assets.data ?? []}
             operatorTextValues={stripOperatorText}
             reduceMotion={settings.data.reduceMotion}
+            entranceToken={entranceToken}
             markers={stripMarkers}
             summary={
               live.data ? (

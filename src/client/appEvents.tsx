@@ -55,6 +55,7 @@ type AppEventsContextValue = {
   subscribeRehearsal(listener: StoreListener): () => void;
   getRehearsalStatus(): RehearsalStatus | null;
   updateRehearsalStatus(state: RehearsalStatus): void;
+  subscribeEntranceCue(listener: (token: number) => void): () => void;
 };
 
 const AppEventsContext = createContext<AppEventsContextValue | null>(null);
@@ -98,6 +99,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const overlayStateRef = useRef<OverlayState | null>(null);
   const rehearsalListenersRef = useRef(new Set<StoreListener>());
   const rehearsalStatusRef = useRef<RehearsalStatus | null>(null);
+  const entranceCueListenersRef = useRef(new Set<(token: number) => void>());
   const instanceIdRef = useRef<string | null>(null);
   const revisionsRef = useRef<AppResourceRevisions | null>(null);
   const runtimeRef = useRef<RuntimeIdentity | null>(null);
@@ -152,6 +154,14 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const updateRehearsalStatus = useCallback((state: RehearsalStatus) => {
     rehearsalStatusRef.current = state;
     for (const listener of [...rehearsalListenersRef.current]) listener();
+  }, []);
+
+  const subscribeEntranceCue = useCallback((listener: (token: number) => void) => {
+    entranceCueListenersRef.current.add(listener);
+    return () => entranceCueListenersRef.current.delete(listener);
+  }, []);
+  const playEntranceCue = useCallback((token: number) => {
+    for (const listener of [...entranceCueListenersRef.current]) listener(token);
   }, []);
 
   const notify = useCallback((invalidation: ResourceInvalidation) => {
@@ -268,6 +278,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       else if (event.type === "operator-text.state") updateOperatorTextState(event.state);
       else if (event.type === "overlay.state") updateOverlayState(event.state);
       else if (event.type === "rehearsal.state") updateRehearsalStatus(event.state);
+      else if (event.type === "overlay.cue") playEntranceCue(event.token);
       else handleChanged(event);
 
       if (forward && window.parent === window) {
@@ -391,7 +402,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       for (const port of childPorts) port.close();
       childPorts.clear();
     };
-  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState, updateRehearsalStatus]);
+  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState, updateRehearsalStatus, playEntranceCue]);
 
   const value = useMemo(
     () => ({
@@ -408,7 +419,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       updateOverlayState,
       subscribeRehearsal,
       getRehearsalStatus,
-      updateRehearsalStatus
+      updateRehearsalStatus,
+      subscribeEntranceCue
     }),
     [
       connectionState,
@@ -424,7 +436,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       updateOverlayState,
       subscribeRehearsal,
       getRehearsalStatus,
-      updateRehearsalStatus
+      updateRehearsalStatus,
+      subscribeEntranceCue
     ]
   );
   return <AppEventsContext.Provider value={value}>{children}</AppEventsContext.Provider>;
@@ -456,4 +469,12 @@ export function useAppEventOverlayState() {
 export function useAppEventRehearsalStatus() {
   const events = useAppEvents();
   return useSyncExternalStore(events?.subscribeRehearsal ?? emptySubscribe, events?.getRehearsalStatus ?? getNullRehearsalStatus, getNullRehearsalStatus);
+}
+
+/** The latest Play entrance cue sent to overlays, or null before any arrives on this page. */
+export function useEntranceCueToken() {
+  const events = useAppEvents();
+  const [token, setToken] = useState<number | null>(null);
+  useEffect(() => events?.subscribeEntranceCue(setToken), [events]);
+  return token;
 }

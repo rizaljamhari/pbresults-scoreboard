@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { changeMotionPresetValues, motionEasingValues, motionPresetValues, type ChangeMotionSettings, type MotionSettings } from "./motion.js";
+import { changeMotionPresetValues, enterOrderValues, motionEasingValues, motionPresetValues, type ChangeMotionSettings, type MotionSettings } from "./motion.js";
 import { randomUuid } from "./randomId.js";
+
+/** Pieces don't animate in or out unless the theme says so. */
+export const defaultPieceMotion: MotionSettings = { preset: "none", durationMs: 400, easing: "snappy", delayMs: 0 };
 
 export const componentIds = [
   "homeName",
@@ -154,7 +157,11 @@ const commonFrameBaseSchema = z.object({
   paddingY: z.number().min(0),
   offsetX: z.number(),
   offsetY: z.number(),
-  shadow: z.string()
+  shadow: z.string(),
+  /** Plays as the piece arrives: when the overlay loads, when it is shown, and on the operator's Play entrance. */
+  enterMotion: motionField(defaultPieceMotion),
+  /** Plays as the piece is hidden. */
+  exitMotion: motionField(defaultPieceMotion)
 });
 
 export const commonFrameSchema = z.preprocess(migrateLegacyFrame, commonFrameBaseSchema);
@@ -675,7 +682,10 @@ const themeObjectSchema = z.object({
   motion: z
     .object({
       /** Old names and logos leave as the new ones arrive when the teams change. */
-      teamSwitch: motionField(defaultTeamSwitchMotion)
+      teamSwitch: motionField(defaultTeamSwitchMotion),
+      /** Gap between pieces as the whole scoreboard enters; 0 brings them in together. */
+      enterStaggerMs: z.number().min(0).max(2000).default(0),
+      enterOrder: z.enum(enterOrderValues).default("left-to-right")
     })
     .default({})
 });

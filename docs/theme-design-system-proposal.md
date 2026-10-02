@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–4 (text fitting, shadows and text effects, motion model, value-change motion) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–5 (text fitting, shadows and text effects, motion model, value-change motion, entrances) built
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -208,12 +208,16 @@ motion = { preset, durationMs, easing, delayMs }   // src/shared/motion.ts, sche
 - **Editor:** one `MotionFields` control (animation, duration, easing, delay) in the centre line's Change animation group and the event cards' shared section, plus a team-switch motion under "Animate team switches".
 - **Rollback note:** a theme saved by this version and opened by an older one loses its event-card and centre-line motion choices, which fall back to the old defaults. Nothing breaks.
 
-### 5.2 Entrance and exit for each piece
+### 5.2 Entrance and exit for each piece (built, step 5)
 
-- Optional `enter` and `exit` motions on every piece.
-- **Enter** plays when the overlay first loads, when the piece is shown, and on a new **"Bring on"** action.
-- **Exit** plays when the piece is hidden.
-- **Stagger:** a theme-level `enterStaggerMs` builds the scorebug in, ordered by layer order or left-to-right.
+- **Every piece** (fixed and custom, text and image) has `enterMotion` and `exitMotion`, both off by default.
+  - **Entrance** plays when the overlay loads, when the piece is shown, and on the operator's **Play entrance**.
+  - **Exit** plays when the piece is hidden; it stays on screen until the exit ends. Exits are named by the direction the piece leaves (Fade, Slide up / down / left / right, Scale) and play an entrance backwards.
+  - While a piece animates, its own opacity moves to `filter: opacity()`, so the keyframes' opacity never overrides it.
+- **Build-in** (`theme.motion.enterStaggerMs`, `enterOrder`): when the whole scoreboard enters, each piece waits its place × the gap. Orders: Left to right, Centre out (mirrored pieces arrive together), Back to front (layers). Showing a single piece doesn't stagger.
+- **Play entrance** (named "Bring on" earlier in this proposal): a button on the Operations toolbar, shown when the published theme has an entrance. It sends an `overlay.cue` real-time event (`POST /api/overlay/entrance`). Every live overlay and the on-air strip replay their entrance; it isn't replayed when an overlay reconnects. It's disabled while motion is reduced.
+- **Editor:** an "Entrance and exit" section on every piece, and a "Build-in" section (gap, order, Play entrance) on the theme panel. Hiding and showing a piece on the canvas plays its exit and entrance.
+- **Not built:** taking the whole scoreboard off air with exits ("Take off"). That would need a persisted on/off state for the overlay, so it's left for later.
 
 ### 5.3 Animation when a value changes (built, step 4)
 
@@ -227,7 +231,8 @@ Shared `liveTextFields` on text pieces (fixed and custom), off by default:
 ### 5.4 Playing motion in the editor (partly built, step 4)
 
 - **Built:** a **Play** button under "When it changes" replays the piece's change motion on the canvas (a number rolls from one less). A **Preview** button under "Last seconds" sets the preview clock just inside the warning. Changing a score in Preview data plays the real change motion.
-- **Still to do:** playing entrances (step 5) and Rehearsal cases for score changes and the clock warning.
+- **Built in step 5:** Play entrance on the theme panel and on each piece.
+- **Still to do:** Rehearsal cases for score changes, the clock warning and the entrance.
 
 ### 5.5 Operator safety (built, step 4)
 
@@ -266,7 +271,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **2. Shadows and text effects** — built | Visual box-shadow editor with presets (4.1); text shadow and outline | Box shadow unchanged (CSS string); additive `textShadow`, `textStroke` |
 | **3. Motion model** — built | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
 | **4. Value-change motion** — built | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
-| **5. Entrance and exit** | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
+| **5. Entrance and exit** — built | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
 | **6. Gradients and shapes** | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
 | **7. Image effects, blend and blur** | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
 | **8. Tokens and styles** | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |

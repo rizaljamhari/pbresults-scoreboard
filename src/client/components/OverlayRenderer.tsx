@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CLOCK_PULSE_ANIMATION,
+  enterSequence,
   motionChange,
   motionEnter,
+  motionExit,
   motionLeave,
   motionLoop,
   motionSwap,
@@ -32,7 +34,11 @@ type OverlayRendererProps = {
   reduceMotion?: boolean;
   /** Editor only: play this piece's change motion again; a new token replays it. */
   replayChange?: { id: string; token: number } | null;
+  /** A new value plays every piece's entrance again, built in with the theme's stagger (the operator's Play entrance). */
+  entranceToken?: number | null;
 };
+
+type FramedPiece = Pick<ThemeDefinition["components"]["homeName"], "visible" | "opacity" | "enterMotion" | "exitMotion" | "x" | "width" | "zIndex">;
 
 /** The event card's motion while motion is reduced: one short fade in, no loop. */
 const CALM_CARD_MOTION: MotionSettings = { preset: "fade", durationMs: 200, easing: "ease", delayMs: 0 };
@@ -474,7 +480,8 @@ export function OverlayRenderer({
   onSelectComponent,
   previewTimeout = null,
   reduceMotion = false,
-  replayChange = null
+  replayChange = null,
+  entranceToken = null
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const teamSwitchMotion = reduceMotion ? withoutMotion(theme.motion.teamSwitch) : theme.motion.teamSwitch;
@@ -742,6 +749,102 @@ export function OverlayRenderer({
     return change && motion ? { key: `${id}:${change.tick}`, motion, previous: motion.out ? change.previous : null } : null;
   }
 
+  // Entrances and exits. Every piece enters on mount; the operator's cue and a piece being shown enter it again.
+  const framedPieces = useMemo(
+    () =>
+      [
+        ...(Object.entries(theme.components) as Array<[string, FramedPiece]>),
+        ...theme.freeComponents.map((component) => [component.id, component] as [string, FramedPiece])
+      ].map(([id, component]) => ({ id, component })),
+    [theme]
+  );
+  const enterIndex = useMemo(
+    () =>
+      enterSequence(
+        framedPieces
+          .filter(({ component }) => component.visible && component.enterMotion.preset !== "none")
+          .map(({ id, component }) => ({ id, x: component.x, width: component.width, zIndex: component.zIndex })),
+        theme.motion.enterOrder,
+        theme.canvas.width
+      ),
+    [framedPieces, theme.motion.enterOrder, theme.canvas.width]
+  );
+  const [pieceRuns, setPieceRuns] = useState<Record<string, { run: number; staggered: boolean }>>({});
+  const [exitingPieces, setExitingPieces] = useState<Record<string, true>>({});
+  const previousVisibleRef = useRef<Record<string, boolean> | null>(null);
+  const previousEntranceTokenRef = useRef(entranceToken);
+  const exitTimersRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    const timers = exitTimersRef.current;
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (entranceToken === previousEntranceTokenRef.current) {
+      return;
+    }
+    previousEntranceTokenRef.current = entranceToken;
+    setExitingPieces({});
+    setPieceRuns((current) =>
+      Object.fromEntries(framedPieces.map(({ id }) => [id, { run: (current[id]?.run ?? 0) + 1, staggered: true }]))
+    );
+  }, [entranceToken, framedPieces]);
+
+  const visibilityKey = framedPieces.map(({ id, component }) => `${id}:${component.visible ? 1 : 0}`).join(",");
+  useLayoutEffect(() => {
+    const now = Object.fromEntries(framedPieces.map(({ id, component }) => [id, component.visible]));
+    const before = previousVisibleRef.current;
+    previousVisibleRef.current = now;
+    if (!before || reduceMotion) {
+      return;
+    }
+    for (const { id, component } of framedPieces) {
+      if (before[id] === false && component.visible && component.enterMotion.preset !== "none") {
+        setExitingPieces(({ [id]: _, ...rest }) => rest);
+        setPieceRuns((current) => ({ ...current, [id]: { run: (current[id]?.run ?? 0) + 1, staggered: false } }));
+      } else if (before[id] === true && !component.visible && component.exitMotion.preset !== "none") {
+        setExitingPieces((current) => ({ ...current, [id]: true }));
+        const timers = exitTimersRef.current;
+        const existing = timers.get(id);
+        if (existing !== undefined) {
+          clearTimeout(existing);
+        }
+        timers.set(
+          id,
+          window.setTimeout(() => {
+            timers.delete(id);
+            setExitingPieces(({ [id]: _, ...rest }) => rest);
+          }, motionTotalMs(component.exitMotion))
+        );
+      }
+    }
+    // Only a visibility flip matters here, not every theme edit.
+  }, [visibilityKey]);
+
+  /**
+   * The piece's entrance or exit: the animation, a key that restarts it, and whether it is still leaving (shown
+   * although hidden). While it animates, its own opacity moves to a filter so the keyframes' opacity doesn't override it.
+   */
+  function slotMotion(id: string, component: FramedPiece): { key: string; style: CSSProperties; exiting: boolean } {
+    const run = pieceRuns[id] ?? { run: 0, staggered: true };
+    const key = `${id}:${run.run}`;
+    if (reduceMotion || (component.enterMotion.preset === "none" && component.exitMotion.preset === "none")) {
+      return { key, style: {}, exiting: false };
+    }
+    const exiting = Boolean(exitingPieces[id]);
+    const stagger = run.staggered ? (enterIndex[id] ?? 0) * theme.motion.enterStaggerMs : 0;
+    const animation = exiting
+      ? motionExit(component.exitMotion)
+      : motionEnter({ ...component.enterMotion, delayMs: component.enterMotion.delayMs + stagger });
+    const style: CSSProperties = animation ? { animation } : {};
+    if (component.opacity < 1) {
+      style.opacity = 1;
+      style.filter = `opacity(${component.opacity})`;
+    }
+    return { key, style, exiting };
+  }
+
   // The exit timer lives in a ref: live data re-renders far more often than the exit lasts, and an effect
   // cleanup would cancel it and leave the old content stuck on screen.
   const centerSecondaryExitTimerRef = useRef<number | null>(null);
@@ -955,12 +1058,13 @@ export function OverlayRenderer({
             teamSwitchActive && teamSwitchPayload
               ? resolveImageAsset(componentId, component, theme, teamSwitchPayload.to, assets)
               : null;
+          const motion = slotMotion(componentId, component);
           return (
             <button
-              key={componentId}
+              key={motion.key}
               type="button"
               className={commonClass}
-              style={imageStyles(component)}
+              style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(componentId)}
             >
               <span className="component-body">
@@ -1104,12 +1208,15 @@ export function OverlayRenderer({
           ...textLook(component)
         };
 
+        const motion = slotMotion(componentId, component);
+
         return (
           <Fragment key={componentId}>
           <button
+            key={motion.key}
             type="button"
             className={ghost ? `${commonClass} component-slot--ghost` : commonClass}
-            style={{ ...frameStyles(component), display: visible || ghost ? "flex" : "none" }}
+            style={{ ...frameStyles(component), ...(ghost ? {} : motion.style), display: visible || ghost || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(componentId)}
           >
             {ghost ? (
@@ -1207,12 +1314,13 @@ export function OverlayRenderer({
 
         if (component.kind === "image") {
           const imageAsset = component.assetId ? assets.find((asset) => asset.id === component.assetId) ?? null : null;
+          const motion = slotMotion(component.id, component);
           return (
             <button
-              key={component.id}
+              key={motion.key}
               type="button"
               className={commonClass}
-              style={imageStyles(component)}
+              style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(component.id)}
             >
               <span className="component-body">
@@ -1260,12 +1368,13 @@ export function OverlayRenderer({
           whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
           overflow: "hidden"
         };
+        const motion = slotMotion(component.id, component);
         return (
           <button
-            key={component.id}
+            key={motion.key}
             type="button"
             className={commonClass}
-            style={{ ...frameStyles(component), display: component.visible ? "flex" : "none" }}
+            style={{ ...frameStyles(component), ...motion.style, display: component.visible || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(component.id)}
           >
             <span className="component-body">

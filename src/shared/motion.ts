@@ -139,3 +139,61 @@ export function motionChange(motion: ChangeMotionSettings): { in: string; out: s
 
 /** The steady beat of a clock in its last seconds. */
 export const CLOCK_PULSE_ANIMATION = "motion-pulse 1000ms ease-in-out infinite";
+
+/** Exits are named by the way the piece leaves; each plays an entrance backwards (leaving up = arriving from above, reversed). */
+export const exitMotionPresetValues = ["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "scale"] as const satisfies readonly MotionPreset[];
+
+const exitKeyframes: Partial<Record<MotionPreset, MotionPreset>> = {
+  fade: "fade",
+  "slide-up": "slide-down",
+  "slide-down": "slide-up",
+  "slide-left": "slide-right",
+  "slide-right": "slide-left",
+  scale: "scale"
+};
+
+/** A piece leaving the screen; holds its last frame so it never flashes back before it is hidden. */
+export function motionExit(motion: MotionSettings): string | undefined {
+  const keyframes = exitKeyframes[motion.preset];
+  if (motion.preset === "none" || !keyframes) {
+    return undefined;
+  }
+  return `motion-${keyframes} ${motion.durationMs}ms ${easingCss[motion.easing]}${motion.delayMs > 0 ? ` ${motion.delayMs}ms` : ""} reverse both`;
+}
+
+/** The order pieces build in when the whole scoreboard enters. */
+export const enterOrderValues = ["left-to-right", "centre-out", "layers"] as const;
+export type EnterOrder = (typeof enterOrderValues)[number];
+
+export const enterOrderLabels: Record<EnterOrder, string> = {
+  "left-to-right": "Left to right",
+  "centre-out": "Centre out",
+  layers: "Back to front"
+};
+
+/**
+ * Each piece's place in the build-in, from 0. Pieces are given as their box and layer; ties keep the given order.
+ */
+export function enterSequence(
+  pieces: Array<{ id: string; x: number; width: number; zIndex: number }>,
+  order: EnterOrder,
+  canvasWidth: number
+): Record<string, number> {
+  const centre = (piece: { x: number; width: number }) => piece.x + piece.width / 2;
+  const key = (piece: (typeof pieces)[number]) =>
+    order === "layers" ? piece.zIndex : order === "centre-out" ? Math.abs(centre(piece) - canvasWidth / 2) : centre(piece);
+  const sorted = pieces.map((piece, index) => ({ piece, index })).sort((a, b) => key(a.piece) - key(b.piece) || a.index - b.index);
+  // Pieces at the same distance from the centre (a mirrored pair) arrive together.
+  const result: Record<string, number> = {};
+  let step = -1;
+  let previousKey: number | null = null;
+  for (const { piece } of sorted) {
+    const value = Math.round(key(piece));
+    if (order !== "centre-out" || value !== previousKey) {
+      step += 1;
+    }
+    previousKey = value;
+    result[piece.id] = step;
+  }
+  return result;
+}
