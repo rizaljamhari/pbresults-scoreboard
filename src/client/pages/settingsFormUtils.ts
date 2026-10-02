@@ -7,6 +7,7 @@ export function areSettingsEqual(left: AppSettings, right: AppSettings): boolean
     left.pollEnabled === right.pollEnabled &&
     left.pollIntervalMs === right.pollIntervalMs &&
     left.autoRemoveBackgroundUploads === right.autoRemoveBackgroundUploads &&
+    left.reduceMotion === right.reduceMotion &&
     left.updateCheckEnabled === right.updateCheckEnabled &&
     left.updateCheckIntervalHours === right.updateCheckIntervalHours &&
     left.updateAutoDownload === right.updateAutoDownload
@@ -20,6 +21,7 @@ export function createSettingsDraft(source: AppSettings): AppSettings {
     pollEnabled: source.pollEnabled,
     pollIntervalMs: source.pollIntervalMs,
     autoRemoveBackgroundUploads: source.autoRemoveBackgroundUploads,
+    reduceMotion: source.reduceMotion,
     updateCheckEnabled: source.updateCheckEnabled,
     updateCheckIntervalHours: source.updateCheckIntervalHours,
     updateAutoDownload: source.updateAutoDownload

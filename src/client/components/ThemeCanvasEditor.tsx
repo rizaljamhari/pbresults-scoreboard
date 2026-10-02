@@ -28,6 +28,8 @@ type ThemeCanvasEditorProps = {
   overlayTarget?: OverlayTarget | null;
   /** Editor-only: show the timeout card without waiting for the feed (held, or one full flash). */
   previewTimeout?: "hold" | "flash" | null;
+  /** Editor-only: replay a piece's change motion; a new token replays it. */
+  replayChange?: { id: string; token: number } | null;
   /** Changing this remounts the overlay render, replaying entrance animations. */
   overlayKey?: number;
   renderChrome?: (api: CanvasChromeApi) => ReactNode;
@@ -135,6 +137,7 @@ export function ThemeCanvasEditor({
   lockedIds,
   overlayTarget,
   previewTimeout,
+  replayChange,
   overlayKey,
   renderChrome,
   onSelect,
@@ -680,6 +683,7 @@ export function ThemeCanvasEditor({
               live={live}
               assets={assets}
               previewTimeout={previewTimeout}
+              replayChange={replayChange}
               editable
               selectedComponentId={selectAll ? null : selectedId}
               onSelectComponent={onSelect}

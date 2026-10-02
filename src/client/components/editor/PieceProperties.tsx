@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
-import { fontFamilies, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
+import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Link2, Play, RotateCcw, Scan, Unlink2, Upload } from "lucide-react";
+import { fontFamilies, type LiveTextSettings, type StoredAsset, type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { listThemeComponentEntries, type ThemeComponentEntry } from "../../../shared/themeComponents";
 import { AssetLibraryPicker } from "../AssetLibraryPicker";
 import { VisibleContentImage } from "../VisibleContentImage";
 import { IconButton } from "./EditorChrome";
 import { pieceName } from "./pieceNames";
+import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
+import { changeMotionPresetLabels, changeMotionPresetValues } from "../../../shared/motion";
 import {
   ColorInput,
   Field,
@@ -149,6 +151,8 @@ export function PieceProperties({
   onUpload,
   onResetToSaved,
   onBringIntoFrame,
+  onReplayChange,
+  onPreviewLastSeconds,
   centreLine
 }: {
   entry: ThemeComponentEntry;
@@ -160,6 +164,10 @@ export function PieceProperties({
   onUpload: (file: File, target: "logo" | "surface") => void;
   onResetToSaved: () => void;
   onBringIntoFrame: () => void;
+  /** Plays this piece's change motion on the canvas. */
+  onReplayChange: () => void;
+  /** Shows the clock in its last seconds on the canvas. */
+  onPreviewLastSeconds: (seconds: number) => void;
   centreLine?: ReactNode;
 }) {
   const component = entry.component as AnyComponent;
@@ -170,6 +178,7 @@ export function PieceProperties({
   const swatches = useMemo(() => themeSwatches(theme), [theme]);
   const radius = component.borderRadius as [number, number, number, number];
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
+  const liveText = component as unknown as LiveTextSettings;
   const imageAsset = isImage
     ? logoContext?.effectiveAsset ?? assets.find((asset) => asset.id === component.assetId) ?? null
     : null;
@@ -304,6 +313,72 @@ export function PieceProperties({
           </Group>
           <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} />
         </>
+      ) : null}
+
+      {isText && (entry.id === "homeScore" || entry.id === "awayScore" || isFree) ? (
+        <PanelSection title="When it changes" defaultOpen={liveText.changeMotion.preset !== "none"}>
+          <p className="te-field-hint">
+            {isFree
+              ? component.contentMode === "operator"
+                ? "Plays when the operator takes new text."
+                : "Plays when the text changes."
+              : "Plays when the score changes. A team change or side switch uses the team switch instead."}
+          </p>
+          <MotionFields
+            name="Change"
+            value={liveText.changeMotion}
+            presets={changeMotionPresetValues}
+            labels={changeMotionPresetLabels}
+            onChange={(next) => patch((draft) => Object.assign(draft.changeMotion as LiveTextSettings["changeMotion"], next))}
+          />
+          {liveText.changeMotion.preset !== "none" ? (
+            <button type="button" className="te-mini-btn te-play-btn" onClick={onReplayChange}>
+              <Play aria-hidden />
+              Play
+            </button>
+          ) : null}
+        </PanelSection>
+      ) : null}
+
+      {isText && (entry.id === "gameTime" || entry.id === "breakTime") ? (
+        <PanelSection title="Last seconds" defaultOpen={liveText.clockWarning.belowSeconds > 0}>
+          <Field label="Warn from" hint={liveText.clockWarning.belowSeconds > 0 ? "Seconds left when the warning starts." : "0 turns the warning off."}>
+            <NumberInput
+              label="Warn from, seconds left"
+              value={liveText.clockWarning.belowSeconds}
+              min={0}
+              max={600}
+              unit="s"
+              onChange={(value) => patch((draft) => ((draft.clockWarning as LiveTextSettings["clockWarning"]).belowSeconds = value))}
+            />
+          </Field>
+          {liveText.clockWarning.belowSeconds > 0 ? (
+            <>
+              <SwitchRow
+                label="Pulse"
+                checked={liveText.clockWarning.pulse}
+                onChange={(pulse) => patch((draft) => ((draft.clockWarning as LiveTextSettings["clockWarning"]).pulse = pulse))}
+              />
+              <ColorInput
+                label="Warning colour"
+                value={liveText.clockWarning.color || String(component.color)}
+                swatches={swatches}
+                onChange={(value) => patch((draft) => ((draft.clockWarning as LiveTextSettings["clockWarning"]).color = value))}
+              />
+              <div className="te-button-pair">
+                <button type="button" className="te-mini-btn" onClick={() => onPreviewLastSeconds(Math.max(1, liveText.clockWarning.belowSeconds - 1))}>
+                  <Play aria-hidden />
+                  Preview
+                </button>
+                {liveText.clockWarning.color ? (
+                  <button type="button" className="te-mini-btn" onClick={() => patch((draft) => ((draft.clockWarning as LiveTextSettings["clockWarning"]).color = ""))}>
+                    Keep own colour
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+        </PanelSection>
       ) : null}
 
       {isImage ? (

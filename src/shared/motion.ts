@@ -100,10 +100,42 @@ export function motionSwap(motion: MotionSettings): { out: string; in: string } 
 }
 
 /** Plain-language summary, e.g. "Fade, 250 ms" — used by Rehearsal and the editor. */
-export function describeMotion(motion: MotionSettings) {
+export function describeMotion(motion: MotionSettings | ChangeMotionSettings) {
   if (motion.preset === "none") {
     return "no motion";
   }
+  const label = motion.preset in changeMotionPresetLabels ? changeMotionPresetLabels[motion.preset as ChangeMotionPreset] : motionPresetLabels[motion.preset as MotionPreset];
   const delay = motion.delayMs > 0 ? ` after ${motion.delayMs} ms` : "";
-  return `${motionPresetLabels[motion.preset].toLowerCase()}, ${motion.durationMs} ms${delay}`;
+  return `${label.toLowerCase()}, ${motion.durationMs} ms${delay}`;
 }
+
+/** Motion played when a live value changes in place (a score, operator text). Same shape as `MotionSettings`. */
+export const changeMotionPresetValues = ["none", "pop", "flash", "roll"] as const;
+export type ChangeMotionPreset = (typeof changeMotionPresetValues)[number];
+
+export type ChangeMotionSettings = Omit<MotionSettings, "preset"> & { preset: ChangeMotionPreset };
+
+export const changeMotionPresetLabels: Record<ChangeMotionPreset, string> = {
+  none: "None",
+  pop: "Pop",
+  flash: "Flash",
+  roll: "Roll"
+};
+
+/**
+ * The animation for a value that just changed. Roll needs the old value too: it leaves upwards (`out`) while the new
+ * one rises in; pop and flash only animate the new value.
+ */
+export function motionChange(motion: ChangeMotionSettings): { in: string; out: string | null } | null {
+  if (motion.preset === "none") {
+    return null;
+  }
+  const timing = `${motion.durationMs}ms ${easingCss[motion.easing]}${motion.delayMs > 0 ? ` ${motion.delayMs}ms` : ""} both`;
+  if (motion.preset === "roll") {
+    return { in: `motion-change-roll-in ${timing}`, out: `motion-change-roll-out ${timing}` };
+  }
+  return { in: `motion-change-${motion.preset} ${timing}`, out: null };
+}
+
+/** The steady beat of a clock in its last seconds. */
+export const CLOCK_PULSE_ANIMATION = "motion-pulse 1000ms ease-in-out infinite";

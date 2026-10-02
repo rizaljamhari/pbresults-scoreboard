@@ -1,4 +1,4 @@
-import { defaultEventCardMotion, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
+import { defaultEventCardMotion, defaultLiveText, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
 
 /** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
 function momentCard(x: number, y: number, width: number, height: number) {
@@ -69,6 +69,7 @@ function textBox(
     lineHeight: 1,
     ...defaultTextFit,
     ...defaultTextEffects,
+    ...defaultLiveText,
     ...overrides
   };
   return {
@@ -240,7 +241,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.1,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "homeTeamLogo": {
         "x": 362,
@@ -303,7 +305,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0,
         "lineHeight": 0.92,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "awayName": {
         "x": 1133,
@@ -337,7 +340,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.1,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "awayTeamLogo": {
         "x": 1134,
@@ -400,7 +404,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0,
         "lineHeight": 0.92,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "gameTime": {
         "x": 882,
@@ -434,7 +439,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0.8,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "breakTime": {
         "x": 787,
@@ -468,7 +474,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0.4,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "eventLogo": {
         "x": 882,
@@ -626,7 +633,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.2,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "homeTeamLogo": {
         "x": 132,
@@ -689,7 +697,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.5,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "awayName": {
         "x": 1264,
@@ -723,7 +732,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.2,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "awayTeamLogo": {
         "x": 1264,
@@ -786,7 +796,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 1.5,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "gameTime": {
         "x": 849,
@@ -820,7 +831,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0.8,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "breakTime": {
         "x": 835,
@@ -854,7 +866,8 @@ export const builtinThemes: ThemeDefinition[] = [
         "letterSpacing": 0.4,
         "lineHeight": 1,
         ...defaultTextFit,
-        ...defaultTextEffects
+        ...defaultTextEffects,
+        ...defaultLiveText
       },
       "eventLogo": {
         "x": 905,

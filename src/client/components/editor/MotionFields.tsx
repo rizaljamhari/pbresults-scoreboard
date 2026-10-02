@@ -1,43 +1,41 @@
-import {
-  motionEasingLabels,
-  motionEasingValues,
-  motionPresetLabels,
-  motionPresetValues,
-  type MotionPreset,
-  type MotionSettings
-} from "../../../shared/motion";
+import { motionEasingLabels, motionEasingValues, motionPresetLabels, motionPresetValues, type MotionEasing } from "../../../shared/motion";
 import { Field, FieldRow, NumberInput, SelectInput } from "./fields";
 
 const EASING_OPTIONS = motionEasingValues.map((value) => ({ value, label: motionEasingLabels[value] }));
 
+type Motion<P extends string> = { preset: P; durationMs: number; easing: MotionEasing; delayMs: number };
+
 /**
- * The shared motion setting: preset, duration, easing and delay. Used by the centre line, the event cards and the
- * team switch; each says in `durationLabel` what the duration covers.
+ * The shared motion setting: preset, duration, easing and delay. Used by the centre line, the event cards, the
+ * team switch and value changes; each says in `durationLabel` what the duration covers. `presets` and `labels`
+ * default to the entrance presets.
  */
-export function MotionFields({
+export function MotionFields<P extends string>({
   name,
   value,
   onChange,
-  presets = motionPresetValues,
+  presets = motionPresetValues as unknown as readonly P[],
+  labels = motionPresetLabels as unknown as Record<P, string>,
   durationLabel = "Duration",
   showDelay = true
 }: {
   /** Prefix for accessible names, e.g. "Centre line". */
   name: string;
-  value: MotionSettings;
-  onChange: (next: Partial<MotionSettings>) => void;
-  presets?: readonly MotionPreset[];
+  value: Motion<P>;
+  onChange: (next: Partial<Motion<P>>) => void;
+  presets?: readonly P[];
+  labels?: Record<P, string>;
   durationLabel?: string;
   showDelay?: boolean;
 }) {
-  const still = value.preset === "none";
+  const still = value.preset === ("none" as P);
   return (
     <>
       <FieldRow>
         <SelectInput
           label="Animation"
           value={value.preset}
-          options={presets.map((preset) => ({ value: preset, label: motionPresetLabels[preset] }))}
+          options={presets.map((preset) => ({ value: preset, label: labels[preset] }))}
           onChange={(preset) => onChange({ preset })}
         />
         {still ? null : (

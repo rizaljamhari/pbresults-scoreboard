@@ -7,6 +7,7 @@ const sample = {
   pollEnabled: true,
   pollIntervalMs: 1000,
   autoRemoveBackgroundUploads: true,
+  reduceMotion: false,
   updateCheckEnabled: true,
   updateCheckIntervalHours: 6,
   updateAutoDownload: false

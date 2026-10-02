@@ -1,5 +1,15 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { motionEnter, motionLeave, motionLoop, motionSwap, motionTotalMs } from "../../shared/motion";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  CLOCK_PULSE_ANIMATION,
+  motionChange,
+  motionEnter,
+  motionLeave,
+  motionLoop,
+  motionSwap,
+  motionTotalMs,
+  type ChangeMotionSettings,
+  type MotionSettings
+} from "../../shared/motion";
 import { formatClock } from "../../shared/normalize";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition, ComponentId, TextEffectSettings, TextFitSettings } from "../../shared/theme";
 import { VisibleContentImage } from "./VisibleContentImage";
@@ -18,7 +28,41 @@ type OverlayRendererProps = {
   onSelectComponent?: (id: string) => void;
   /** Editor only: show the timeout card without a feed jump, held on screen or as one full flash. Never used on air. */
   previewTimeout?: "hold" | "flash" | null;
+  /** Operator switch: cut instead of animating (no change motion, pulses, swaps or looping event cards). */
+  reduceMotion?: boolean;
+  /** Editor only: play this piece's change motion again; a new token replays it. */
+  replayChange?: { id: string; token: number } | null;
 };
+
+/** The event card's motion while motion is reduced: one short fade in, no loop. */
+const CALM_CARD_MOTION: MotionSettings = { preset: "fade", durationMs: 200, easing: "ease", delayMs: 0 };
+
+/** The event card loops its motion while on screen, or fades in once while motion is reduced. */
+export function eventCardAnimation(motion: MotionSettings, reduceMotion: boolean) {
+  return reduceMotion ? motionEnter(CALM_CARD_MOTION) : motionLoop(motion);
+}
+
+function withoutMotion<T extends { preset: string }>(motion: T): T {
+  return { ...motion, preset: "none" };
+}
+
+/**
+ * Which watched values changed in place since the last render. Nothing counts when the sides moved (a team change
+ * or switch moves every value; the team switch animates that), and appearing or blanking is not a change.
+ */
+export function changedValues(before: Record<string, string>, now: Record<string, string>, sidesMoved: boolean): Array<[id: string, previous: string]> {
+  if (sidesMoved) {
+    return [];
+  }
+  return Object.entries(now)
+    .filter(([id, value]) => before[id] !== undefined && before[id] !== "" && value !== "" && before[id] !== value)
+    .map(([id]) => [id, before[id]]);
+}
+
+/** Wraps a clock's content in its last-seconds pulse. */
+function pulsing(content: ReactNode, pulse: boolean) {
+  return pulse ? <span className="clock-pulse" style={{ animation: CLOCK_PULSE_ANIMATION }}>{content}</span> : content;
+}
 
 type OverlaySnapshot = {
   state: string;
@@ -428,13 +472,15 @@ export function OverlayRenderer({
   transparentBackground = false,
   selectedComponentId,
   onSelectComponent,
-  previewTimeout = null
+  previewTimeout = null,
+  reduceMotion = false,
+  replayChange = null
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
-  const teamSwitchMotion = theme.motion.teamSwitch;
+  const teamSwitchMotion = reduceMotion ? withoutMotion(theme.motion.teamSwitch) : theme.motion.teamSwitch;
   const teamSwitchSwap = motionSwap(teamSwitchMotion);
   const teamSwitchMs = motionTotalMs(teamSwitchMotion);
-  const centreLineMotion = theme.centerSecondary.motion;
+  const centreLineMotion = reduceMotion ? withoutMotion(theme.centerSecondary.motion) : theme.centerSecondary.motion;
   const [activeConcede, setActiveConcede] = useState<{ side: "left" | "right"; eventType: "towel" | "base"; until: number; token: string } | null>(null);
   const [teamSwitchToken, setTeamSwitchToken] = useState<number | null>(null);
   const [teamSwitchPayload, setTeamSwitchPayload] = useState<{
@@ -617,6 +663,84 @@ export function OverlayRenderer({
   // Remove timeout logic: activeConcede is now persistent while teamEvent is active
 
   const centerSecondaryPresentation = useMemo(() => resolveCenterSecondaryPresentation(theme, live), [theme, live]);
+
+  // Values that animate when they change in place: scores and custom text with a change motion.
+  const changeWatch = useMemo(() => {
+    const watched: Record<string, { value: string; motion: ChangeMotionSettings }> = {};
+    if (reduceMotion) {
+      return watched;
+    }
+    for (const id of ["homeScore", "awayScore"] as const) {
+      const component = theme.components[id];
+      if (component.kind === "text" && component.changeMotion.preset !== "none") {
+        watched[id] = { value: resolveTextContent(theme, id, live) ?? "", motion: component.changeMotion };
+      }
+    }
+    for (const component of theme.freeComponents) {
+      if (component.kind === "text" && component.changeMotion.preset !== "none") {
+        const value = component.contentMode === "operator" ? operatorTextValues[component.id] ?? component.defaultText : component.defaultText;
+        watched[component.id] = { value, motion: component.changeMotion };
+      }
+    }
+    return watched;
+  }, [theme, live, operatorTextValues, reduceMotion]);
+  // A team change or a side switch moves every value at once; the team switch animates that, not each value.
+  const sidesKey = live ? `${normalizedName(live.displayLeftTeam.name)}|${normalizedName(live.displayRightTeam.name)}` : "";
+  const [valueChanges, setValueChanges] = useState<Record<string, { tick: number; previous: string | null }>>({});
+  const previousValuesRef = useRef<Record<string, string>>({});
+  const previousSidesKeyRef = useRef<string | null>(null);
+  const changeTimersRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    const timers = changeTimersRef.current;
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  // Before paint, so the new value never shows for a frame without its motion.
+  useLayoutEffect(() => {
+    const before = previousValuesRef.current;
+    const sidesMoved = previousSidesKeyRef.current !== null && previousSidesKeyRef.current !== sidesKey;
+    previousSidesKeyRef.current = sidesKey;
+    previousValuesRef.current = Object.fromEntries(Object.entries(changeWatch).map(([id, entry]) => [id, entry.value]));
+    for (const [id, previous] of changedValues(before, previousValuesRef.current, sidesMoved)) {
+      startValueChange(id, previous, changeWatch[id].motion);
+    }
+  }, [changeWatch, sidesKey]);
+
+  // Editor playback: replay the motion with a stand-in previous value.
+  useLayoutEffect(() => {
+    const entry = replayChange ? changeWatch[replayChange.id] : undefined;
+    if (!replayChange || !entry) {
+      return;
+    }
+    const number = Number(entry.value);
+    startValueChange(replayChange.id, entry.value !== "" && Number.isFinite(number) ? String(Math.max(0, number - 1)) : entry.value, entry.motion);
+    // Only a new token replays; the watched values changing must not.
+  }, [replayChange?.token]);
+
+  function startValueChange(id: string, previous: string, motion: ChangeMotionSettings) {
+    setValueChanges((current) => ({ ...current, [id]: { tick: (current[id]?.tick ?? 0) + 1, previous } }));
+    const timers = changeTimersRef.current;
+    const existing = timers.get(id);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+    }
+    timers.set(
+      id,
+      window.setTimeout(() => {
+        timers.delete(id);
+        setValueChanges((current) => (current[id] ? { ...current, [id]: { ...current[id], previous: null } } : current));
+      }, motion.durationMs + motion.delayMs)
+    );
+  }
+
+  /** The motion for a value that just changed, with the old value when the motion needs it (roll). */
+  function valueChangeFor(id: string) {
+    const change = valueChanges[id];
+    const watched = changeWatch[id];
+    const motion = change && watched ? motionChange(watched.motion) : null;
+    return change && motion ? { key: `${id}:${change.tick}`, motion, previous: motion.out ? change.previous : null } : null;
+  }
 
   // The exit timer lives in a ref: live data re-renders far more often than the exit lasts, and an effect
   // cleanup would cancel it and leave the old content stuck on screen.
@@ -961,6 +1085,24 @@ export function OverlayRenderer({
             : componentId === "breakTime" && centerSecondaryAnimationTick > 0
               ? motionEnter(centreLineMotion)
               : undefined;
+        const valueChange = valueChangeFor(componentId);
+        // A clock's last seconds: counted on the game clock, or the break clock while the centre line shows it.
+        const warningSeconds =
+          !live ? null : componentId === "gameTime" ? live.gameTimer.value : componentId === "breakTime" && activeVariant === "timer" ? live.breakTimer.value : null;
+        const warning = component.clockWarning;
+        const warningActive = warningSeconds !== null && warning.belowSeconds > 0 && warningSeconds > 0 && warningSeconds <= warning.belowSeconds;
+        const mainTextStyle: CSSProperties = {
+          justifyContent: component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+          padding: resolveComponentPadding(component),
+          ...resolveComponentOffset(component),
+          color: warningActive && warning.color ? warning.color : centerSecondaryStyle?.color ?? component.color,
+          fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
+          fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
+          fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
+          letterSpacing: component.letterSpacing,
+          lineHeight: component.lineHeight,
+          ...textLook(component)
+        };
 
         return (
           <Fragment key={componentId}>
@@ -1032,26 +1174,24 @@ export function OverlayRenderer({
                   </span>
                 </>
               ) : (
-                <span
-                  key={contentKey}
-                  className="component-content text-content"
-                  style={{
-                    justifyContent:
-                      component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                    padding: resolveComponentPadding(component),
-                    ...resolveComponentOffset(component),
-                    color: centerSecondaryStyle?.color ?? component.color,
-                    fontFamily: `"${centerSecondaryStyle?.fontFamily ?? component.fontFamily}", sans-serif`,
-                    fontSize: centerSecondaryStyle?.fontSize ?? component.fontSize,
-                    fontWeight: centerSecondaryStyle?.fontWeight ?? component.fontWeight,
-                    letterSpacing: component.letterSpacing,
-                    lineHeight: component.lineHeight,
-                    ...textLook(component),
-                    animation: contentAnimation
-                  }}
-                >
-                  <FitText settings={component}>{content}</FitText>
-                </span>
+                <>
+                  {valueChange?.previous ? (
+                    <span
+                      key={`${valueChange.key}:out`}
+                      className="component-content text-content"
+                      style={{ ...mainTextStyle, position: "absolute", inset: 0, animation: valueChange.motion.out ?? undefined }}
+                    >
+                      <FitText settings={component}>{valueChange.previous}</FitText>
+                    </span>
+                  ) : null}
+                  <span
+                    key={contentKey ?? valueChange?.key}
+                    className="component-content text-content"
+                    style={{ ...mainTextStyle, animation: contentAnimation ?? valueChange?.motion.in }}
+                  >
+                    {pulsing(<FitText settings={component}>{content}</FitText>, warningActive && warning.pulse && !reduceMotion)}
+                  </span>
+                </>
               )}
             </span>
           </button>
@@ -1105,6 +1245,21 @@ export function OverlayRenderer({
           component.contentMode === "operator"
             ? operatorTextValues[component.id] ?? component.defaultText
             : component.defaultText;
+        const valueChange = valueChangeFor(component.id);
+        const freeTextStyle: CSSProperties = {
+          justifyContent: component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
+          padding: resolveComponentPadding(component),
+          ...resolveComponentOffset(component),
+          color: component.color,
+          fontFamily: `"${component.fontFamily}", sans-serif`,
+          fontSize: component.fontSize,
+          fontWeight: component.fontWeight,
+          letterSpacing: component.letterSpacing,
+          lineHeight: component.lineHeight,
+          ...textLook(component),
+          whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
+          overflow: "hidden"
+        };
         return (
           <button
             key={component.id}
@@ -1116,24 +1271,18 @@ export function OverlayRenderer({
             <span className="component-body">
               <span className="component-surface" style={surface.background} />
               {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
-              <span
-                className="component-content text-content"
-                style={{
-                  justifyContent:
-                    component.textAlign === "left" ? "flex-start" : component.textAlign === "right" ? "flex-end" : "center",
-                  padding: resolveComponentPadding(component),
-                  ...resolveComponentOffset(component),
-                  color: component.color,
-                  fontFamily: `"${component.fontFamily}", sans-serif`,
-                  fontSize: component.fontSize,
-                  fontWeight: component.fontWeight,
-                  letterSpacing: component.letterSpacing,
-                  lineHeight: component.lineHeight,
-                  ...textLook(component),
-                  whiteSpace: component.multiline ? "pre-wrap" : "nowrap",
-                  overflow: "hidden"
-                }}
-              >
+              {valueChange?.previous ? (
+                <span
+                  key={`${valueChange.key}:out`}
+                  className="component-content text-content"
+                  style={{ ...freeTextStyle, position: "absolute", inset: 0, animation: valueChange.motion.out ?? undefined }}
+                >
+                  <FitText settings={component} multiline={component.multiline} textAlign={component.textAlign}>
+                    {valueChange.previous}
+                  </FitText>
+                </span>
+              ) : null}
+              <span key={valueChange?.key} className="component-content text-content" style={{ ...freeTextStyle, animation: valueChange?.motion.in }}>
                 <FitText settings={component} multiline={component.multiline} textAlign={component.textAlign}>
                   {content}
                 </FitText>
@@ -1164,7 +1313,7 @@ export function OverlayRenderer({
           <div
             className="concede-label-motion"
             style={{
-              animation: motionLoop(overlayGeneral.motion)
+              animation: eventCardAnimation(overlayGeneral.motion, reduceMotion)
             }}
           >
             <span className="component-surface" style={winnerLabel ? winnerSurface.background : activeConcedeSurface?.background} />

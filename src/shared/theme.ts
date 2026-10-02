@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { motionEasingValues, motionPresetValues, type MotionSettings } from "./motion.js";
+import { changeMotionPresetValues, motionEasingValues, motionPresetValues, type ChangeMotionSettings, type MotionSettings } from "./motion.js";
 import { randomUuid } from "./randomId.js";
 
 export const componentIds = [
@@ -77,6 +77,35 @@ export const defaultEventCardMotion: MotionSettings = { preset: "drop-in", durat
 export const defaultCentreLineMotion: MotionSettings = { preset: "fade", durationMs: 250, easing: "ease", delayMs: 0 };
 export const defaultTeamSwitchMotion: MotionSettings = { preset: "scale", durationMs: 600, easing: "snappy", delayMs: 0 };
 
+/**
+ * How a live text piece reacts to its value changing: an animation when it changes (scores, operator text) and a
+ * warning in a clock's last seconds. Both off by default.
+ */
+export const liveTextFields = {
+  changeMotion: z
+    .object({
+      preset: z.enum(changeMotionPresetValues).default("none"),
+      durationMs: z.number().min(0).max(10000).default(450),
+      easing: z.enum(motionEasingValues).default("snappy"),
+      delayMs: z.number().min(0).max(5000).default(0)
+    })
+    .default({}),
+  clockWarning: z
+    .object({
+      /** The warning starts at this many seconds left; 0 turns it off. */
+      belowSeconds: z.number().int().min(0).max(600).default(0),
+      pulse: z.boolean().default(true),
+      /** Text colour during the warning; empty keeps the piece's own colour. */
+      color: z.string().default("")
+    })
+    .default({})
+};
+
+const liveTextSchema = z.object(liveTextFields);
+export type LiveTextSettings = z.infer<typeof liveTextSchema>;
+export const defaultChangeMotion: ChangeMotionSettings = { preset: "none", durationMs: 450, easing: "snappy", delayMs: 0 };
+export const defaultLiveText: LiveTextSettings = { changeMotion: { ...defaultChangeMotion }, clockWarning: { belowSeconds: 0, pulse: true, color: "" } };
+
 const textEffectSchema = z.object(textEffectFields);
 export type TextEffectSettings = z.infer<typeof textEffectSchema>;
 export const defaultTextEffects: TextEffectSettings = { textShadow: "none", textStrokeWidth: 0, textStrokeColor: "#000000" };
@@ -140,7 +169,8 @@ const textComponentBaseSchema = commonFrameBaseSchema.extend({
   letterSpacing: z.number(),
   lineHeight: z.number().positive(),
   ...textFitFields,
-  ...textEffectFields
+  ...textEffectFields,
+  ...liveTextFields
 });
 
 export const textComponentSchema = z.preprocess(migrateLegacyFrame, textComponentBaseSchema);
@@ -658,6 +688,8 @@ export const settingsSchema = z.object({
   pollEnabled: z.boolean().default(true),
   pollIntervalMs: z.number().int().min(100).max(10000).default(1000),
   autoRemoveBackgroundUploads: z.boolean().default(true),
+  /** Operator switch: the overlay cuts instead of animating until it is turned off. */
+  reduceMotion: z.boolean().default(false),
   updateCheckEnabled: z.boolean().default(true),
   updateCheckIntervalHours: z.number().int().min(1).max(168).default(6),
   updateAutoDownload: z.boolean().default(false)
@@ -1037,6 +1069,7 @@ export const defaultSettings: AppSettings = {
   pollEnabled: true,
   pollIntervalMs: 1000,
   autoRemoveBackgroundUploads: true,
+  reduceMotion: false,
   updateCheckEnabled: true,
   updateCheckIntervalHours: 6,
   updateAutoDownload: false

@@ -20,7 +20,8 @@ import {
   Plus,
   RefreshCw,
   Replace,
-  TriangleAlert
+  TriangleAlert,
+  Waves
 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
@@ -945,6 +946,7 @@ export function OperationsPage() {
   const live = useLiveState(true, settings.data?.pollIntervalMs);
   const operatorText = useOperatorTextState();
   const [togglingPoll, setTogglingPoll] = useState(false);
+  const [togglingMotion, setTogglingMotion] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [resolvingSide, setResolvingSide] = useState<"left" | "right" | null>(null);
   const [clearingSide, setClearingSide] = useState<"left" | "right" | null>(null);
@@ -1138,6 +1140,22 @@ export function OperationsPage() {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update polling." });
     } finally {
       setTogglingPoll(false);
+    }
+  }
+
+  async function handleSetReduceMotion(reduceMotion: boolean) {
+    if (!settings.data) {
+      return;
+    }
+    setTogglingMotion(true);
+    try {
+      const next = await api.updateSettings({ ...settings.data, reduceMotion });
+      settings.setData(next);
+      showToast({ kind: "success", message: reduceMotion ? "Motion reduced: the overlay cuts instead of animating." : "Overlay motion is back on." });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to update motion." });
+    } finally {
+      setTogglingMotion(false);
     }
   }
 
@@ -1388,6 +1406,20 @@ export function OperationsPage() {
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
         ) : null}
+        <Button
+          variant={settings.data.reduceMotion ? "default" : "ghost"}
+          aria-pressed={settings.data.reduceMotion}
+          disabled={togglingMotion}
+          title={
+            settings.data.reduceMotion
+              ? "The overlay cuts instead of animating. Click to bring motion back."
+              : "Make the overlay cut instead of animate: no score pops, pulses or looping event cards"
+          }
+          onClick={() => void handleSetReduceMotion(!settings.data!.reduceMotion)}
+        >
+          <Waves aria-hidden />
+          {settings.data.reduceMotion ? "Motion reduced" : "Reduce motion"}
+        </Button>
         <Button variant="ghost" onClick={() => void handleRefreshNow()} disabled={refreshing}>
           <RefreshCw aria-hidden />
           {refreshing ? "Refreshing…" : "Refresh now"}
@@ -1409,6 +1441,7 @@ export function OperationsPage() {
             live={live.data}
             assets={assets.data ?? []}
             operatorTextValues={stripOperatorText}
+            reduceMotion={settings.data.reduceMotion}
             markers={stripMarkers}
             summary={
               live.data ? (

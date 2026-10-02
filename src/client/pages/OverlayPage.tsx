@@ -42,6 +42,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
           live={live.data}
           assets={assets.data ?? []}
           transparentBackground={mode === "preview" && theme.canvas.transparentPreview}
+          reduceMotion={mode === "live" && settings.data?.reduceMotion === true}
           operatorTextValues={
             operatorText.data?.themeId === theme.id
               ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))

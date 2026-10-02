@@ -476,6 +476,7 @@ export function ThemeEditorPage() {
   const [previewMode, setPreviewMode] = useState<"live" | "game" | "break" | "timeout" | "finished" | "towel" | "base" | "winner">("live");
   // The timeout is a 1.2 s flash on air; the editor holds it so it can be designed, and Play shows one real flash.
   const [previewTimeout, setPreviewTimeout] = useState<"hold" | "flash" | null>(null);
+  const [replayChange, setReplayChange] = useState<{ id: string; token: number } | null>(null);
   const previewTimeoutTimerRef = useRef<number | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
   const [previewFinished, setPreviewFinished] = useState(false);
@@ -1874,6 +1875,7 @@ export function ThemeEditorPage() {
         selectedIds={overlaySelected ? (overlayTarget ? [overlayTarget.id] : []) : selectedIds}
         overlayTarget={overlayTarget}
         previewTimeout={previewMode === "timeout" ? previewTimeout : null}
+        replayChange={replayChange}
         overlayKey={overlayKey}
         selectAll={selectAllMode}
         zoom={canvasZoom}
@@ -2291,6 +2293,17 @@ export function ThemeEditorPage() {
                 onUpload={(file, target) => void uploadAssetIntoTarget(file, target)}
                 onResetToSaved={resetSelectedPieceToSaved}
                 onBringIntoFrame={bringSelectedIntoView}
+                onReplayChange={() => setReplayChange({ id: selectedEntry.id, token: Date.now() })}
+                onPreviewLastSeconds={(seconds) => {
+                  setPreviewEnabled(true);
+                  if (selectedEntry.id === "breakTime") {
+                    setPreviewPeriod("BREAK");
+                    setPreviewBreakTimerValue(seconds);
+                  } else {
+                    setPreviewPeriod("GAME");
+                    setPreviewGameTimerValue(seconds);
+                  }
+                }}
                 centreLine={
                   selected === "breakTime" ? (
                     <CentreLineProperties

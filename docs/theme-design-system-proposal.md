@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–3 (text fitting, shadows and text effects, motion model) built
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–4 (text fitting, shadows and text effects, motion model, value-change motion) built
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -215,27 +215,23 @@ motion = { preset, durationMs, easing, delayMs }   // src/shared/motion.ts, sche
 - **Exit** plays when the piece is hidden.
 - **Stagger:** a theme-level `enterStaggerMs` builds the scorebug in, ordered by layer order or left-to-right.
 
-### 5.3 Animation when a value changes
+### 5.3 Animation when a value changes (built, step 4)
 
-An optional `onChange` motion for live-bound pieces:
+Shared `liveTextFields` on text pieces (fixed and custom), off by default:
 
-| Piece | Presets |
-|---|---|
-| Score | **pop**, **flash**, **roll** (old digit slides out, new one slides in) |
-| Team name | **crossfade**, **slide** (reuses the team-switch machinery) |
-| Clocks | none by default; **pulse** in the last N seconds (`warnBelowSeconds`) |
+- **`changeMotion`** `{ preset, durationMs, easing, delayMs }` with presets **Pop**, **Flash** and **Roll** (the old value leaves upwards as the new one rises in). Offered on the two scores and on custom text, where it plays when the operator takes new text.
+  - Detection runs before paint (`changedValues` in `OverlayRenderer.tsx`), so a new value never shows for a frame without its motion. A team change or side switch moves every value at once, so it is left to the team switch.
+  - **Names** don't get their own change motion: any name change already plays the team switch.
+- **`clockWarning`** `{ belowSeconds, pulse, color }` on the game clock and the centre line (while it shows the break clock): from that many seconds left, the clock pulses and, optionally, changes colour.
 
-The score pop is likely the biggest improvement in perceived quality for the least work. It's worth shipping on its own first.
+### 5.4 Playing motion in the editor (partly built, step 4)
 
-### 5.4 Playing motion in the editor
+- **Built:** a **Play** button under "When it changes" replays the piece's change motion on the canvas (a number rolls from one less). A **Preview** button under "Last seconds" sets the preview clock just inside the warning. Changing a score in Preview data plays the real change motion.
+- **Still to do:** playing entrances (step 5) and Rehearsal cases for score changes and the clock warning.
 
-- A **Play** button in the Motion section, and in the Preview as bar, plays the selected piece's entrance, or the whole theme's.
-- **Simulate** buttons send a score change, a name change, the last 10 seconds of the clock, and the existing towel, base and winner states through the renderer.
-- Rehearsal gains matching cases ("score change animation", "build-in"), so motion is checked in real vMix too.
+### 5.5 Operator safety (built, step 4)
 
-### 5.5 Operator safety
-
-- A **Reduce motion** switch on Operations: it turns all `onChange` and entrance motion into instant cuts until switched off. Event cards keep a short fade. It matches the "Nothing surprising during a show" principle.
+- **Reduce motion** on the Operations toolbar (`settings.reduceMotion`, applied to `/overlay/live` and the on-air strip, never the editor): change motion, pulses, the team switch and the centre-line change all become instant cuts. Event cards drop their loop for one 200 ms fade. A clock's warning colour stays, because it carries information.
 - Motion uses only `transform` and `opacity`, to stay smooth on the production machine.
 
 ---
@@ -269,7 +265,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **1. Text fitting** — built | Case, fit (clip / ellipsis / shrink) and minimum size (4.3); stress-test preview presets (W3) | Additive shared `textFit` fields on every text-bearing object |
 | **2. Shadows and text effects** — built | Visual box-shadow editor with presets (4.1); text shadow and outline | Box shadow unchanged (CSS string); additive `textShadow`, `textStroke` |
 | **3. Motion model** — built | Unified motion schema; migrate the event overlay, centre-line transition and team switch onto it (5.1) | Migration of three existing motion fields, identical timing |
-| **4. Value-change motion** | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
+| **4. Value-change motion** — built | Score pop, flash and roll; name crossfade; clock pulse (5.3); editor playback and simulate (5.4); Reduce motion (5.5) | Additive `onChange` |
 | **5. Entrance and exit** | Per-piece enter and exit, theme stagger, "Bring on" (5.2) | Additive `enter`, `exit`, `enterStaggerMs` |
 | **6. Gradients and shapes** | Gradient fills and tint (4.2); shape layer with skew (4.4) | Additive `fill`; new custom layer kind |
 | **7. Image effects, blend and blur** | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
