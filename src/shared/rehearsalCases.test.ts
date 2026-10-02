@@ -295,3 +295,25 @@ describe("long name expectation", () => {
     );
   });
 });
+
+describe("motion cases", () => {
+  const find = (ctx: RehearsalContext, id: string) => buildRehearsalCases(ctx).find((item) => item.id === id)!;
+
+  it("describe the score change, clock warning and entrance from the theme", () => {
+    const plain = context();
+    expect(find(plain, "score-change").expectation).toContain("straight away");
+    expect(find(plain, "clock-warning").expectation).toContain("No last-seconds warning");
+    expect(find(plain, "entrance").expectation).toContain("No piece has an entrance");
+
+    const animated = context((theme) => {
+      theme.components.homeScore.changeMotion = { preset: "roll", durationMs: 400, easing: "snappy", delayMs: 0 };
+      theme.components.gameTime.clockWarning = { belowSeconds: 10, pulse: true, color: "#ff3b30" };
+      theme.components.homeName.enterMotion = { preset: "fade", durationMs: 300, easing: "ease", delayMs: 0 };
+      theme.motion.enterStaggerMs = 80;
+    });
+    expect(find(animated, "score-change").expectation).toBe("The left score goes from 2 to 3 with a roll over 400 ms.");
+    expect(find(animated, "clock-warning").expectation).toBe("From 10 s left, the game clock pulses and turns #ff3b30.");
+    expect(find(animated, "clock-warning").frames[0].raw.gameTimer?.value).toBe(13);
+    expect(find(animated, "entrance").expectation).toContain("1 piece builds in, 80 ms apart, left to right");
+  });
+});

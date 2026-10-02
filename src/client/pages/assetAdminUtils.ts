@@ -64,6 +64,8 @@ export function usagePlace(usage: AssetUsage): string {
       return location.which === "timeout" ? "Timeout card background" : "Game finished card background";
     case "font":
       return `Font “${location.family}”`;
+    case "version":
+      return `Saved version “${location.name}”`;
   }
 }
 

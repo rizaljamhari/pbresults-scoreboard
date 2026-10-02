@@ -6,6 +6,7 @@ import type { FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
+import { z } from "zod";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { clientDistDir, uploadsDir } from "./runtimePaths.js";
@@ -16,6 +17,8 @@ import {
   createTeamRecord,
   deleteTheme,
   setThemeArchived,
+  addThemeVersion,
+  deleteThemeVersion,
   deleteTeamRecord,
   exportAppPackage,
   exportTeamRegistryPackage,
@@ -698,6 +701,36 @@ app.delete("/api/themes/:id", async (request, reply) => {
     appEventHub.publish("settings.changed");
   }
   return reply.code(204).send();
+});
+
+const themeVersionBodySchema = z.object({ name: z.string().trim().min(1).max(60), theme: z.record(z.string(), z.unknown()) });
+
+/** Keeps a named version of the theme: usually the editor's draft. Doesn't change the theme or what's on air. */
+app.post("/api/themes/:id/versions", async (request, reply) => {
+  const themeId = (request.params as { id: string }).id;
+  const body = themeVersionBodySchema.safeParse(request.body);
+  if (!body.success) {
+    return reply.code(400).send({ message: "A version needs a name and the theme to keep" });
+  }
+  try {
+    const theme = addThemeVersion(themeId, body.data.name, body.data.theme);
+    appEventHub.publish("themes.changed", [theme.id]);
+    return reply.code(201).send(theme);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not keep the version";
+    return reply.code(message === "Theme not found" ? 404 : error instanceof z.ZodError ? 400 : 409).send({ message });
+  }
+});
+
+app.delete("/api/themes/:id/versions/:versionId", async (request, reply) => {
+  const { id, versionId } = request.params as { id: string; versionId: string };
+  try {
+    const theme = deleteThemeVersion(id, versionId);
+    appEventHub.publish("themes.changed", [theme.id]);
+    return theme;
+  } catch (error) {
+    return reply.code(404).send({ message: error instanceof Error ? error.message : "Theme not found" });
+  }
 });
 
 app.post("/api/themes/:id/archive", async (request, reply) => {

@@ -170,6 +170,21 @@ function themeAssetRefs(theme: ThemeDefinition): Array<AssetRef<AssetThemeUsageL
       }
     });
   }
+  // Images and fonts a named version uses stay in use, so cleanup never breaks a version.
+  for (const version of theme.versions) {
+    const snapshot = themeSchema.safeParse({ ...version.theme, versions: [] });
+    if (!snapshot.success) continue;
+    for (const ref of themeAssetRefs(snapshot.data)) {
+      refs.push({
+        location: { type: "version", name: version.name },
+        assetId: ref.assetId,
+        set: (assetId) => {
+          ref.set(assetId);
+          version.theme = versionContent(snapshot.data);
+        }
+      });
+    }
+  }
   for (const font of theme.fonts) {
     refs.push({
       location: { type: "font", family: font.family },
@@ -899,7 +914,9 @@ export function saveTheme(theme: ThemeDefinition): ThemeDefinition {
   if (!existing && next.builtin) {
     throw new Error("Built-in themes must originate from predefined templates");
   }
-  const toSave = { ...(existing?.builtin ? { ...next, builtin: true } : next), updatedAt: new Date().toISOString() };
+  // Versions change only through their own calls, so an editor holding an older list never drops one.
+  const withVersions = existing ? { ...next, versions: existing.versions } : next;
+  const toSave = { ...(existing?.builtin ? { ...withVersions, builtin: true } : withVersions), updatedAt: new Date().toISOString() };
   if (index > -1) {
     themes[index] = toSave;
   } else {
@@ -908,6 +925,46 @@ export function saveTheme(theme: ThemeDefinition): ThemeDefinition {
   writeJson(themesPath, themes);
   pruneOperatorTextOverridesForTheme(toSave);
   return toSave;
+}
+
+export const MAX_THEME_VERSIONS = 10;
+
+/** A theme's settings without its identity-free extras, as stored in a version. */
+function versionContent(theme: ThemeDefinition): Record<string, unknown> {
+  const { versions: _versions, updatedAt: _updatedAt, ...content } = theme;
+  return content;
+}
+
+/**
+ * Keeps a named snapshot of `snapshot` (usually the editor's current draft) on the theme, newest first; past the
+ * limit the oldest is dropped. Not an edit: the theme's settings and last-edited time stay as they are.
+ */
+export function addThemeVersion(id: string, name: string, snapshot: unknown): ThemeDefinition {
+  const themes = listThemes();
+  const index = themes.findIndex((theme) => theme.id === id);
+  if (index === -1) {
+    throw new Error("Theme not found");
+  }
+  const theme = themes[index];
+  if (theme.builtin) {
+    throw new Error("Built-in themes can't keep versions. Save a copy first.");
+  }
+  const parsed = themeSchema.parse({ ...(snapshot as Record<string, unknown>), id, versions: [] });
+  const version = { id: createThemeId("version"), name: name.trim().slice(0, 60), savedAt: new Date().toISOString(), theme: versionContent(parsed) };
+  themes[index] = { ...theme, versions: [version, ...theme.versions].slice(0, MAX_THEME_VERSIONS) };
+  writeJson(themesPath, themes);
+  return themes[index];
+}
+
+export function deleteThemeVersion(id: string, versionId: string): ThemeDefinition {
+  const themes = listThemes();
+  const index = themes.findIndex((theme) => theme.id === id);
+  if (index === -1) {
+    throw new Error("Theme not found");
+  }
+  themes[index] = { ...themes[index], versions: themes[index].versions.filter((version) => version.id !== versionId) };
+  writeJson(themesPath, themes);
+  return themes[index];
 }
 
 /** Hides or restores a theme in the list. Not an edit, so the theme's last-edited time stays as it was. */

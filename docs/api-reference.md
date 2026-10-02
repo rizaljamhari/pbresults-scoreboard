@@ -165,7 +165,8 @@ type AssetUsage =
         | { type: "surface"; key: string; label: string } // a layer's background image
         | { type: "eventOverlay"; which: "concede" | "base" | "winner" }
         | { type: "momentOverlay"; which: "timeout" | "gameFinished" }
-        | { type: "font"; family: string }; // a custom font listed in the theme's fonts
+        | { type: "font"; family: string } // a custom font listed in the theme's fonts
+        | { type: "version"; name: string }; // used only by a named version
     }
   | { kind: "team"; teamId: string; teamName: string; slot: "primary" | "alternate" };
 ```
@@ -496,6 +497,16 @@ Returns:
 Effect:
 - asks the poller to fetch immediately
 - works even if polling is paused
+
+### `POST /api/themes/:id/versions`
+
+Body: `{ "name": string (1–60), "theme": ThemeDefinition }`. Keeps `theme` (usually the editor's draft) as a named version on theme `:id`, newest first, up to 10 (the oldest is dropped). Returns the theme with its `versions`. The theme's settings, `updatedAt` and what's on air don't change. `409` for built-in themes, `404` for unknown ids.
+
+`PUT /api/themes/:id` keeps the stored `versions`: versions change only through these calls.
+
+### `DELETE /api/themes/:id/versions/:versionId`
+
+Removes one version. Returns the theme.
 
 ### `POST /api/overlay/entrance`
 

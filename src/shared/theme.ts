@@ -809,6 +809,20 @@ const themeObjectSchema = z.object({
   teamEventOverlay: teamEventOverlaySchema.default({}),
   centerSecondary: centerSecondarySchema.default({}),
   momentOverlays: momentOverlaysSchema.default({}),
+  /**
+   * Named snapshots of the theme, newest first. Each holds the theme's settings as they were (without its own
+   * versions), parsed with the theme schema when used, so old snapshots migrate like any stored theme.
+   */
+  versions: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().trim().min(1).max(60),
+        savedAt: z.string(),
+        theme: z.record(z.string(), z.unknown())
+      })
+    )
+    .default([]),
   /** Custom fonts the theme uses: an uploaded font file and the family name pieces refer to it by. */
   fonts: z.array(z.object({ assetId: z.string().min(1), family: fontFamilySchema })).default([]),
   /** Named colours the theme's pieces and styles can use. */
@@ -1057,7 +1071,8 @@ export const assetThemeUsageLocationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("surface"), key: z.string(), label: z.string() }),
   z.object({ type: z.literal("eventOverlay"), which: z.enum(["concede", "base", "winner"]) }),
   z.object({ type: z.literal("momentOverlay"), which: z.enum(["timeout", "gameFinished"]) }),
-  z.object({ type: z.literal("font"), family: z.string() })
+  z.object({ type: z.literal("font"), family: z.string() }),
+  z.object({ type: z.literal("version"), name: z.string() })
 ]);
 
 export const assetUsageSchema = z.discriminatedUnion("kind", [

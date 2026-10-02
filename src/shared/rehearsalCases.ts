@@ -1,5 +1,5 @@
 import type { RawLiveState } from "./normalize.js";
-import { motionPresetLabels } from "./motion.js";
+import { changeMotionPresetLabels, describeMotion, enterOrderLabels, motionPresetLabels } from "./motion.js";
 import { matchTeamName } from "./teamMatching.js";
 import type { StoredAsset, TeamRecord, ThemeDefinition } from "./theme.js";
 
@@ -74,7 +74,7 @@ function sampleTeam(id: string, name: string): TeamRecord {
 }
 
 /** How many cases a full rehearsal plays; the catalog test keeps this honest. */
-export const REHEARSAL_CASE_COUNT = 33;
+export const REHEARSAL_CASE_COUNT = 36;
 
 export type PossibleName = { feedName: string; suggests: TeamRecord };
 
@@ -279,6 +279,33 @@ function changeAnimation(theme: ThemeDefinition) {
   return preset === "none" ? "straight away (no change animation)" : `with a ${motionPresetLabels[preset].toLowerCase()} over ${durationMs} ms${delay}`;
 }
 
+function scoreChangeExpectation(theme: ThemeDefinition) {
+  const motion = theme.components.homeScore.changeMotion;
+  return motion.preset === "none"
+    ? "The left score goes from 2 to 3 straight away (no change animation)."
+    : `The left score goes from 2 to 3 with a ${changeMotionPresetLabels[motion.preset].toLowerCase()} over ${motion.durationMs} ms.`;
+}
+
+function clockWarningExpectation(theme: ThemeDefinition) {
+  const warning = theme.components.gameTime.clockWarning;
+  if (warning.belowSeconds <= 0) {
+    return "No last-seconds warning: the game clock looks the same all the way down.";
+  }
+  const effects = [warning.pulse ? "pulses" : null, warning.color ? `turns ${warning.color}` : null].filter(Boolean);
+  return effects.length
+    ? `From ${warning.belowSeconds} s left, the game clock ${effects.join(" and ")}.`
+    : `The warning starts at ${warning.belowSeconds} s left but has no pulse or colour, so nothing changes.`;
+}
+
+function entranceExpectation(theme: ThemeDefinition) {
+  const entering = [...Object.values(theme.components), ...theme.freeComponents].filter((piece) => piece.visible && piece.enterMotion.preset !== "none");
+  if (entering.length === 0) {
+    return "No piece has an entrance: Play entrance on Operations has nothing to play, and the scoreboard shows straight away.";
+  }
+  const gap = theme.motion.enterStaggerMs > 0 ? `, ${theme.motion.enterStaggerMs} ms apart, ${enterOrderLabels[theme.motion.enterOrder].toLowerCase()}` : " together";
+  return `Press Play entrance on Operations during this case: ${entering.length} ${entering.length === 1 ? "piece builds" : "pieces build"} in${gap}, then the scoreboard looks as designed.`;
+}
+
 function momentPlacement(theme: ThemeDefinition, kind: "timeout" | "gameFinished") {
   const card = theme.momentOverlays[kind];
   if (card.placement === "free") return `at x ${card.x}, y ${card.y}`;
@@ -479,6 +506,22 @@ export function buildRehearsalCases(ctx: RehearsalContext): RehearsalCase[] {
       frames: [typical([3, 2], { gameClock: 0, state: "STOPPED" })]
     },
     {
+      key: "score-change",
+      group: "Scores & clocks",
+      title: "Score change",
+      expectation: scoreChangeExpectation(theme),
+      source: `Left score · when it changes: ${describeMotion(theme.components.homeScore.changeMotion)}`,
+      frames: [typical([2, 1], { gameClock: 300 }, { holdMs: 2_500, countdown: "game" }), typical([3, 1], { gameClock: 297 }, { countdown: "game" })]
+    },
+    {
+      key: "clock-warning",
+      group: "Scores & clocks",
+      title: "Last seconds",
+      expectation: clockWarningExpectation(theme),
+      source: `Game clock · last seconds: ${theme.components.gameTime.clockWarning.belowSeconds > 0 ? `from ${theme.components.gameTime.clockWarning.belowSeconds} s` : "off"}`,
+      frames: [typical([3, 2], { gameClock: Math.max(1, theme.components.gameTime.clockWarning.belowSeconds) + 3 }, { countdown: "game" })]
+    },
+    {
       key: "break",
       group: "Centre line",
       title: "Break",
@@ -613,6 +656,14 @@ export function buildRehearsalCases(ctx: RehearsalContext): RehearsalCase[] {
         typical([3, 1], { state: "END", period: "BREAK", gameClock: 0, breakClock: 30, round: 8 }, { holdMs: 2_000 }),
         typical([3, 1], { state: "END", period: "BREAK", gameClock: 0, breakClock: jumpTo, round: 8 })
       ]
+    },
+    {
+      key: "entrance",
+      group: "Transitions",
+      title: "Entrance",
+      expectation: entranceExpectation(theme),
+      source: `Build-in: ${theme.motion.enterOrder}, ${theme.motion.enterStaggerMs} ms gap`,
+      frames: [typical([2, 1], { gameClock: 300, state: "STOPPED" }, { holdMs: 10_000 })]
     },
     {
       key: "team-switch",

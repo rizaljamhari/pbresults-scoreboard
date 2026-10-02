@@ -5,6 +5,7 @@ import { DesignSystemProperties } from "./DesignSystemProperties";
 import { themeSwatches } from "./PieceProperties";
 import type { StoredAsset, ThemeDefinition } from "../../../shared/theme";
 import { FontsProperties } from "./FontsProperties";
+import { VersionsProperties } from "./VersionsProperties";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
 /** What Properties shows when nothing is selected: the theme and its canvas. */
@@ -21,7 +22,8 @@ export function ThemeProperties({
   onSelectPieces,
   assets,
   onUploadFont,
-  onAddLibraryFont
+  onAddLibraryFont,
+  versions
 }: {
   theme: ThemeDefinition;
   patchTheme: (update: (draft: ThemeDefinition) => void) => void;
@@ -38,6 +40,7 @@ export function ThemeProperties({
   assets: StoredAsset[];
   onUploadFont: (file: File) => void;
   onAddLibraryFont: (asset: StoredAsset) => void;
+  versions: Omit<Parameters<typeof VersionsProperties>[0], "theme">;
 }) {
   const entering = [...Object.values(theme.components), ...theme.freeComponents].filter(
     (component) => component.visible && component.enterMotion.preset !== "none"
@@ -91,6 +94,8 @@ export function ThemeProperties({
       <DesignSystemProperties theme={theme} swatches={themeSwatches(theme)} patchTheme={patchTheme} onSelectPieces={onSelectPieces} />
 
       <FontsProperties theme={theme} assets={assets} patchTheme={patchTheme} onUpload={onUploadFont} onAddFromLibrary={onAddLibraryFont} />
+
+      <VersionsProperties theme={theme} {...versions} />
 
       <PanelSection title="Build-in" defaultOpen={entering > 0}>
         <p className="te-field-hint">

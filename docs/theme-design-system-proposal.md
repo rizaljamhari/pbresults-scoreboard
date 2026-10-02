@@ -1,6 +1,6 @@
 # Theme Design System: Tokens, Styling and Motion
 
-Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–8 and custom fonts (step 9) built; team colours, theme kits and step 10 open
+Status: proposal · 2026-10-02 · styling and motion first (§7); steps 1–8, custom fonts (step 9) and W4–W5 (step 10) built; team colours, theme kits, W2, W6 and W8 open
 Builds on: `docs/theme-editor-redesign-brief.md` (all five phases built)
 
 The theme editor's mechanics are mature: full-window canvas, moveable snapping, arrange tools, Preview as, and event cards edited in context. What it lacks is a **design layer**. Every style is a raw value set on one piece, with no shared definitions, limited styling and almost no motion. This proposal adds that layer without breaking existing themes or the overlay.
@@ -208,7 +208,7 @@ Shared `liveTextFields` on text pieces (fixed and custom), off by default:
 
 - **Built:** a **Play** button under "When it changes" replays the piece's change motion on the canvas (a number rolls from one less). A **Preview** button under "Last seconds" sets the preview clock just inside the warning. Changing a score in Preview data plays the real change motion.
 - **Built in step 5:** Play entrance on the theme panel and on each piece.
-- **Still to do:** Rehearsal cases for score changes, the clock warning and the entrance.
+- **Built in step 10:** Rehearsal cases **Score change**, **Last seconds** and **Entrance**, whose expected result follows the theme's settings.
 
 ### 5.5 Operator safety (built, step 4)
 
@@ -223,9 +223,9 @@ Shared `liveTextFields` on text pieces (fixed and custom), off by default:
 |---|---|---|
 | W1 | **Copy and paste style** (built, step 8) | ⌘/Ctrl+Alt+C, then ⌘/Ctrl+Alt+V onto one or more selected pieces, and in the right-click menu. It copies type, box, effects, motion and linked colours and styles, not content or position, field by field where the target has the field (e.g. text to image pieces only takes the box). Pasting onto cards isn't built. |
 | W2 | **Linked mirror (symmetry)** | An optional link between a left-team piece and its right-team counterpart. While linked, size and style edits apply to both, and position is mirrored across the frame centre. This needs a persisted `mirrorOf` field; the brief kept mirroring copy-once to avoid a schema change. The copy-once action stays. |
-| W3 | **Stress-test preview presets** | One-click data sets in the preview bar: **Long names** (24+ characters), **No logos**, **Double-digit scores**, **Overtime clock**, **Unresolved team**. Pairs with text fitting (§4.3). |
-| W4 | **Diff against on air** | Before Save to air, list what changes compared with the published version ("Left team name: font size 56 → 60; new layer: Sponsor bar"), with each item clickable on the canvas. |
-| W5 | **Named versions** | Save a named version, then preview, restore or duplicate it. Stored with the theme, so it's included in backups. |
+| W3 | **Stress-test preview presets** (built, step 1) | One-click data sets in Preview data: **Long names**, **No logos**, **Unmatched teams**, **Big scores**, **Wide clocks** and **Everything**. Pairs with text fitting (§4.3). |
+| W4 | **Diff against on air** (built, step 10) | On an on-air theme, **Save to air** opens a review of what changes on the live overlay, compared with what's on air now ("Left team name · Font size: 56 → 60", "New layer: Sponsor bar"). Pieces are clickable and select the piece. It replaces the one-time on-air confirm. `diffThemes` in `src/shared/themeDiff.ts` names settings in the editor's words, combines position and size, reports style links, colours, styles and fonts, and caps each item at 6 lines. |
+| W5 | **Named versions** (built, step 10) | Theme panel → **Versions**: keep the editor's current state (unsaved changes included) under a name; **Compare** with the draft, **Open as draft** (undo brings the draft back), **Duplicate as new theme**, or delete. Up to 10, newest first, oldest dropped. Stored in `theme.versions` (so backups and exports carry them) through `POST/DELETE /api/themes/:id/versions`; keeping one doesn't change the theme, its last-edited time or what's on air, and a normal save never drops versions. Images and fonts used only by a version count as in use. Built-in themes can't keep versions. |
 | W6 | **Groups for custom layers** | Move, hide, lock and animate a set of custom layers together. Groups appear in Layers. Fixed slots stay ungrouped. |
 | W7 | **Show where a token or style is used** (built, step 8) | Each colour and style shows "Used by N pieces, M cards"; **Select** selects those pieces on the canvas. Highlighting on hover isn't built. |
 | W8 | **Starter templates** | "New theme" offers the built-in themes plus a blank theme with default tokens and styles, rather than only duplicating. |
@@ -252,7 +252,7 @@ Each step ships on its own and keeps existing themes rendering exactly as before
 | **7. Image effects, blend and blur** — built | Alpha drop shadow, grayscale and dim (4.6); blend modes and backdrop blur (4.5), after a vMix performance check | Additive |
 | **8. Tokens and styles** — built | Bind-and-bake storage (3.1), colour tokens (3.2), text styles (3.3), surface styles (3.4), where-used (W7), copy and paste style (W1) | Additive (`tokens`, `styles`, `bindings`, `overrides`) |
 | **9. Brand and team** — custom fonts built; team colours and theme kits not started | Team colours (3.5), custom fonts (3.6), theme kits (3.7) | Team record fields; `fontFamily` widened to a string |
-| **10. Workflow** | Diff against on air (W4), named versions (W5), groups (W6), linked mirror (W2), starter templates (W8) | Additive (`versions`, `groups`, `mirrorOf`) |
+| **10. Workflow** — W4 and W5 built; W2, W6 and W8 not started | Diff against on air (W4), named versions (W5), groups (W6), linked mirror (W2), starter templates (W8) | Additive (`versions`, `groups`, `mirrorOf`) |
 
 Every styling and motion step adds a Rehearsal case, so the result is checked in real vMix on Windows, not only on the admin canvas.
 

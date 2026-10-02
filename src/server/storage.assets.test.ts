@@ -340,3 +340,16 @@ describe("cleanup", () => {
     expect(storage.getAsset(asset.id)).not.toBeNull();
   });
 });
+
+describe("named versions and assets", () => {
+  it("counts an image used only by a version as in use, and exports it", async () => {
+    const asset = await storePlain("version-only.png", { r: 5, g: 50, b: 5 });
+    const theme = storage.saveTheme(themeUsing("theme-version-asset", {}));
+    storage.addThemeVersion(theme.id, "With logo", themeUsing("theme-version-asset", { image: asset.id }));
+
+    const usages = storage.computeAssetUsageIndex().get(asset.id) ?? [];
+    expect(usages).toEqual([expect.objectContaining({ kind: "theme", location: { type: "version", name: "With logo" } })]);
+    const exported = await storage.exportThemePackage(theme.id);
+    expect(exported.assets.map((item) => item.asset.id)).toContain(asset.id);
+  });
+});

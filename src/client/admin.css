@@ -1740,6 +1740,24 @@ tr[aria-selected="true"] .ad-row-open {
   text-overflow: ellipsis;
 }
 
+/* Toolbar buttons keep their full label; the feed status text is the part that gives way on narrow screens. */
+.ad-toolbar > .ad-btn,
+.ad-feed-state > .ad-chip {
+  flex-shrink: 0;
+}
+
+/* Below 1200px the secondary toolbar buttons show only their icon; the label stays for screen readers and the tooltip. */
+@media (max-width: 1199px) {
+  .ad-toolbar > .ad-btn .ad-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 .ad-ops-col {
   display: grid;
   gap: 16px;

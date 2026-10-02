@@ -1418,7 +1418,7 @@ export function OperationsPage() {
           onClick={() => setRehearsalOpen(true)}
         >
           <Play aria-hidden />
-          {rehearsing ? "Rehearsing…" : "Rehearse"}
+          <span className="ad-btn-label">{rehearsing ? "Rehearsing…" : "Rehearse"}</span>
         </Button>
         {goLiveIssues.length ? (
           <a className="ad-btn ad-btn--ghost ad-issues-link" href="#operator-status">
@@ -1434,7 +1434,7 @@ export function OperationsPage() {
             onClick={() => void handlePlayEntrance()}
           >
             <Sparkles aria-hidden />
-            Play entrance
+            <span className="ad-btn-label">Play entrance</span>
           </Button>
         ) : null}
         <Button
@@ -1449,11 +1449,11 @@ export function OperationsPage() {
           onClick={() => void handleSetReduceMotion(!settings.data!.reduceMotion)}
         >
           <Waves aria-hidden />
-          {settings.data.reduceMotion ? "Motion reduced" : "Reduce motion"}
+          <span className="ad-btn-label">{settings.data.reduceMotion ? "Motion reduced" : "Reduce motion"}</span>
         </Button>
-        <Button variant="ghost" onClick={() => void handleRefreshNow()} disabled={refreshing}>
+        <Button variant="ghost" title="Fetch the live feed now" onClick={() => void handleRefreshNow()} disabled={refreshing}>
           <RefreshCw aria-hidden />
-          {refreshing ? "Refreshing…" : "Refresh now"}
+          <span className="ad-btn-label">{refreshing ? "Refreshing…" : "Refresh now"}</span>
         </Button>
         <Button
           variant={settings.data.pollEnabled ? "default" : "primary"}

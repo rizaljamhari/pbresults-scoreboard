@@ -282,6 +282,15 @@ export const api = {
       body: JSON.stringify({ confirmation: "ROLL_BACK_AND_RESTART" })
     }).then(handle<UpdateStatus>),
   dismissUpdateResult: () => fetch("/api/update/result/dismiss", { method: "POST" }).then(handle<UpdateStatus>),
+  /** Keeps a named version of a theme (usually the editor's draft); returns the theme with its versions. */
+  addThemeVersion: (themeId: string, name: string, theme: ThemeDefinition) =>
+    fetch(`/api/themes/${encodeURIComponent(themeId)}/versions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, theme })
+    }).then(handle<ThemeDefinition>),
+  deleteThemeVersion: (themeId: string, versionId: string) =>
+    fetch(`/api/themes/${encodeURIComponent(themeId)}/versions/${encodeURIComponent(versionId)}`, { method: "DELETE" }).then(handle<ThemeDefinition>),
   getAssets: () => fetch("/api/assets").then(handle<StoredAsset[]>),
   uploadAsset: (file: File) => {
     const form = new FormData();

@@ -1891,6 +1891,106 @@ details[open]:not(.editor-section-card) > summary::after {
   line-height: 1.35;
 }
 
+/* Named versions on the theme panel. */
+.te-version {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--te-line);
+}
+
+.te-version-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.te-version-head b {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.te-version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+/* Review before Save to air: what changes on the live overlay. */
+.te-review-popover {
+  width: min(380px, calc(100vw - 32px));
+  padding: 0;
+}
+
+.te-review {
+  display: grid;
+  max-height: min(70vh, 560px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.te-review-head {
+  padding: 14px 16px 8px;
+}
+
+.te-review-head h2 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.te-review-head p {
+  margin: 0;
+  color: var(--te-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.te-review-body {
+  overflow: auto;
+  padding: 4px 16px 8px;
+}
+
+.te-review-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--te-line);
+}
+
+.te-changes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.te-change-subject {
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.te-change--added .te-change-subject::before {
+  content: "+ ";
+}
+
+.te-change--removed .te-change-subject {
+  color: var(--te-muted);
+  text-decoration: line-through;
+}
+
+.te-change-details {
+  margin: 3px 0 0;
+  padding-left: 14px;
+  color: var(--te-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Fonts on the theme panel: a sample in the font itself, its name, and where it is used. */
 .te-font {
   display: grid;

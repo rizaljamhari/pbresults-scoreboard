@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
@@ -77,6 +77,9 @@ import { CentreLineProperties } from "../components/editor/CentreLineProperties"
 import { PreviewDataProperties, type PreviewEventMode, type PreviewLogoMode, type PreviewNameMode, type PreviewPeriodMode, type PreviewSwitchMode } from "../components/editor/PreviewDataProperties";
 import { showToast } from "../toast";
 import { pieceName } from "../components/editor/pieceNames";
+import { ChangeReview } from "../components/editor/ChangeReview";
+import { versionTheme } from "../components/editor/VersionsProperties";
+import { diffThemes } from "../../shared/themeDiff";
 import { useAppEvents } from "../appEvents";
 import { useAppearance } from "../appearance";
 import { ResourceRefreshCoordinator } from "../resourceRefresh";
@@ -485,6 +488,7 @@ export function ThemeEditorPage() {
   // The timeout is a 1.2 s flash on air; the editor holds it so it can be designed, and Play shows one real flash.
   const [previewTimeout, setPreviewTimeout] = useState<"hold" | "flash" | null>(null);
   const [replayChange, setReplayChange] = useState<{ id: string; token: number } | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [entranceToken, setEntranceToken] = useState<number | null>(null);
   const previewTimeoutTimerRef = useRef<number | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
@@ -808,6 +812,15 @@ export function ThemeEditorPage() {
   const selectedMirroredPair = selected && isFixedComponentId(selected) ? mirroredPairForComponent(selected) : null;
   const hasUnsavedChanges = savedSnapshot && theme ? !sameTheme(savedSnapshot, theme) : false;
   const isOnAir = Boolean(theme && settings.data?.publishedThemeId === theme.id);
+  // What Save to air would change on the live overlay; only worked out while the review is open.
+  const airChanges = useMemo(() => {
+    if (!reviewOpen || !savedSnapshot || !theme) return [];
+    const entries = listThemeComponentEntries(theme);
+    return diffThemes(savedSnapshot, theme, (id, label) => {
+      const entry = entries.find((candidate) => candidate.id === id);
+      return entry ? pieceName(entry) : label;
+    });
+  }, [reviewOpen, savedSnapshot, theme]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) {
@@ -1078,7 +1091,8 @@ export function ThemeEditorPage() {
     const previous = history[history.length - 2];
     setFuture((current) => [structuredClone(currentTheme), ...current]);
     setHistory((current) => current.slice(0, -1));
-    themeResource.setData(structuredClone(previous));
+    // Versions live on the server, outside undo: keep the current list.
+    themeResource.setData({ ...structuredClone(previous), versions: currentTheme.versions });
   }
 
   function redo() {
@@ -1088,7 +1102,65 @@ export function ThemeEditorPage() {
     const [next, ...rest] = future;
     setHistory((current) => [...current, structuredClone(next)]);
     setFuture(rest);
-    themeResource.setData(structuredClone(next));
+    themeResource.setData({ ...structuredClone(next), versions: themeResource.data?.versions ?? next.versions });
+  }
+
+  const [versionBusy, setVersionBusy] = useState(false);
+
+  /** Takes the server's version list into the draft and the saved copy, so neither looks changed by it. */
+  function adoptServerVersions(versions: ThemeDefinition["versions"]) {
+    themeResource.setData((current) => (current ? { ...current, versions } : current));
+    setSavedSnapshot((current) => (current ? { ...current, versions } : current));
+  }
+
+  async function keepVersion(name: string) {
+    if (!themeResource.data) return;
+    setVersionBusy(true);
+    try {
+      const updated = await api.addThemeVersion(themeResource.data.id, name, themeResource.data);
+      adoptServerVersions(updated.versions);
+      showToast({ kind: "success", message: `Kept version “${name}”. Nothing on air changed.` });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "The version could not be kept." });
+    } finally {
+      setVersionBusy(false);
+    }
+  }
+
+  async function deleteVersion(version: ThemeDefinition["versions"][number]) {
+    if (!themeResource.data || !window.confirm(`Delete the version “${version.name}”? This can't be undone.`)) return;
+    try {
+      const updated = await api.deleteThemeVersion(themeResource.data.id, version.id);
+      adoptServerVersions(updated.versions);
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "The version could not be deleted." });
+    }
+  }
+
+  /** Replaces the draft with a version's settings; the theme keeps its name, id and versions. Undo brings the draft back. */
+  function openVersionAsDraft(version: ThemeDefinition["versions"][number]) {
+    const current = themeResource.data;
+    const snapshot = current ? versionTheme(current, version) : null;
+    if (!current || !snapshot) return;
+    if (hasUnsavedChanges && !window.confirm(`Replace your draft with “${version.name}”? Undo brings your draft back.`)) return;
+    updateTheme({ ...snapshot, id: current.id, name: current.name, builtin: current.builtin, archived: current.archived, updatedAt: current.updatedAt, versions: current.versions });
+    showToast({ kind: "success", message: `Opened “${version.name}” as your draft. Nothing changes on air until you save.` });
+  }
+
+  async function duplicateVersion(version: ThemeDefinition["versions"][number]) {
+    const current = themeResource.data;
+    const snapshot = current ? versionTheme(current, version) : null;
+    if (!current || !snapshot) return;
+    setVersionBusy(true);
+    try {
+      const clone = await api.createTheme(current.id, `${current.name} (${version.name})`.slice(0, 80));
+      const saved = await api.saveTheme({ ...snapshot, id: clone.id, name: clone.name, builtin: false, archived: false, versions: [] });
+      showToast({ kind: "success", message: `Created “${saved.name}” from the version. This theme is unchanged.` });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "The version could not be duplicated." });
+    } finally {
+      setVersionBusy(false);
+    }
   }
 
   function bringSelectedIntoView() {
@@ -2156,16 +2228,40 @@ export function ThemeEditorPage() {
               <a className="te-btn" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer">
                 <ExternalLink /> Preview
               </a>
-              <button
-                type="button"
-                className={isOnAir ? "te-btn te-btn--primary" : "te-btn"}
-                onClick={() => void save()}
-                disabled={saving || publishing}
-                title={isOnAir ? "This theme is on air. Saving updates the live broadcast." : undefined}
-              >
-                {isOnAir ? <span className="te-tally te-tally--on-primary" aria-hidden /> : null}
-                {saving && !publishing ? "Saving…" : isOnAir ? "Save to air" : "Save"}
-              </button>
+              <Popover.Root open={reviewOpen} onOpenChange={setReviewOpen}>
+                <Popover.Anchor asChild>
+                  <button
+                    type="button"
+                    className={isOnAir ? "te-btn te-btn--primary" : "te-btn"}
+                    onClick={() => (isOnAir ? setReviewOpen(true) : void save())}
+                    disabled={saving || publishing}
+                    title={isOnAir ? "This theme is on air. Review what changes, then save to the live broadcast." : undefined}
+                  >
+                    {isOnAir ? <span className="te-tally te-tally--on-primary" aria-hidden /> : null}
+                    {saving && !publishing ? "Saving…" : isOnAir ? "Save to air" : "Save"}
+                  </button>
+                </Popover.Anchor>
+                <Popover.Portal>
+                  <Popover.Content className="te-popover te-review-popover" side="bottom" align="end" sideOffset={8} collisionPadding={16}>
+                    {reviewOpen ? (
+                      <ChangeReview
+                        changes={airChanges}
+                        busy={saving}
+                        onSelectPiece={(pieceId) => {
+                          setReviewOpen(false);
+                          selectComponent(pieceId);
+                        }}
+                        onCancel={() => setReviewOpen(false)}
+                        onConfirm={() =>
+                          void save({ skipOnAirConfirm: true }).then((saved) => {
+                            if (saved) setReviewOpen(false);
+                          })
+                        }
+                      />
+                    ) : null}
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
               {isOnAir ? null : (
                 <button type="button" className="te-btn te-btn--primary" onClick={() => void publish()} disabled={saving || publishing}>
                   {publishing ? "Publishing…" : "Publish"}
@@ -2502,6 +2598,7 @@ export function ThemeEditorPage() {
                 assets={assets.data ?? []}
                 onUploadFont={(file) => void uploadFont(file)}
                 onAddLibraryFont={(asset) => addFontToTheme(asset.id, asset.displayName ?? asset.originalName)}
+                versions={{ busy: versionBusy, onKeep: (name) => void keepVersion(name), onOpen: openVersionAsDraft, onDuplicate: (version) => void duplicateVersion(version), onDelete: (version) => void deleteVersion(version) }}
               />
             )}
           </>

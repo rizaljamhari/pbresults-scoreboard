@@ -70,3 +70,40 @@ describe("theme edit time and archive", () => {
     expect(storage.getTheme(theme.id)?.archived).toBe(false);
   });
 });
+
+describe("named versions", () => {
+  function savedTheme(id: string) {
+    return storage.saveTheme({ ...structuredClone(builtinThemes[0]), id, name: `Versions ${id}`, builtin: false });
+  }
+
+  it("keeps a version without editing the theme, newest first, up to the limit", () => {
+    const theme = savedTheme("theme-versions");
+    const draft = { ...theme, description: "Draft description" };
+    let updated = storage.addThemeVersion(theme.id, "Before sponsor", draft);
+    expect(updated.updatedAt).toBe(theme.updatedAt);
+    expect(updated.description).toBe(theme.description);
+    expect(updated.versions[0]).toMatchObject({ name: "Before sponsor", theme: expect.objectContaining({ description: "Draft description" }) });
+    expect(updated.versions[0].theme).not.toHaveProperty("versions");
+
+    for (let index = 1; index <= storage.MAX_THEME_VERSIONS; index += 1) {
+      updated = storage.addThemeVersion(theme.id, `V${index}`, draft);
+    }
+    expect(updated.versions).toHaveLength(storage.MAX_THEME_VERSIONS);
+    expect(updated.versions[0].name).toBe(`V${storage.MAX_THEME_VERSIONS}`);
+    expect(updated.versions.map((version) => version.name)).not.toContain("Before sponsor");
+  });
+
+  it("keeps versions when an editor saves the theme with an older list, and deletes one on request", () => {
+    const theme = savedTheme("theme-versions-save");
+    const withVersion = storage.addThemeVersion(theme.id, "Keep me", theme);
+    const saved = storage.saveTheme({ ...theme, versions: [], name: "Renamed" });
+    expect(saved.name).toBe("Renamed");
+    expect(saved.versions.map((version) => version.name)).toEqual(["Keep me"]);
+    const afterDelete = storage.deleteThemeVersion(theme.id, withVersion.versions[0].id);
+    expect(afterDelete.versions).toEqual([]);
+  });
+
+  it("refuses versions on built-in themes", () => {
+    expect(() => storage.addThemeVersion(builtinThemes[0].id, "Nope", builtinThemes[0])).toThrow("Save a copy first");
+  });
+});
