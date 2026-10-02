@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
 import type { ThemeDefinition } from "../../shared/theme";
-import { fitContent, formatEdited, organizeThemes, themeContentBounds } from "./themeAdminUtils";
+import { fitContent, formatEdited, organizeThemes, reconcileServerTheme, themeContentBounds } from "./themeAdminUtils";
 
 function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   return {
@@ -110,5 +110,28 @@ describe("theme thumbnail crop", () => {
 
   it("centres the content in the box, fitting the tighter side", () => {
     expect(fitContent({ x: 100, y: 50, width: 1000, height: 100 }, 320, 140, 10)).toEqual({ scale: 0.3, x: -20, y: 40 });
+  });
+});
+
+describe("reconcileServerTheme", () => {
+  const loaded = makeTheme({ name: "Loaded" });
+  const draft = makeTheme({ name: "Draft" });
+  const elsewhere = makeTheme({ name: "Changed elsewhere" });
+
+  it("takes the server copy when there are no unsaved edits", () => {
+    expect(reconcileServerTheme(loaded, loaded, elsewhere)).toBe("apply");
+    expect(reconcileServerTheme(null, null, elsewhere)).toBe("apply");
+  });
+
+  it("keeps the draft when the server copy hasn't changed", () => {
+    expect(reconcileServerTheme(draft, loaded, structuredClone(loaded))).toBe("keep");
+  });
+
+  it("takes the server copy once it matches the draft, e.g. after this editor saved", () => {
+    expect(reconcileServerTheme(draft, loaded, structuredClone(draft))).toBe("apply");
+  });
+
+  it("reports a conflict only when someone else really changed the theme", () => {
+    expect(reconcileServerTheme(draft, loaded, elsewhere)).toBe("conflict");
   });
 });

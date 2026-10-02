@@ -50,6 +50,7 @@ import {
   Undo2
 } from "lucide-react";
 import { SnapOptionsPanel, ThemeCanvasEditor } from "../components/ThemeCanvasEditor";
+import { reconcileServerTheme } from "./themeAdminUtils";
 import { IconButton, Island, ShortcutsHelp } from "../components/editor/EditorChrome";
 import { ArrangeMenuItems, ArrangePanel, type ArrangeActions } from "../components/editor/ArrangeControls";
 import { LayersPanel } from "../components/editor/LayersPanel";
@@ -831,16 +832,18 @@ export function ThemeEditorPage() {
     if (!id || !appEvents) return;
     const coordinator = new ResourceRefreshCoordinator(async (_token, shouldApply) => {
       try {
-        const next = await api.getTheme(id);
+        // Compare in the form the baseline is stored in, so an unchanged server copy never looks like an edit.
+        const next = clampThemeToCanvas(await api.getTheme(id));
         if (!shouldApply()) return;
-        const current = themeRef.current;
-        const baseline = savedSnapshotRef.current;
-        const dirty = Boolean(current && baseline && !sameTheme(current, baseline));
-        if (!dirty || (current && sameTheme(current, next))) {
+        const outcome = reconcileServerTheme(themeRef.current, savedSnapshotRef.current, next);
+        if (outcome === "apply") {
           applyServerTheme(next);
-          return;
+        } else if (outcome === "conflict") {
+          setExternalTheme(next);
+        } else {
+          // The server is back to the version this draft started from: any earlier warning no longer applies.
+          setExternalTheme(null);
         }
-        setExternalTheme(next);
       } catch {
         // Keep the current draft if the external version cannot be loaded.
       }

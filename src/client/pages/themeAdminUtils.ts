@@ -96,3 +96,26 @@ export function fitContent(content: Box, boxWidth: number, boxHeight: number, pa
     y: Math.round((boxHeight - content.height * scale) / 2 - content.y * scale)
   };
 }
+
+export type ServerThemeOutcome = "apply" | "keep" | "conflict";
+
+/**
+ * What the editor does with a freshly fetched server copy of the theme it has open. Without unsaved edits, or when
+ * the server already matches the draft, it takes the server copy. With unsaved edits it keeps the draft while the
+ * server copy is still the one the editor loaded, and reports a conflict only when someone really changed it.
+ * All three themes must be in the same (canvas-clamped) form.
+ */
+export function reconcileServerTheme(
+  current: ThemeDefinition | null,
+  baseline: ThemeDefinition | null,
+  next: ThemeDefinition
+): ServerThemeOutcome {
+  if (!current || !baseline) {
+    return "apply";
+  }
+  const same = (left: ThemeDefinition, right: ThemeDefinition) => JSON.stringify(left) === JSON.stringify(right);
+  if (same(current, baseline) || same(current, next)) {
+    return "apply";
+  }
+  return same(next, baseline) ? "keep" : "conflict";
+}
