@@ -8,7 +8,11 @@
       // Apply the admin's light/dark choice before first paint, so dark mode never flashes white.
       // Overlay routes are skipped: the broadcast never takes the admin theme. The admin shell keeps it in sync after load.
       (function () {
-        if (location.pathname.indexOf("/overlay") === 0) return;
+        if (location.pathname.indexOf("/overlay") === 0) {
+          // Overlays sit on top of video, so the page itself must not paint a background.
+          document.documentElement.dataset.overlay = "";
+          return;
+        }
         var preference = null;
         try {
           preference = localStorage.getItem("pbresults.admin.appearance");
