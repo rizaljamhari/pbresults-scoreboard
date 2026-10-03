@@ -186,6 +186,10 @@ describe("show and hide transition", () => {
     theme.freeComponents.push({ ...plate(), y: 1000, height: 40 });
     expect(transitionBandRect(theme)).toEqual(plain);
 
+    // Band size goes down to 20%, no further.
+    expect(themeSchema.safeParse({ ...theme, transition: { ...theme.transition, bandScale: 0.2 } }).success).toBe(true);
+    expect(themeSchema.safeParse({ ...theme, transition: { ...theme.transition, bandScale: 0.19 } }).success).toBe(false);
+
     // Band size grows it around the scoreboard's middle.
     theme.transition.bandScale = 1.5;
     const bigger = transitionBandRect(theme);

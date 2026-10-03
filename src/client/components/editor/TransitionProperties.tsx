@@ -126,7 +126,7 @@ export function TransitionProperties({
             <NumberInput
               label="Band size"
               value={Math.round(transition.bandScale * 100)}
-              min={50}
+              min={20}
               max={200}
               step={5}
               unit="%"

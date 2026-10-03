@@ -190,7 +190,7 @@ export const transitionSchema = z.object({
   /** Puts the event logo at the band's leading edge. */
   bandShowLogo: z.boolean().default(true),
   /** Scales the band's height around the scoreboard's middle; 1 just covers the scoreboard with a little room. */
-  bandScale: z.number().min(0.5).max(2).default(1),
+  bandScale: z.number().min(0.2).max(2).default(1),
   /** A light sideways blur on the band while it moves. */
   motionBlur: z.boolean().default(true),
   /** How text and the other contents arrive once the band has passed. */
