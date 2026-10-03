@@ -8,7 +8,7 @@ import { StylePicker } from "./DesignSystemProperties";
 import { textStyleFields } from "../../../shared/design";
 import { MotionFields } from "./MotionFields";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, PercentSlider, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 export type EventKind = "concede" | "base" | "winner";
 
@@ -110,6 +110,11 @@ export function EventOverlayProperties({
           onColor={(value) => patchEvent((draft) => (draft.backgroundColor = value))}
           {...bindEventColor("backgroundColor")}
           onFill={(next) => patchEvent((draft) => Object.assign(draft.fill, next))}
+        />
+        <PercentSlider
+          label="Background opacity"
+          value={Math.round(settings.backgroundOpacity * 100)}
+          onChange={(value) => patchEvent((draft) => (draft.backgroundOpacity = value / 100))}
         />
         <Field label="Background image">
           <div className="te-asset-row">

@@ -224,6 +224,8 @@ const commonFrameBaseSchema = z.object({
   backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
   backgroundOverlayColor: z.string().default("#000000"),
   backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
+  /** Fades the background (fill, image and tint together) without fading the content, border or shadow. */
+  backgroundOpacity: z.number().min(0).max(1).default(1),
   borderColor: z.string(),
   borderWidth: z.number().min(0),
   borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]),
@@ -316,6 +318,7 @@ const defaultImageComponentValue = {
   backgroundImagePosition: "center" as const,
   backgroundOverlayColor: "#000000",
   backgroundOverlayOpacity: 0,
+  backgroundOpacity: 1,
   borderColor: "#00000000",
   borderWidth: 0,
   borderRadius: 0,
@@ -388,6 +391,7 @@ const teamEventOverlayEventSchema = z.object({
   backgroundImageAssetId: z.string().nullable().default(null),
   backgroundOverlayColor: z.string().default("#000000"),
   backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
+  backgroundOpacity: z.number().min(0).max(1).default(1),
   ...surfaceFillFields,
   design: designField
 });
@@ -634,6 +638,7 @@ const momentCardSchema = z.object({
   backgroundImagePosition: z.enum(backgroundImagePositionValues).default("center"),
   backgroundOverlayColor: z.string().default("#000000"),
   backgroundOverlayOpacity: z.number().min(0).max(1).default(0),
+  backgroundOpacity: z.number().min(0).max(1).default(1),
   borderColor: z.string().default("#00000000"),
   borderWidth: z.number().min(0).default(0),
   borderRadius: z.tuple([z.number().min(0), z.number().min(0), z.number().min(0), z.number().min(0)]).default([0, 0, 0, 0]),

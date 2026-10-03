@@ -239,6 +239,7 @@ details[open]:not(.editor-section-card) > summary::after {
   pointer-events: none;
 }
 
+.component-surface-group,
 .component-surface,
 .component-surface-overlay {
   position: absolute;

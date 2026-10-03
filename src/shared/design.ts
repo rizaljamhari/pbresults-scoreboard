@@ -241,6 +241,7 @@ export const copyableStyleFields = [
     "tintFill",
     "backgroundOverlayColor",
     "backgroundOverlayOpacity",
+    "backgroundOpacity",
     "paddingX",
     "paddingY",
     "blendMode",

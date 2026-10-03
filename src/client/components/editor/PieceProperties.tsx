@@ -539,6 +539,11 @@ export function PieceProperties({
         onFill={(next) => patch((draft) => Object.assign(draft.fill as FillSettings, next))}
         {...bindColor("backgroundColor")}
       />
+      <PercentSlider
+        label="Background opacity"
+        value={Math.round(Number(component.backgroundOpacity ?? 1) * 100)}
+        onChange={(value) => patch((draft) => (draft.backgroundOpacity = value / 100))}
+      />
 
       <Group title="Position and size">
         <div className="te-grid-2">

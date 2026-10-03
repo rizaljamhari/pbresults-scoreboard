@@ -184,11 +184,16 @@ function surfaceStyles(
     | "backgroundImagePosition"
     | "backgroundOverlayColor"
     | "backgroundOverlayOpacity"
-  > & { backgroundImageMode?: "asset" | "homeTeamLogo" | "awayTeamLogo"; fill?: FillSettings; tintFill?: FillSettings },
+  > & {
+    backgroundImageMode?: "asset" | "homeTeamLogo" | "awayTeamLogo";
+    fill?: FillSettings;
+    tintFill?: FillSettings;
+    backgroundOpacity?: number;
+  },
   assets: StoredAsset[],
   theme: ThemeDefinition,
   live: NormalizedLiveState | null
-): { background: CSSProperties; overlay: CSSProperties | null } {
+): { background: CSSProperties; overlay: CSSProperties | null; opacity: number } {
   let backgroundAsset = null;
   if (component.backgroundImageMode === "homeTeamLogo") {
     backgroundAsset = resolveImageAsset("homeTeamLogo", theme.components.homeTeamLogo, theme, live, assets);
@@ -224,8 +229,19 @@ function surfaceStyles(
             background: tintGradient ?? component.backgroundOverlayColor,
             opacity: component.backgroundOverlayOpacity
           }
-        : null
+        : null,
+    opacity: component.backgroundOpacity ?? 1
   };
+}
+
+/** The background and its tint, faded together so the content above keeps its own opacity. */
+function SurfaceLayers({ surface }: { surface: ReturnType<typeof surfaceStyles> }) {
+  return (
+    <span className="component-surface-group" style={surface.opacity < 1 ? { opacity: surface.opacity } : undefined}>
+      <span className="component-surface" style={surface.background} />
+      {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+    </span>
+  );
 }
 
 function imageStyles(component: ThemeDefinition["components"]["eventLogo"]): CSSProperties {
@@ -963,6 +979,7 @@ export function OverlayRenderer({
           backgroundImagePosition: overlayGeneral.backgroundImagePosition,
           backgroundOverlayColor: activeConcedeTheme.backgroundOverlayColor,
           backgroundOverlayOpacity: activeConcedeTheme.backgroundOverlayOpacity,
+          backgroundOpacity: activeConcedeTheme.backgroundOpacity,
           fill: activeConcedeTheme.fill,
           tintFill: activeConcedeTheme.tintFill
         },
@@ -982,6 +999,7 @@ export function OverlayRenderer({
       backgroundImagePosition: overlayGeneral.backgroundImagePosition,
       backgroundOverlayColor: winnerTheme.backgroundOverlayColor,
       backgroundOverlayOpacity: winnerTheme.backgroundOverlayOpacity,
+      backgroundOpacity: winnerTheme.backgroundOpacity,
       fill: winnerTheme.fill,
       tintFill: winnerTheme.tintFill
     },
@@ -1041,8 +1059,7 @@ export function OverlayRenderer({
               : "center-secondary-slide-up 220ms ease"
         }}
       >
-        <span className="component-surface" style={surface.background} />
-        {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+        <SurfaceLayers surface={surface} />
         <span
           className="component-content text-content"
           style={{
@@ -1099,7 +1116,6 @@ export function OverlayRenderer({
           const imageAsset = resolveImageAsset(componentId, component, theme, live, assets);
           const surface = surfaceStyles(component, assets, theme, live);
           const isTeamLogo = componentId === "homeTeamLogo" || componentId === "awayTeamLogo";
-          const backgroundSurface = surface.background;
           const previousImageAsset =
             teamSwitchActive && teamSwitchPayload
               ? resolveImageAsset(componentId, component, theme, teamSwitchPayload.from, assets)
@@ -1120,8 +1136,7 @@ export function OverlayRenderer({
               onClick={() => onSelectComponent?.(componentId)}
             >
               <span className="component-body">
-                <span className="component-surface" style={backgroundSurface} />
-                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay ?? undefined} /> : null}
+                <SurfaceLayers surface={surface} />
                 {teamSwitchActive && isTeamLogo && teamSwitchPayload ? (
                   <>
                     <span
@@ -1279,8 +1294,7 @@ export function OverlayRenderer({
               </span>
             ) : null}
             <span className="component-body" hidden={ghost}>
-              <span className="component-surface" style={surface.background} />
-              {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+              <SurfaceLayers surface={surface} />
               {!showContent ? null : teamSwitchActive && teamSwitchPayload ? (
                 <>
                   <span
@@ -1378,8 +1392,7 @@ export function OverlayRenderer({
               onClick={() => onSelectComponent?.(component.id)}
             >
               <span className="component-body">
-                <span className="component-surface" style={surface.background} />
-                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+                <SurfaceLayers surface={surface} />
                 <span
                   className="component-content image-content"
                   style={{ padding: resolveComponentPadding(component), ...resolveComponentOffset(component), filter: imageEffectFilter(component.imageEffects, false) }}
@@ -1436,8 +1449,7 @@ export function OverlayRenderer({
                   transform: component.skewX ? `skewX(${-component.skewX}deg)` : undefined
                 }}
               >
-                <span className="component-surface" style={surface.background} />
-                {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+                <SurfaceLayers surface={surface} />
               </span>
             </button>
           );
@@ -1472,8 +1484,7 @@ export function OverlayRenderer({
             onClick={() => onSelectComponent?.(component.id)}
           >
             <span className="component-body">
-              <span className="component-surface" style={surface.background} />
-              {surface.overlay ? <span className="component-surface-overlay" style={surface.overlay} /> : null}
+              <SurfaceLayers surface={surface} />
               {valueChange?.previous ? (
                 <span
                   key={`${valueChange.key}:out`}
@@ -1519,12 +1530,7 @@ export function OverlayRenderer({
               animation: eventCardAnimation(overlayGeneral.motion, reduceMotion)
             }}
           >
-            <span className="component-surface" style={winnerLabel ? winnerSurface.background : activeConcedeSurface?.background} />
-            {winnerLabel ? (
-              winnerSurface.overlay ? <span className="component-surface-overlay" style={winnerSurface.overlay} /> : null
-            ) : activeConcedeSurface?.overlay ? (
-              <span className="component-surface-overlay" style={activeConcedeSurface.overlay} />
-            ) : null}
+            {winnerLabel ? <SurfaceLayers surface={winnerSurface} /> : activeConcedeSurface ? <SurfaceLayers surface={activeConcedeSurface} /> : null}
             <span
               className="component-content text-content"
               style={{

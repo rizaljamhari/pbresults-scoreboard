@@ -48,6 +48,7 @@ const FIELD_LABELS: Record<string, string> = {
   backgroundImagePosition: "Background anchor",
   backgroundOverlayColor: "Tint",
   backgroundOverlayOpacity: "Tint strength",
+  backgroundOpacity: "Background opacity",
   fill: "Fill",
   tintFill: "Tint",
   paddingX: "Padding",

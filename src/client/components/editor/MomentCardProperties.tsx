@@ -5,7 +5,7 @@ import { FillInput } from "./FillInput";
 import { StylePicker } from "./DesignSystemProperties";
 import { surfaceStyleFields, textStyleFields } from "../../../shared/design";
 import { ShadowInput, TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, PercentSlider, Segmented, SelectInput, SwitchRow, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 export type MomentKind = "timeout" | "gameFinished";
 
@@ -235,6 +235,11 @@ export function MomentCardProperties({
           onColor={(value) => set((draft) => (draft.backgroundColor = value))}
           {...bindColor("backgroundColor")}
           onFill={(next) => set((draft) => Object.assign(draft.fill, next))}
+        />
+        <PercentSlider
+          label="Background opacity"
+          value={Math.round(card.backgroundOpacity * 100)}
+          onChange={(value) => set((draft) => (draft.backgroundOpacity = value / 100))}
         />
         <Field label="Background image">
           <div className="te-asset-row">

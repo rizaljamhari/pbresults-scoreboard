@@ -47,6 +47,15 @@ describe("finished-match overlays", () => {
     }
   );
 
+  it("fades the moment card's and the winner card's backgrounds on their own", () => {
+    const markup = renderFinishedMatch(true, true, [2, 1], (theme) => {
+      theme.momentOverlays.gameFinished.backgroundOpacity = 0.3;
+      theme.teamEventOverlay.winner.backgroundOpacity = 0.6;
+    });
+    expect(markup).toContain('<span class="component-surface-group" style="opacity:0.3">');
+    expect(markup).toContain('<span class="component-surface-group" style="opacity:0.6">');
+  });
+
   it("does not show a winner for a tied completed match", () => {
     const markup = renderFinishedMatch(true, true, [1, 1]);
 

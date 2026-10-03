@@ -86,6 +86,20 @@ describe("fills in the overlay", () => {
   });
 });
 
+describe("background opacity", () => {
+  it("fades the background and tint together, leaving the piece itself opaque", () => {
+    const markup = render((theme) => {
+      theme.freeComponents.push(shape({ backgroundOpacity: 0.4, backgroundOverlayOpacity: 0.5 }));
+    });
+    expect(markup).toContain('<span class="component-surface-group" style="opacity:0.4"><span class="component-surface" style="background-color:#123456');
+    expect(markup).toContain('class="component-surface-overlay"');
+  });
+
+  it("adds no opacity at full strength", () => {
+    expect(render((theme) => theme.freeComponents.push(shape()))).toContain('<span class="component-surface-group"><span class="component-surface"');
+  });
+});
+
 describe("shape layer", () => {
   it("draws a slanted pill with its fill inside the slot", () => {
     const markup = render((theme) => {
