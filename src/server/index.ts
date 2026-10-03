@@ -25,6 +25,7 @@ import {
   exportThemePackage,
   getOperationsState,
   getOperatorTextState,
+  getScoreboardState,
   getSettings,
   getTheme,
   getTeamRecord,
@@ -38,6 +39,7 @@ import {
   rememberTeamLiveMatchName,
   saveTeamRecord,
   saveOperatorTextOverride,
+  setScoreboardVisible,
   saveTeamResolutionOverride,
   saveTheme,
   updateSettings,
@@ -61,6 +63,7 @@ import { OverlayRegistry } from "./overlayRegistry.js";
 import { LiveGate } from "./liveGate.js";
 import { RehearsalRefusedError, RehearsalRunner } from "./rehearsalRunner.js";
 import { behindThreshold, overlayReportSchema } from "../shared/overlayHealth.js";
+import { scoreboardVisibilityRequestSchema } from "../shared/scoreboard.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
 
@@ -298,7 +301,8 @@ registerAppEventRoutes(app, {
   getOperatorTextState: () => operatorTextRuntime.getState(),
   overlays: overlayRegistry,
   getOverlayState: () => overlayRegistry.getState(),
-  getRehearsalStatus: () => rehearsal.getStatus()
+  getRehearsalStatus: () => rehearsal.getStatus(),
+  getScoreboardState: () => getScoreboardState()
 });
 
 // Rehearsal: test cases on the real overlay before a show. Refused during a match; never saves anything.
@@ -354,6 +358,13 @@ app.post("/api/overlay/report", { bodyLimit: 4 * 1024 }, async (request, reply) 
   return reply.code(204).send();
 });
 app.get("/api/overlay/clients", async () => overlayRegistry.getState());
+app.get("/api/scoreboard", async () => getScoreboardState());
+app.put("/api/scoreboard", async (request) => {
+  const { visible } = scoreboardVisibilityRequestSchema.parse(request.body);
+  const state = setScoreboardVisible(visible);
+  appEventHub.publishScoreboardState(state);
+  return state;
+});
 app.post("/api/overlay/entrance", async () => {
   const token = Date.now();
   appEventHub.publishEntranceCue(token);

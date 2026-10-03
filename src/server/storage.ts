@@ -47,6 +47,7 @@ import { listExplicitTeamMatchNames, matchTeamName, normalizeTeamName } from "..
 import { listOperatorTextComponents } from "../shared/themeComponents.js";
 import { analyzeVisibleContent, removeImageBackground } from "./imageProcessing.js";
 import type { BackupPreview } from "../shared/backup.js";
+import { defaultScoreboardState, type ScoreboardState } from "../shared/scoreboard.js";
 import { runtimeBuild } from "./buildInfo.js";
 import { dataDir, isPathInside, uploadsDir } from "./runtimePaths.js";
 const settingsPath = path.join(dataDir, "settings.json");
@@ -59,7 +60,8 @@ const preferredBuiltinThemeId = "theme-7ad8adb8-e017-4853-93b1-fb608a750253";
 const allowedBuiltinThemeIds = new Set([preferredBuiltinThemeId, "builtin-minimal-strip"]);
 const defaultOperationsState: OperationsState = {
   overrides: [],
-  operatorTextOverrides: []
+  operatorTextOverrides: [],
+  scoreboard: { ...defaultScoreboardState }
 };
 
 type StoredAssetRecord = StoredAsset & { filePath: string };
@@ -534,6 +536,23 @@ export function getOperationsState(): OperationsState {
 
 function writeOperationsState(next: OperationsState) {
   writeJson(operationsPath, operationsStateSchema.parse(next));
+}
+
+export function getScoreboardState(): ScoreboardState {
+  return getOperationsState().scoreboard;
+}
+
+/** Shows or hides the scoreboard. Remembered across restarts, so a hidden scoreboard never comes back on its own. */
+export function setScoreboardVisible(visible: boolean): ScoreboardState {
+  const operations = getOperationsState();
+  const scoreboard: ScoreboardState = {
+    visible,
+    // Always moves forward, even if the clock steps back, so overlays never ignore a newer change.
+    token: Math.max(Date.now(), operations.scoreboard.token + 1),
+    changedAt: new Date().toISOString()
+  };
+  writeOperationsState({ ...operations, scoreboard });
+  return scoreboard;
 }
 
 export function getOperatorTextState(): OperatorTextState {

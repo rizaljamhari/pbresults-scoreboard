@@ -239,6 +239,87 @@ details[open]:not(.editor-section-card) > summary::after {
   pointer-events: none;
 }
 
+/* Show / Hide (scoreboardTransition.tsx). The stage holds every piece and card; it only clips while the band sweeps. */
+.scoreboard-stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* Contents wait for the band, build in once it has passed, and fade before it comes back. */
+.scoreboard-stage[data-phase="entering"] [data-build] .component-content,
+.scoreboard-stage[data-phase="leaving-wipe"] [data-build] .component-content {
+  opacity: 0;
+}
+
+.scoreboard-stage[data-phase="building"] [data-build] .component-content {
+  animation: var(--build-animation, none);
+}
+
+.scoreboard-stage[data-phase="leaving-contents"] [data-build] .component-content {
+  animation: motion-fade 200ms ease-in reverse both;
+}
+
+/* No moment or event card on an empty screen, or over the band. */
+.scoreboard-stage:not([data-phase="shown"]):not([data-phase="building"]) :is([data-moment], .concede-label) {
+  display: none;
+}
+
+.transition-band {
+  position: absolute;
+  left: 0;
+  z-index: 10000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.transition-band-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* Each layer sits at the band's left edge; the sweep moves it with a transform. */
+.transition-band-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+}
+
+.transition-band-image {
+  object-fit: cover;
+}
+
+.transition-band-text {
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  padding: 0 0.3em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.transition-band-logo {
+  flex: none;
+  object-fit: contain;
+}
+
+/* The block that uncovers the scoreboard: two slanted strokes on the edge colour. */
+.transition-band-edge {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 18%;
+  overflow: hidden;
+}
+
+.transition-band-edge i {
+  width: 14%;
+  transform: skewX(-20deg);
+}
+
 .component-surface-group,
 .component-surface,
 .component-surface-overlay {
@@ -714,6 +795,41 @@ details[open]:not(.editor-section-card) > summary::after {
   100% {
     opacity: 0;
     transform: scale(0.88);
+  }
+}
+
+@keyframes motion-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-pop-in-loop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  16%,
+  84% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
   }
 }
 

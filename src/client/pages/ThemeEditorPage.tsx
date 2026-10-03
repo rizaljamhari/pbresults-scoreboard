@@ -490,6 +490,7 @@ export function ThemeEditorPage() {
   const [replayChange, setReplayChange] = useState<{ id: string; token: number } | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [entranceToken, setEntranceToken] = useState<number | null>(null);
+  const [previewScoreboardVisible, setPreviewScoreboardVisible] = useState(true);
   const previewTimeoutTimerRef = useRef<number | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
   const [previewFinished, setPreviewFinished] = useState(false);
@@ -2089,6 +2090,7 @@ export function ThemeEditorPage() {
         previewTimeout={previewMode === "timeout" ? previewTimeout : null}
         replayChange={replayChange}
         entranceToken={entranceToken}
+        scoreboardVisible={previewScoreboardVisible}
         overlayKey={overlayKey}
         selectAll={selectAllMode}
         zoom={canvasZoom}
@@ -2594,6 +2596,8 @@ export function ThemeEditorPage() {
                 onOpenEventOverlay={() => applyPreviewMode("towel")}
                 onOpenPreviewData={() => setPropsView("preview")}
                 onPlayEntrance={() => setEntranceToken(Date.now())}
+                previewScoreboardVisible={previewScoreboardVisible}
+                onPreviewScoreboard={setPreviewScoreboardVisible}
                 onSelectPieces={(ids) => selectComponents(ids)}
                 assets={assets.data ?? []}
                 onUploadFont={(file) => void uploadFont(file)}

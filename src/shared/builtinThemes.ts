@@ -1,4 +1,4 @@
-import { defaultDesign, defaultEventCardMotion, defaultFrameLook, defaultImageEffects, defaultLiveText, defaultPieceMotion, defaultSurfaceFill, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, type ThemeDefinition } from "./theme.js";
+import { defaultDesign, defaultEventCardMotion, defaultFrameLook, defaultImageEffects, defaultLiveText, defaultPieceMotion, defaultSurfaceFill, defaultTeamSwitchMotion, defaultTextEffects, defaultTextFit, transitionSchema, type ThemeDefinition } from "./theme.js";
 
 /** A moment card that follows the centre line; the rect is its own placement if switched to Free. */
 function momentCard(x: number, y: number, width: number, height: number) {
@@ -229,6 +229,7 @@ export const builtinThemes: ThemeDefinition[] = [
     "tokens": { "colors": [] },
     "styles": { "text": [], "surface": [] },
     "motion": { "teamSwitch": { ...defaultTeamSwitchMotion }, "enterStaggerMs": 0, "enterOrder": "left-to-right" },
+    "transition": transitionSchema.parse({}),
     "canvas": {
       "width": 1920,
       "height": 1080,
@@ -682,6 +683,7 @@ export const builtinThemes: ThemeDefinition[] = [
     "tokens": { "colors": [] },
     "styles": { "text": [], "surface": [] },
     "motion": { "teamSwitch": { ...defaultTeamSwitchMotion }, "enterStaggerMs": 0, "enterOrder": "left-to-right" },
+    "transition": transitionSchema.parse({}),
     "canvas": {
       "width": 1920,
       "height": 1080,

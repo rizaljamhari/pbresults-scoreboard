@@ -6,6 +6,7 @@ import { themeSwatches } from "./PieceProperties";
 import type { StoredAsset, ThemeDefinition } from "../../../shared/theme";
 import { FontsProperties } from "./FontsProperties";
 import { VersionsProperties } from "./VersionsProperties";
+import { TransitionProperties } from "./TransitionProperties";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
 /** What Properties shows when nothing is selected: the theme and its canvas. */
@@ -19,6 +20,8 @@ export function ThemeProperties({
   onOpenEventOverlay,
   onOpenPreviewData,
   onPlayEntrance,
+  previewScoreboardVisible,
+  onPreviewScoreboard,
   onSelectPieces,
   assets,
   onUploadFont,
@@ -35,6 +38,9 @@ export function ThemeProperties({
   onOpenPreviewData: () => void;
   /** Plays every piece's entrance on the canvas, built in as on air. */
   onPlayEntrance: () => void;
+  /** Whether the canvas shows the scoreboard, and plays Show / Hide on it. */
+  previewScoreboardVisible: boolean;
+  onPreviewScoreboard: (visible: boolean) => void;
   /** Selects these pieces on the canvas (from a colour's or style's "Select"). */
   onSelectPieces: (pieceIds: string[]) => void;
   assets: StoredAsset[];
@@ -127,6 +133,15 @@ export function ThemeProperties({
           Play entrance
         </button>
       </PanelSection>
+
+      <TransitionProperties
+        theme={theme}
+        patchTheme={patchTheme}
+        assets={assets}
+        swatches={themeSwatches(theme)}
+        previewVisible={previewScoreboardVisible}
+        onPreview={onPreviewScoreboard}
+      />
 
       <PanelSection title="Team layout" defaultOpen={false}>
         <Field label="Copy everything to the other side" hint="Layout, style, visibility and images. The copy is independent afterwards.">

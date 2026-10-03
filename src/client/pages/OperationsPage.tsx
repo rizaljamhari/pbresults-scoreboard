@@ -11,6 +11,8 @@ import {
   CircleCheck,
   Copy,
   Database,
+  Eye,
+  EyeOff,
   ImageOff,
   Info,
   Layers,
@@ -28,7 +30,7 @@ import { formatClock } from "../../shared/normalize";
 import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
 import type { AppSettings, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ApiError, api } from "../api";
-import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRehearsal, useRuntimeInfo, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRehearsal, useRuntimeInfo, useScoreboardState, useSettings, useTeams, useThemes } from "../hooks";
 import { feedShowsRunningMatch } from "../../shared/rehearsal";
 import { RehearsalPanel } from "../components/RehearsalPanel";
 import { formatAge as formatOverlayAge, summarizeOverlays, type OverlayClient, type OverlayState } from "../../shared/overlayHealth";
@@ -951,6 +953,9 @@ export function OperationsPage() {
   const [togglingMotion, setTogglingMotion] = useState(false);
   const [playingEntrance, setPlayingEntrance] = useState(false);
   const entranceToken = useEntranceCueToken();
+  const scoreboard = useScoreboardState();
+  const scoreboardVisible = scoreboard.data?.visible ?? true;
+  const [togglingScoreboard, setTogglingScoreboard] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [resolvingSide, setResolvingSide] = useState<"left" | "right" | null>(null);
   const [clearingSide, setClearingSide] = useState<"left" | "right" | null>(null);
@@ -1150,6 +1155,34 @@ export function OperationsPage() {
       setTogglingPoll(false);
     }
   }
+
+  async function handleSetScoreboardVisible(visible: boolean) {
+    setTogglingScoreboard(true);
+    try {
+      scoreboard.setData?.(await api.setScoreboardVisible(visible));
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : visible ? "Failed to show the scoreboard." : "Failed to hide the scoreboard." });
+    } finally {
+      setTogglingScoreboard(false);
+    }
+  }
+
+  // H shows or hides the scoreboard, so the operator can cue it while watching the program feed.
+  const toggleScoreboardRef = useRef(() => undefined as void);
+  toggleScoreboardRef.current = () => {
+    if (!togglingScoreboard && scoreboard.data) void handleSetScoreboardVisible(!scoreboard.data.visible);
+  };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "h" || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      event.preventDefault();
+      toggleScoreboardRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function handlePlayEntrance() {
     setPlayingEntrance(true);
@@ -1426,17 +1459,27 @@ export function OperationsPage() {
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
         ) : null}
-        {themeHasEntrance ? (
+        {themeHasEntrance && scoreboardVisible ? (
           <Button
             variant="ghost"
             disabled={playingEntrance || settings.data.reduceMotion}
-            title={settings.data.reduceMotion ? "Motion is reduced, so pieces appear without their entrance" : "Play the scoreboard's entrance on the live overlay, e.g. as you cut to it"}
+            title={settings.data.reduceMotion ? "Motion is reduced, so pieces appear without their entrance" : "Play each piece's entrance again on the live overlay"}
             onClick={() => void handlePlayEntrance()}
           >
             <Sparkles aria-hidden />
-            <span className="ad-btn-label">Play entrance</span>
+            <span className="ad-btn-label">Replay entrance</span>
           </Button>
         ) : null}
+        <Button
+          variant={scoreboardVisible ? "default" : "primary"}
+          aria-pressed={!scoreboardVisible}
+          disabled={togglingScoreboard || !scoreboard.data}
+          title={scoreboardVisible ? "Take the scoreboard off air with its transition (H)" : "Bring the scoreboard on air with its transition (H)"}
+          onClick={() => void handleSetScoreboardVisible(!scoreboardVisible)}
+        >
+          {scoreboardVisible ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+          {scoreboardVisible ? "Hide scoreboard" : "Show scoreboard"}
+        </Button>
         <Button
           variant={settings.data.reduceMotion ? "default" : "ghost"}
           aria-pressed={settings.data.reduceMotion}
@@ -1474,6 +1517,7 @@ export function OperationsPage() {
             operatorTextValues={stripOperatorText}
             reduceMotion={settings.data.reduceMotion}
             entranceToken={entranceToken}
+            scoreboardVisible={scoreboardVisible}
             markers={stripMarkers}
             summary={
               live.data ? (

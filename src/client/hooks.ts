@@ -5,7 +5,7 @@ import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, 
 import type { RuntimeInfo } from "./api";
 import type { UpdateStatus } from "../shared/update";
 import type { AppResourceDomain } from "../shared/appEvents";
-import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEventRehearsalStatus, useAppEvents } from "./appEvents";
+import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEventRehearsalStatus, useAppEventScoreboardState, useAppEvents } from "./appEvents";
 import { ResourceRefreshCoordinator } from "./resourceRefresh";
 
 let resourceRefreshToken = 0;
@@ -272,6 +272,52 @@ export function useOperatorTextState() {
   }, [data]);
 
   return { data, error, setData: appEvents?.updateOperatorTextState };
+}
+
+/** Whether the operator has the scoreboard on air; loaded once, then kept current by the event stream. */
+export function useScoreboardState() {
+  const data = useAppEventScoreboardState();
+  const appEvents = useAppEvents();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+    const repeat = appEvents?.connectionState === "disconnected";
+
+    const load = async () => {
+      controller = new AbortController();
+      try {
+        const next = await api.getScoreboardState(controller.signal);
+        if (active) {
+          appEvents?.updateScoreboardState(next);
+          setError(null);
+        }
+      } catch (err) {
+        if (active && !(err instanceof DOMException && err.name === "AbortError")) {
+          setError(err instanceof Error ? err.message : "Failed to load the scoreboard state");
+        }
+      } finally {
+        controller = null;
+        if (active && repeat) timer = window.setTimeout(() => void load(), 2000);
+      }
+    };
+
+    if (!data || repeat) void load();
+
+    return () => {
+      active = false;
+      controller?.abort();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [appEvents?.connectionState, appEvents?.updateScoreboardState, Boolean(data)]);
+
+  useEffect(() => {
+    if (data) setError(null);
+  }, [data]);
+
+  return { data, error, setData: appEvents?.updateScoreboardState };
 }
 
 type ResourceOptions<T> = {

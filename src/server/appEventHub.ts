@@ -13,6 +13,7 @@ import {
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js";
 import type { OverlayState } from "../shared/overlayHealth.js";
 import type { RehearsalStatus } from "../shared/rehearsal.js";
+import type { ScoreboardState } from "../shared/scoreboard.js";
 
 type AppEventListener = (frame: string) => boolean;
 
@@ -61,7 +62,8 @@ export class AppEventHub {
     liveState?: NormalizedLiveState,
     operatorTextState?: OperatorTextState,
     overlayState?: OverlayState,
-    rehearsal?: RehearsalStatus
+    rehearsal?: RehearsalStatus,
+    scoreboardState?: ScoreboardState
   ): AppEventSnapshot {
     return {
       protocol: 1,
@@ -74,7 +76,8 @@ export class AppEventHub {
       ...(liveState ? { liveState } : {}),
       ...(operatorTextState ? { operatorTextState } : {}),
       ...(overlayState ? { overlayState } : {}),
-      ...(rehearsal ? { rehearsal } : {})
+      ...(rehearsal ? { rehearsal } : {}),
+      ...(scoreboardState ? { scoreboardState } : {})
     };
   }
 
@@ -118,6 +121,10 @@ export class AppEventHub {
   /** Every overlay plays its entrance again (the operator's Play entrance). */
   publishEntranceCue(token: number): AppRealtimeEvent {
     return this.publishRealtime({ type: "overlay.cue", cue: "entrance", token });
+  }
+
+  publishScoreboardState(state: ScoreboardState): AppRealtimeEvent {
+    return this.publishRealtime({ type: "scoreboard.state", state });
   }
 
   hasCapacity(): boolean {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { changeMotionPresetValues, enterOrderValues, motionEasingValues, motionPresetValues, type ChangeMotionSettings, type MotionSettings } from "./motion.js";
 import { defaultFill, fillTypeValues, type FillSettings } from "./fill.js";
 import { randomUuid } from "./randomId.js";
+import { scoreboardStateSchema } from "./scoreboard.js";
 
 /** A surface's solid colour or gradient (see `./fill.ts`); solid by default, so `backgroundColor` keeps working. */
 function fillField(defaults: FillSettings = defaultFill) {
@@ -153,6 +154,56 @@ function motionField(defaults: MotionSettings) {
 export const defaultEventCardMotion: MotionSettings = { preset: "drop-in", durationMs: 2000, easing: "ease-in-out", delayMs: 0 };
 export const defaultCentreLineMotion: MotionSettings = { preset: "fade", durationMs: 250, easing: "ease", delayMs: 0 };
 export const defaultTeamSwitchMotion: MotionSettings = { preset: "scale", durationMs: 600, easing: "snappy", delayMs: 0 };
+
+export const transitionDirectionValues = ["right-to-left", "left-to-right"] as const;
+export const sweepWidthValues = ["full", "scoreboard"] as const;
+export const defaultTransitionContentMotion: MotionSettings = { preset: "fade", durationMs: 220, easing: "ease-out", delayMs: 0 };
+export const defaultTransitionLogoMotion: MotionSettings = { preset: "pop-in", durationMs: 420, easing: "ease-out", delayMs: 120 };
+
+/**
+ * The operator's Show and Hide: a band sweeps across and uncovers the scoreboard's plates behind it, then the
+ * contents build in. Hide plays it backwards. Loading the overlay and Play entrance keep each piece's own entrance.
+ */
+export const transitionSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** The way the band travels on Show. */
+  direction: z.enum(transitionDirectionValues).default("left-to-right"),
+  /**
+   * How far the band travels: across the whole screen, or only across the scoreboard (plus some room each side), so
+   * a source cropped to the scoreboard in vMix or OBS still shows the whole sweep.
+   */
+  sweepWidth: z.enum(sweepWidthValues).default("full"),
+  /** With the sweep on the scoreboard only, extra room each side, as a share of the scoreboard's width. 0 for a tight crop. */
+  sweepRoom: z.number().min(0).max(0.3).default(0.175),
+  /** How long the band takes to cross the screen. */
+  sweepMs: z.number().min(200).max(3000).default(800),
+  /** An image from the library fills the band instead of the colour, logo and text. */
+  bandImageAssetId: z.string().nullable().default(null),
+  /** The colour strip: it fades in from a darker tail and travels at its own pace, overtaking the text. */
+  bandColor: z.string().default("#b3121f"),
+  /** The narrow block at the band's tail that uncovers the scoreboard. */
+  bandEdgeColor: z.string().default("#111111"),
+  bandTextColor: z.string().default("#ffffff"),
+  /** Empty uses the centre line's game text, then the theme name. */
+  bandText: z.string().max(80).default(""),
+  bandFontFamily: fontFamilySchema.default("Oswald"),
+  /** Puts the event logo at the band's leading edge. */
+  bandShowLogo: z.boolean().default(true),
+  /** Scales the band's height around the scoreboard's middle; 1 just covers the scoreboard with a little room. */
+  bandScale: z.number().min(0.5).max(2).default(1),
+  /** A light sideways blur on the band while it moves. */
+  motionBlur: z.boolean().default(true),
+  /** How text and the other contents arrive once the band has passed. */
+  contentMotion: motionField(defaultTransitionContentMotion),
+  /** How logos arrive once the band has passed. */
+  logoMotion: motionField(defaultTransitionLogoMotion),
+  /** Gap between contents as they build in, in the theme's build-in order. */
+  contentGapMs: z.number().min(0).max(1000).default(60),
+  /** The centre line shows the band's text for this long after Show, then its usual content; 0 skips it. */
+  centreLineIntroMs: z.number().min(0).max(10000).default(1500)
+});
+
+export type TransitionSettings = z.infer<typeof transitionSchema>;
 
 /**
  * How a live text piece reacts to its value changing: an animation when it changes (scores, operator text) and a
@@ -852,7 +903,8 @@ const themeObjectSchema = z.object({
       enterStaggerMs: z.number().min(0).max(2000).default(0),
       enterOrder: z.enum(enterOrderValues).default("left-to-right")
     })
-    .default({})
+    .default({}),
+  transition: transitionSchema.default({})
 });
 
 export const themeSchema = z.preprocess(migrateMomentOverlays, themeObjectSchema);
@@ -996,7 +1048,8 @@ export const operationsStateSchema = z.preprocess(
   migrateLegacyOperationsState,
   z.object({
     overrides: z.array(teamResolutionOverrideSchema).default([]),
-    operatorTextOverrides: z.array(operatorTextOverrideSchema).default([])
+    operatorTextOverrides: z.array(operatorTextOverrideSchema).default([]),
+    scoreboard: scoreboardStateSchema.default({})
   })
 );
 

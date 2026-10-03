@@ -21,6 +21,7 @@ import { FitText } from "./FitText";
 import { useThemeFonts } from "./themeFonts";
 import { themeFontFaces } from "../../shared/fonts";
 import { useTimeoutToken } from "./momentTriggers";
+import { TransitionBand, useScoreboardTransition } from "./scoreboardTransition";
 
 type OverlayRendererProps = {
   theme: ThemeDefinition;
@@ -40,6 +41,11 @@ type OverlayRendererProps = {
   replayChange?: { id: string; token: number } | null;
   /** A new value plays every piece's entrance again, built in with the theme's stagger (the operator's Play entrance). */
   entranceToken?: number | null;
+  /**
+   * The operator's Show / Hide. Changing it plays the theme's transition; left out, the scoreboard is always shown.
+   * While hidden, moment and event cards stay hidden too.
+   */
+  scoreboardVisible?: boolean;
 };
 
 type FramedPiece = Pick<ThemeDefinition["components"]["homeName"], "visible" | "opacity" | "enterMotion" | "exitMotion" | "x" | "width" | "zIndex">;
@@ -524,6 +530,66 @@ export function resolveMomentFrame(kind: "timeout" | "gameFinished", theme: Them
   return { following: false, x: card.x, y: card.y, width: card.width, height: card.height, borderRadius: card.borderRadius };
 }
 
+/**
+ * Where the band runs: over the scoreboard's own pieces (not free pieces, so a sponsor line elsewhere on screen
+ * can't stretch it), with 15% room above and below, then scaled by Band size around the scoreboard's middle.
+ * Across, it covers the whole canvas, or with Sweep width on the scoreboard, the scoreboard plus Side room each side.
+ */
+export function transitionBandRect(theme: ThemeDefinition) {
+  const shown = (boxes: Array<{ visible: boolean; x: number; y: number; width: number; height: number }>) => boxes.filter((box) => box.visible);
+  // A theme made only of free pieces still gets a band over them.
+  const builtIn = shown(Object.values(theme.components));
+  const boxes = builtIn.length ? builtIn : shown(theme.freeComponents);
+  const full = { left: 0, width: theme.canvas.width };
+  if (!boxes.length) {
+    const height = Math.round(theme.canvas.height * 0.1 * theme.transition.bandScale);
+    return { top: Math.round((theme.canvas.height - height) / 2), height, ...full };
+  }
+  const top = Math.min(...boxes.map((box) => box.y));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const room = Math.max(6, Math.round((bottom - top) * 0.15));
+  const height = Math.round((bottom - top + room * 2) * theme.transition.bandScale);
+  const across = { top: Math.round((top + bottom) / 2 - height / 2), height };
+  if (theme.transition.sweepWidth !== "scoreboard") {
+    return { ...across, ...full };
+  }
+  const xBoxes = boxes as Array<{ x: number; width: number }>;
+  const leftmost = Math.min(...xBoxes.map((box) => box.x));
+  const rightmost = Math.max(...xBoxes.map((box) => box.x + box.width));
+  const side = Math.round((rightmost - leftmost) * theme.transition.sweepRoom);
+  const left = Math.max(0, leftmost - side);
+  const right = Math.min(theme.canvas.width, rightmost + side);
+  return { ...across, left, width: right - left };
+}
+
+/**
+ * How the contents build in on Show, once the band has passed: every shown piece except plain shapes (whose box
+ * comes in with the band), in the theme's build-in order. Logos use the logo motion, the rest the content motion.
+ */
+export function scoreboardBuildPlan(theme: ThemeDefinition) {
+  const transition = theme.transition;
+  const pieces: Array<{ id: string; component: FramedPiece & { kind?: string; y?: number; height?: number } }> = [
+    ...(Object.entries(theme.components) as Array<[string, FramedPiece]>),
+    ...theme.freeComponents.map((component) => [component.id, component] as [string, FramedPiece])
+  ].map(([id, component]) => ({ id, component }));
+  const builders = pieces.filter(({ component }) => component.visible && component.kind !== "shape");
+  const order = enterSequence(
+    builders.map(({ id, component }) => ({ id, x: component.x, width: component.width, zIndex: component.zIndex })),
+    theme.motion.enterOrder,
+    theme.canvas.width
+  );
+  const plan: Record<string, { kind: "logo" | "content"; animation: string | undefined }> = {};
+  let buildMs = 0;
+  for (const { id, component } of builders) {
+    const kind = component.kind === "image" ? "logo" : "content";
+    const motion = kind === "logo" ? transition.logoMotion : transition.contentMotion;
+    const delayMs = motion.delayMs + (order[id] ?? 0) * transition.contentGapMs;
+    plan[id] = { kind, animation: motionEnter({ ...motion, delayMs }) };
+    buildMs = Math.max(buildMs, motion.preset === "none" ? 0 : delayMs + motion.durationMs);
+  }
+  return { plan, buildMs };
+}
+
 export function OverlayRenderer({
   theme,
   live,
@@ -536,7 +602,8 @@ export function OverlayRenderer({
   previewTimeout = null,
   reduceMotion = false,
   replayChange = null,
-  entranceToken = null
+  entranceToken = null,
+  scoreboardVisible = true
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const fontFaces = useMemo(() => themeFontFaces(theme, assets), [theme.fonts, assets]);
@@ -729,7 +796,14 @@ export function OverlayRenderer({
 
   // Remove timeout logic: activeConcede is now persistent while teamEvent is active
 
-  const centerSecondaryPresentation = useMemo(() => resolveCenterSecondaryPresentation(theme, live), [theme, live]);
+  // After Show, the centre line carries the band's text for a moment before its usual content.
+  const [centreLineIntro, setCentreLineIntro] = useState(false);
+  const bandText = (theme.transition.bandText.trim() || theme.centerSecondary.gameText.trim() || theme.name).toUpperCase();
+  const centerSecondaryPresentation = useMemo(() => {
+    const usual = resolveCenterSecondaryPresentation(theme, live);
+    // A centre line the theme hides stays hidden; the intro only borrows one that is showing.
+    return centreLineIntro && usual.variant !== "hidden" ? { content: bandText, variant: "staticText" as const } : usual;
+  }, [theme, live, centreLineIntro, bandText]);
 
   // Values that animate when they change in place: scores and custom text with a change motion.
   const changeWatch = useMemo(() => {
@@ -840,16 +914,75 @@ export function OverlayRenderer({
     return () => timers.forEach((timer) => clearTimeout(timer));
   }, []);
 
+  function replayEntrances() {
+    setExitingPieces({});
+    setPieceRuns((current) =>
+      Object.fromEntries(framedPieces.map(({ id }) => [id, { run: (current[id]?.run ?? 0) + 1, staggered: true }]))
+    );
+  }
+
   useLayoutEffect(() => {
     if (entranceToken === previousEntranceTokenRef.current) {
       return;
     }
     previousEntranceTokenRef.current = entranceToken;
-    setExitingPieces({});
-    setPieceRuns((current) =>
-      Object.fromEntries(framedPieces.map(({ id }) => [id, { run: (current[id]?.run ?? 0) + 1, staggered: true }]))
-    );
+    replayEntrances();
   }, [entranceToken, framedPieces]);
+
+  // Show / Hide.
+  const transition = theme.transition;
+  const buildPlan = useMemo(() => scoreboardBuildPlan(theme), [theme]);
+  const plainExitMs = useMemo(
+    () => Math.max(0, ...framedPieces.filter(({ component }) => component.visible).map(({ component }) => (motionExit(component.exitMotion) ? motionTotalMs(component.exitMotion) : 0))),
+    [framedPieces]
+  );
+  const bandRect = useMemo(() => transitionBandRect(theme), [theme]);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  const { phase: scoreboardPhase, plainShowRun } = useScoreboardTransition({
+    visible: scoreboardVisible,
+    settings: transition,
+    reduceMotion,
+    buildMs: buildPlan.buildMs,
+    plainExitMs,
+    canvasWidth: theme.canvas.width,
+    bandArea: { left: bandRect.left, width: bandRect.width },
+    stageRef,
+    bandRef
+  });
+  // A ref, not effect cleanup: settling from "building" into "shown" must not cut the intro short.
+  const centreLineIntroTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const stop = () => {
+      if (centreLineIntroTimerRef.current !== null) {
+        clearTimeout(centreLineIntroTimerRef.current);
+        centreLineIntroTimerRef.current = null;
+      }
+    };
+    if (scoreboardPhase === "building" && transition.centreLineIntroMs > 0) {
+      stop();
+      setCentreLineIntro(true);
+      centreLineIntroTimerRef.current = window.setTimeout(() => {
+        centreLineIntroTimerRef.current = null;
+        setCentreLineIntro(false);
+      }, transition.centreLineIntroMs);
+    } else if (scoreboardPhase === "leaving-contents" || scoreboardPhase === "hidden") {
+      stop();
+      setCentreLineIntro(false);
+    }
+  }, [scoreboardPhase]);
+  useEffect(
+    () => () => {
+      if (centreLineIntroTimerRef.current !== null) clearTimeout(centreLineIntroTimerRef.current);
+    },
+    []
+  );
+  const previousPlainShowRunRef = useRef(plainShowRun);
+  useLayoutEffect(() => {
+    if (plainShowRun === previousPlainShowRunRef.current) return;
+    previousPlainShowRunRef.current = plainShowRun;
+    replayEntrances();
+  }, [plainShowRun]);
 
   const visibilityKey = framedPieces.map(({ id, component }) => `${id}:${component.visible ? 1 : 0}`).join(",");
   useLayoutEffect(() => {
@@ -886,23 +1019,35 @@ export function OverlayRenderer({
    * The piece's entrance or exit: the animation, a key that restarts it, and whether it is still leaving (shown
    * although hidden). While it animates, its own opacity moves to a filter so the keyframes' opacity doesn't override it.
    */
-  function slotMotion(id: string, component: FramedPiece): { key: string; style: CSSProperties; exiting: boolean } {
+  function slotMotion(
+    id: string,
+    component: FramedPiece
+  ): { key: string; style: CSSProperties; exiting: boolean; attrs: { "data-build"?: "logo" | "content" } } {
     const run = pieceRuns[id] ?? { run: 0, staggered: true };
     const key = `${id}:${run.run}`;
+    const build = transition.enabled && !reduceMotion ? buildPlan.plan[id] : undefined;
+    const attrs = build ? { "data-build": build.kind } : {};
+    // Only while Show runs, so a piece's style at rest is exactly what it was before Show / Hide existed.
+    const building = scoreboardPhase === "entering" || scoreboardPhase === "building";
+    const buildStyle = (building && build?.animation ? { "--build-animation": build.animation } : {}) as CSSProperties;
+    if (scoreboardPhase === "leaving-plain") {
+      const animation = motionExit(component.exitMotion);
+      return { key, style: animation ? { animation } : { visibility: "hidden" }, exiting: false, attrs };
+    }
     if (reduceMotion || (component.enterMotion.preset === "none" && component.exitMotion.preset === "none")) {
-      return { key, style: {}, exiting: false };
+      return { key, style: buildStyle, exiting: false, attrs };
     }
     const exiting = Boolean(exitingPieces[id]);
     const stagger = run.staggered ? (enterIndex[id] ?? 0) * theme.motion.enterStaggerMs : 0;
     const animation = exiting
       ? motionExit(component.exitMotion)
       : motionEnter({ ...component.enterMotion, delayMs: component.enterMotion.delayMs + stagger });
-    const style: CSSProperties = animation ? { animation } : {};
+    const style: CSSProperties = animation ? { ...buildStyle, animation } : { ...buildStyle };
     if (component.opacity < 1) {
       style.opacity = 1;
       style.filter = `opacity(${component.opacity})`;
     }
-    return { key, style, exiting };
+    return { key, style, exiting, attrs };
   }
 
   // The exit timer lives in a ref: live data re-renders far more often than the exit lasts, and an effect
@@ -1094,6 +1239,13 @@ export function OverlayRenderer({
     >
       {editable && theme.canvas.safeArea ? <div className="safe-area" /> : null}
 
+      <div
+        ref={stageRef}
+        className="scoreboard-stage"
+        data-phase={scoreboardPhase}
+        style={scoreboardPhase === "hidden" ? { visibility: "hidden" } : undefined}
+      >
+
       {(
         Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>
       ).map(([componentId, component]) => {
@@ -1134,6 +1286,7 @@ export function OverlayRenderer({
               className={commonClass}
               style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(componentId)}
+              {...motion.attrs}
             >
               <span className="component-body">
                 <SurfaceLayers surface={surface} />
@@ -1287,6 +1440,7 @@ export function OverlayRenderer({
             className={ghost ? `${commonClass} component-slot--ghost` : commonClass}
             style={{ ...frameStyles(component), ...(ghost ? {} : motion.style), display: visible || ghost || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(componentId)}
+            {...motion.attrs}
           >
             {ghost ? (
               <span className="component-ghost-label" style={{ fontSize: Math.max(12, Math.min(28, Math.round(component.height * 0.42))) }}>
@@ -1390,6 +1544,7 @@ export function OverlayRenderer({
               className={commonClass}
               style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(component.id)}
+              {...motion.attrs}
             >
               <span className="component-body">
                 <SurfaceLayers surface={surface} />
@@ -1437,6 +1592,7 @@ export function OverlayRenderer({
                 display: component.visible || motion.exiting ? "block" : "none"
               }}
               onClick={() => onSelectComponent?.(component.id)}
+              {...motion.attrs}
             >
               <span
                 className="shape-body"
@@ -1482,6 +1638,7 @@ export function OverlayRenderer({
             className={commonClass}
             style={{ ...frameStyles(component), ...motion.style, display: component.visible || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(component.id)}
+            {...motion.attrs}
           >
             <span className="component-body">
               <SurfaceLayers surface={surface} />
@@ -1554,6 +1711,22 @@ export function OverlayRenderer({
             </span>
           </div>
         </div>
+      ) : null}
+      </div>
+
+      {transition.enabled && !reduceMotion ? (
+        <TransitionBand
+          bandRef={bandRef}
+          settings={transition}
+          active={scoreboardPhase === "entering" || scoreboardPhase === "leaving-wipe"}
+          top={bandRect.top}
+          height={bandRect.height}
+          left={bandRect.left}
+          width={bandRect.width}
+          text={bandText}
+          logoUrl={transition.bandShowLogo ? assets.find((asset) => asset.id === theme.components.eventLogo.assetId)?.url ?? null : null}
+          imageUrl={transition.bandImageAssetId ? assets.find((asset) => asset.id === transition.bandImageAssetId)?.url ?? null : null}
+        />
       ) : null}
     </div>
   );

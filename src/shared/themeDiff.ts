@@ -16,6 +16,22 @@ export type ThemeChange = {
   kind: "changed" | "added" | "removed";
 };
 
+const TRANSITION_LABELS: Record<string, string> = {
+  enabled: "Band sweep",
+  direction: "Direction",
+  sweepMs: "Sweep time",
+  bandImageAssetId: "Band image",
+  bandColor: "Strip colour",
+  bandEdgeColor: "Edge colour",
+  bandTextColor: "Band text colour",
+  bandText: "Band text",
+  bandFontFamily: "Band font",
+  bandShowLogo: "Event logo on the band",
+  motionBlur: "Motion blur",
+  contentGapMs: "Gap between contents",
+  centreLineIntroMs: "Centre line intro"
+};
+
 const FIELD_LABELS: Record<string, string> = {
   fontFamily: "Font",
   fontSize: "Font size",
@@ -257,6 +273,30 @@ export function diffThemes(before: ThemeDefinition, after: ThemeDefinition, piec
   if (before.motion.enterStaggerMs !== after.motion.enterStaggerMs) motionDetails.push(describe("Build-in gap", before.motion.enterStaggerMs, after.motion.enterStaggerMs));
   if (before.motion.enterOrder !== after.motion.enterOrder) motionDetails.push(describe("Build-in order", before.motion.enterOrder, after.motion.enterOrder));
   push({ key: "motion", pieceId: null, subject: "Motion", details: motionDetails, kind: "changed" });
+
+  const transitionBefore = record(before.transition);
+  const transitionAfter = record(after.transition);
+  push({
+    key: "transition",
+    pieceId: null,
+    subject: "Show and hide",
+    details: objectDetails(transitionBefore, transitionAfter, (field) => {
+      if (field === "contentMotion" || field === "logoMotion") return field === "logoMotion" ? "Logos motion changed" : "Contents motion changed";
+      if (field === "direction") {
+        const way = (value: unknown) => (value === "left-to-right" ? "Left to right" : "Right to left");
+        return `Direction: ${way(transitionBefore.direction)} → ${way(transitionAfter.direction)}`;
+      }
+      if (field === "sweepWidth") {
+        const width = (value: unknown) => (value === "scoreboard" ? "Scoreboard only" : "Full screen");
+        return `Sweep width: ${width(transitionBefore.sweepWidth)} → ${width(transitionAfter.sweepWidth)}`;
+      }
+      if (field === "sweepRoom") return `Side room: ${Math.round(Number(transitionBefore.sweepRoom) * 1000) / 10}% → ${Math.round(Number(transitionAfter.sweepRoom) * 1000) / 10}%`;
+      if (field === "bandScale") return `Band size: ${Math.round(Number(transitionBefore.bandScale) * 100)}% → ${Math.round(Number(transitionAfter.bandScale) * 100)}%`;
+      const label = TRANSITION_LABELS[field];
+      return label ? describe(label, transitionBefore[field], transitionAfter[field]) : null;
+    }),
+    kind: "changed"
+  });
 
   for (const change of [
     listChanges(before.tokens.colors, after.tokens.colors, "Theme colours", "tokens"),

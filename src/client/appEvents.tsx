@@ -26,6 +26,7 @@ import {
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme";
 import type { OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
+import type { ScoreboardState } from "../shared/scoreboard";
 import { eventStreamUrl } from "./overlayClient";
 
 export type AppEventConnectionState = "connecting" | "open" | "disconnected";
@@ -56,6 +57,9 @@ type AppEventsContextValue = {
   getRehearsalStatus(): RehearsalStatus | null;
   updateRehearsalStatus(state: RehearsalStatus): void;
   subscribeEntranceCue(listener: (token: number) => void): () => void;
+  subscribeScoreboard(listener: StoreListener): () => void;
+  getScoreboardState(): ScoreboardState | null;
+  updateScoreboardState(state: ScoreboardState): void;
 };
 
 const AppEventsContext = createContext<AppEventsContextValue | null>(null);
@@ -88,6 +92,10 @@ function getNullRehearsalStatus() {
   return null;
 }
 
+function getNullScoreboardState() {
+  return null;
+}
+
 export function AppEventProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<AppEventConnectionState>("connecting");
   const listenersRef = useRef(new Map<AppResourceDomain, Set<ResourceInvalidationListener>>());
@@ -100,6 +108,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   const rehearsalListenersRef = useRef(new Set<StoreListener>());
   const rehearsalStatusRef = useRef<RehearsalStatus | null>(null);
   const entranceCueListenersRef = useRef(new Set<(token: number) => void>());
+  const scoreboardListenersRef = useRef(new Set<StoreListener>());
+  const scoreboardStateRef = useRef<ScoreboardState | null>(null);
   const instanceIdRef = useRef<string | null>(null);
   const revisionsRef = useRef<AppResourceRevisions | null>(null);
   const runtimeRef = useRef<RuntimeIdentity | null>(null);
@@ -162,6 +172,18 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   }, []);
   const playEntranceCue = useCallback((token: number) => {
     for (const listener of [...entranceCueListenersRef.current]) listener(token);
+  }, []);
+
+  const subscribeScoreboard = useCallback((listener: StoreListener) => {
+    scoreboardListenersRef.current.add(listener);
+    return () => scoreboardListenersRef.current.delete(listener);
+  }, []);
+  const getScoreboardState = useCallback(() => scoreboardStateRef.current, []);
+  const updateScoreboardState = useCallback((state: ScoreboardState) => {
+    // A late response must not undo a newer Show or Hide.
+    if (scoreboardStateRef.current && state.token < scoreboardStateRef.current.token) return;
+    scoreboardStateRef.current = state;
+    for (const listener of [...scoreboardListenersRef.current]) listener();
   }, []);
 
   const notify = useCallback((invalidation: ResourceInvalidation) => {
@@ -251,6 +273,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       if (snapshot.operatorTextState) updateOperatorTextState(snapshot.operatorTextState);
       if (snapshot.overlayState) updateOverlayState(snapshot.overlayState);
       if (snapshot.rehearsal) updateRehearsalStatus(snapshot.rehearsal);
+      if (snapshot.scoreboardState) updateScoreboardState(snapshot.scoreboardState);
 
       for (const domain of appResourceDomains) {
         notify({
@@ -279,6 +302,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       else if (event.type === "overlay.state") updateOverlayState(event.state);
       else if (event.type === "rehearsal.state") updateRehearsalStatus(event.state);
       else if (event.type === "overlay.cue") playEntranceCue(event.token);
+      else if (event.type === "scoreboard.state") updateScoreboardState(event.state);
       else handleChanged(event);
 
       if (forward && window.parent === window) {
@@ -367,7 +391,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
             ...(liveStateRef.current ? { liveState: liveStateRef.current } : {}),
             ...(operatorTextStateRef.current ? { operatorTextState: operatorTextStateRef.current } : {}),
             ...(overlayStateRef.current ? { overlayState: overlayStateRef.current } : {}),
-            ...(rehearsalStatusRef.current ? { rehearsal: rehearsalStatusRef.current } : {})
+            ...(rehearsalStatusRef.current ? { rehearsal: rehearsalStatusRef.current } : {}),
+            ...(scoreboardStateRef.current ? { scoreboardState: scoreboardStateRef.current } : {})
           }
         });
       }
@@ -402,7 +427,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       for (const port of childPorts) port.close();
       childPorts.clear();
     };
-  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState, updateRehearsalStatus, playEntranceCue]);
+  }, [notify, notifyAll, updateLiveState, updateOperatorTextState, updateOverlayState, updateRehearsalStatus, playEntranceCue, updateScoreboardState]);
 
   const value = useMemo(
     () => ({
@@ -420,7 +445,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       subscribeRehearsal,
       getRehearsalStatus,
       updateRehearsalStatus,
-      subscribeEntranceCue
+      subscribeEntranceCue,
+      subscribeScoreboard,
+      getScoreboardState,
+      updateScoreboardState
     }),
     [
       connectionState,
@@ -437,7 +465,10 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       subscribeRehearsal,
       getRehearsalStatus,
       updateRehearsalStatus,
-      subscribeEntranceCue
+      subscribeEntranceCue,
+      subscribeScoreboard,
+      getScoreboardState,
+      updateScoreboardState
     ]
   );
   return <AppEventsContext.Provider value={value}>{children}</AppEventsContext.Provider>;
@@ -469,6 +500,11 @@ export function useAppEventOverlayState() {
 export function useAppEventRehearsalStatus() {
   const events = useAppEvents();
   return useSyncExternalStore(events?.subscribeRehearsal ?? emptySubscribe, events?.getRehearsalStatus ?? getNullRehearsalStatus, getNullRehearsalStatus);
+}
+
+export function useAppEventScoreboardState() {
+  const events = useAppEvents();
+  return useSyncExternalStore(events?.subscribeScoreboard ?? emptySubscribe, events?.getScoreboardState ?? getNullScoreboardState, getNullScoreboardState);
 }
 
 /** The latest Play entrance cue sent to overlays, or null before any arrives on this page. */

@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useEntranceCueToken } from "../appEvents";
-import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useSettings, useTheme } from "../hooks";
+import { useAssets, useLiveState, useOperatorTextState, useRuntimeVersionWatcher, useScoreboardState, useSettings, useTheme } from "../hooks";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { ScaledCanvasFrame } from "../components/ScaledCanvasFrame";
 import { useOverlayReporter } from "../overlayReporter";
@@ -16,6 +16,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
   const operatorText = useOperatorTextState();
   const assets = useAssets();
   const entranceToken = useEntranceCueToken();
+  const scoreboard = useScoreboardState();
   // Reports what this page shows so Operations can tell whether vMix's overlay is alive and current.
   useOverlayReporter(mode, themeResource.data ?? null, live.data);
 
@@ -23,7 +24,8 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
     return <div className="overlay-page loading">No published theme.</div>;
   }
 
-  if (!theme) {
+  // Live waits for the Show / Hide state too, so a hidden scoreboard never flashes up while the page loads.
+  if (!theme || (mode === "live" && !scoreboard.data)) {
     return <div className="overlay-page loading">Loading overlay…</div>;
   }
 
@@ -46,6 +48,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
           transparentBackground={mode === "preview" && theme.canvas.transparentPreview}
           reduceMotion={mode === "live" && settings.data?.reduceMotion === true}
           entranceToken={mode === "live" ? entranceToken : null}
+          scoreboardVisible={mode === "live" ? scoreboard.data?.visible ?? true : true}
           operatorTextValues={
             operatorText.data?.themeId === theme.id
               ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))

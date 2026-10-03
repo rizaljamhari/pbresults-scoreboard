@@ -47,6 +47,21 @@ describe("app event contracts", () => {
     expect(parseAppEventMessage("operator-text.state", JSON.stringify(live))).toBeNull();
   });
 
+  it("carries the scoreboard's show / hide state as an event and in the snapshot", () => {
+    const state = { visible: false, token: 1791038792014, changedAt: "2026-10-03T14:46:32.014Z" };
+    const event = appRealtimeEventSchema.parse({ ...common, type: "scoreboard.state", state });
+    expect(parseAppEventMessage("scoreboard.state", JSON.stringify(event))).toEqual(event);
+
+    const snapshot = appEventSnapshotSchema.parse({
+      ...common,
+      type: "system.snapshot",
+      revisions: { settings: 1, themes: 2, assets: 3, teams: 4 },
+      runtime: { appVersion: "1.8.0", releaseTag: null },
+      scoreboardState: state
+    });
+    expect(snapshot.scoreboardState).toEqual(state);
+  });
+
   it.each([
     ["settings.changed", "settings"],
     ["themes.changed", "themes"],

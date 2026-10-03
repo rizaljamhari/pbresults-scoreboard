@@ -22,6 +22,7 @@ import type { UpdateStatus } from "../shared/update";
 import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/backup";
 import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
+import type { ScoreboardState } from "../shared/scoreboard";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -119,6 +120,14 @@ export const api = {
     fetch("/api/overlay/entrance", {
       method: "POST"
     }).then(handle<{ token: number }>),
+  getScoreboardState: (signal?: AbortSignal) => fetch("/api/scoreboard", { signal }).then(handle<ScoreboardState>),
+  /** Shows or hides the scoreboard on every overlay, with its transition. */
+  setScoreboardVisible: (visible: boolean) =>
+    fetch("/api/scoreboard", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ visible })
+    }).then(handle<ScoreboardState>),
   startLivePolling: () =>
     fetch("/api/live/poll/start", {
       method: "POST"

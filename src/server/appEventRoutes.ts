@@ -4,6 +4,7 @@ import type { RuntimeIdentity } from "../shared/appEvents.js";
 import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js";
 import type { OverlayState } from "../shared/overlayHealth.js";
 import type { RehearsalStatus } from "../shared/rehearsal.js";
+import type { ScoreboardState } from "../shared/scoreboard.js";
 import { AppEventHub, formatAppEventFrame } from "./appEventHub.js";
 import type { OverlayRegistry } from "./overlayRegistry.js";
 
@@ -17,6 +18,7 @@ type AppEventRouteOptions = {
   overlays?: OverlayRegistry;
   getOverlayState?: () => OverlayState;
   getRehearsalStatus?: () => RehearsalStatus;
+  getScoreboardState?: () => ScoreboardState;
 };
 
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -82,7 +84,7 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     }
     writeFrame(
       formatAppEventFrame(
-        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.(), options.getRehearsalStatus?.()),
+        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.(), options.getRehearsalStatus?.(), options.getScoreboardState?.()),
         2000
       )
     );

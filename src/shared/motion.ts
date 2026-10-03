@@ -5,7 +5,7 @@
  * `motion-<preset>-loop` (enter, hold, leave).
  */
 
-export const motionPresetValues = ["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "drop-in", "glide-in", "scale"] as const;
+export const motionPresetValues = ["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "drop-in", "glide-in", "scale", "pop-in"] as const;
 export type MotionPreset = (typeof motionPresetValues)[number];
 
 export const motionEasingValues = ["ease", "linear", "ease-in", "ease-out", "ease-in-out", "snappy", "expo-out"] as const;
@@ -27,7 +27,8 @@ export const motionPresetLabels: Record<MotionPreset, string> = {
   "slide-right": "Slide right",
   "drop-in": "Drop in",
   "glide-in": "Glide in",
-  scale: "Scale"
+  scale: "Scale",
+  "pop-in": "Pop in"
 };
 
 export const motionEasingLabels: Record<MotionEasing, string> = {

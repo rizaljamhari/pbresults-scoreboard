@@ -45,6 +45,7 @@ export function OnAirStrip({
   operatorTextValues,
   reduceMotion = false,
   entranceToken = null,
+  scoreboardVisible = true,
   markers,
   summary,
   overlayUrl,
@@ -60,6 +61,8 @@ export function OnAirStrip({
   reduceMotion?: boolean;
   /** Mirrors the operator's Play entrance. */
   entranceToken?: number | null;
+  /** Mirrors the operator's Show / Hide, transition included. */
+  scoreboardVisible?: boolean;
   markers: StripMarker[];
   summary: ReactNode;
   overlayUrl: string;
@@ -192,7 +195,7 @@ export function OnAirStrip({
                 }}
                 aria-hidden
               >
-                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} transparentBackground />
+                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} transparentBackground />
               </div>
               {markers.map((marker) => {
                 const rect = teamSideRect(theme, marker.side);
@@ -217,7 +220,7 @@ export function OnAirStrip({
         ) : (
           <div className="ad-strip-frame">
             <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="ad-strip-frame-box" innerClassName="ad-strip-frame-stage" mode="width">
-              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} transparentBackground />
+              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} transparentBackground />
             </ScaledCanvasFrame>
           </div>
         )}
@@ -225,6 +228,7 @@ export function OnAirStrip({
           <span className="ad-strip-live">
             <Dot tone={live?.sourceStatus === "ok" ? "live" : live?.sourceStatus === "error" ? "critical" : "warning"} flat />
             {live?.sourceStatus === "ok" ? "Live" : live?.sourceStatus === "error" ? "Feed unreachable" : live?.sourceStatus === "paused" ? "Paused" : "Waiting"}
+            {scoreboardVisible ? null : " · Scoreboard hidden"}
           </span>
         ) : null}
       </div>

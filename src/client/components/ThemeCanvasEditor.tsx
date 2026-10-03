@@ -32,6 +32,8 @@ type ThemeCanvasEditorProps = {
   replayChange?: { id: string; token: number } | null;
   /** Editor-only: a new value plays every piece's entrance. */
   entranceToken?: number | null;
+  /** Editor-only: previews the operator's Show / Hide. */
+  scoreboardVisible?: boolean;
   /** Changing this remounts the overlay render, replaying entrance animations. */
   overlayKey?: number;
   renderChrome?: (api: CanvasChromeApi) => ReactNode;
@@ -141,6 +143,7 @@ export function ThemeCanvasEditor({
   previewTimeout,
   replayChange,
   entranceToken,
+  scoreboardVisible = true,
   overlayKey,
   renderChrome,
   onSelect,
@@ -688,6 +691,7 @@ export function ThemeCanvasEditor({
               previewTimeout={previewTimeout}
               replayChange={replayChange}
               entranceToken={entranceToken}
+              scoreboardVisible={scoreboardVisible}
               editable
               selectedComponentId={selectAll ? null : selectedId}
               onSelectComponent={onSelect}
