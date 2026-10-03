@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type RefObject } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
-import { Search } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 /** The admin's shared controls. Styles live in admin.css (.ad-*); every page that uses them sits inside .ad-scope. */
@@ -151,7 +151,18 @@ export function SettingRow({ title, hint, children, dim = false }: { title: Reac
 }
 
 export type MenuItem =
-  | { kind?: "item"; label: string; icon?: ReactNode; onSelect: () => void; disabled?: boolean; danger?: boolean }
+  | {
+      kind?: "item";
+      label: string;
+      icon?: ReactNode;
+      onSelect: () => void;
+      disabled?: boolean;
+      danger?: boolean;
+      /** A switch-like item: shows a tick while on. */
+      checked?: boolean;
+      /** A keyboard shortcut or short note, at the end of the row. */
+      hint?: string;
+    }
   | { kind: "separator" };
 
 /** A "…" style menu. Portalled, so it carries the admin scope itself. */
@@ -165,20 +176,38 @@ export function Menu({ trigger, items, align = "end" }: { trigger: ReactNode; it
             item.kind === "separator" ? (
               <DropdownMenu.Separator key={`sep-${index}`} className="ad-menu-sep" />
             ) : (
-              <DropdownMenu.Item
-                key={item.label}
-                className={cn("ad-menu-item", item.danger && "ad-menu-item--danger")}
-                disabled={item.disabled}
-                onSelect={item.onSelect}
-              >
-                {item.icon}
-                {item.label}
-              </DropdownMenu.Item>
+              <MenuRow key={item.label} item={item} />
             )
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+  );
+}
+
+function MenuRow({ item }: { item: Extract<MenuItem, { label: string }> }) {
+  const content = (
+    <>
+      {item.icon}
+      {item.label}
+      {item.hint || item.checked !== undefined ? (
+        <span className="ad-menu-end">
+          {item.hint ? <kbd className="ad-kbd">{item.hint}</kbd> : null}
+          {item.checked ? <Check aria-hidden /> : null}
+        </span>
+      ) : null}
+    </>
+  );
+  const className = cn("ad-menu-item", item.danger && "ad-menu-item--danger");
+  // A switch-like item is a checkbox item, so screen readers hear whether it is on.
+  return item.checked !== undefined ? (
+    <DropdownMenu.CheckboxItem className={className} disabled={item.disabled} checked={item.checked} onSelect={item.onSelect}>
+      {content}
+    </DropdownMenu.CheckboxItem>
+  ) : (
+    <DropdownMenu.Item className={className} disabled={item.disabled} onSelect={item.onSelect}>
+      {content}
+    </DropdownMenu.Item>
   );
 }
 

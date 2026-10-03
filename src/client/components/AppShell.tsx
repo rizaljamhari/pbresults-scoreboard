@@ -182,13 +182,8 @@ function SidebarLiveStatus({
   const StateIcon = summary.tone === "ok" ? CircleCheck : summary.tone === "critical" ? CircleAlert : TriangleAlert;
 
   return (
-    <Link className="ad-live" to="/admin/operations" title={`${summary.feedLabel} · Overlay ${overlayLine.label} · ${summary.stateLabel}. Opens Operations.`}>
+    <Link className="ad-live" to="/admin/operations" title={`Feed ${summary.feedLabel.toLowerCase()} · Overlay ${overlayLine.label} · ${summary.stateLabel}. Opens Operations.`}>
       <div className="ad-live-body">
-        <div className="ad-live-row">
-          <span className="ad-k">Feed</span>
-          <Dot tone={summary.feedTone} />
-          <span className="ad-v">{summary.feedLabel}</span>
-        </div>
         <div className="ad-live-row">
           <span className="ad-k">On air</span>
           <Dot tone={onAirTheme ? "tally" : undefined} />
@@ -221,9 +216,10 @@ function SidebarLiveStatus({
         )}
       </div>
       <div className="ad-live-mini" aria-hidden>
-        <Dot tone={summary.feedTone} />
         <Dot tone={onAirTheme ? "tally" : undefined} />
         <Dot tone={overlayLine.tone} />
+        {/* The overall state, so a feed problem still shows with the sidebar collapsed. */}
+        <Dot tone={summary.tone === "ok" ? "live" : summary.tone} />
       </div>
     </Link>
   );

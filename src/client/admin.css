@@ -946,6 +946,21 @@
   color: var(--ad-crit);
 }
 
+.ad-menu-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--ad-faint);
+}
+
+.ad-menu-end svg {
+  width: 15px;
+  height: 15px;
+  color: var(--ad-accent);
+}
+
 .ad-menu-sep {
   height: 1px;
   margin: 4px 2px;
@@ -1726,36 +1741,88 @@ tr[aria-selected="true"] .ad-row-open {
 }
 
 /* ---------- Operations ---------- */
-.ad-feed-state {
-  display: flex;
-  align-items: center;
+/* The feed chip opens its controls: polling, refresh, and the full status. */
+.ad-feed-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ad-feed-trigger:focus-visible {
+  outline: 2px solid var(--ad-accent);
+  outline-offset: 2px;
+}
+
+.ad-feed-trigger:hover .ad-chip {
+  filter: brightness(0.96);
+}
+
+.ad-feed-caret {
+  width: 13px;
+  height: 13px;
+  margin-right: -2px;
+  opacity: 0.7;
+}
+
+.ad-feed-pop {
+  display: grid;
   gap: 8px;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
+  width: 300px;
+  padding: 12px;
 }
 
-.ad-feed-state .ad-hint {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.ad-feed-pop p {
+  margin: 0;
 }
 
-/* Toolbar buttons keep their full label; the feed status text is the part that gives way on narrow screens. */
+.ad-feed-pop-status {
+  display: grid;
+  gap: 2px;
+}
+
+.ad-feed-pop-error {
+  color: var(--ad-crit);
+  overflow-wrap: anywhere;
+}
+
+.ad-feed-pop-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .ad-toolbar > .ad-btn,
-.ad-feed-state > .ad-chip {
+.ad-toolbar > .ad-chip {
   flex-shrink: 0;
 }
 
-/* Below 1200px the secondary toolbar buttons show only their icon; the label stays for screen readers and the tooltip. */
-@media (max-width: 1199px) {
-  .ad-toolbar > .ad-btn .ad-btn-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
+/* The one control operators reach for during a show: what is on air, the action, and its key. */
+.ad-onair-btn {
+  gap: 8px;
+}
+
+.ad-onair-state {
+  font-weight: 600;
+}
+
+.ad-onair-state::after {
+  content: "·";
+  margin-left: 8px;
+  opacity: 0.5;
+}
+
+.ad-onair-btn .ad-kbd {
+  margin-left: 2px;
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+  opacity: 0.65;
 }
 
 .ad-ops-col {
@@ -2399,40 +2466,26 @@ tr[aria-selected="true"] .ad-row-open {
   border-bottom: 1px solid var(--ad-line);
 }
 
-/* Title and status chips keep their size; the score summary gives way first. */
-.ad-strip-head > h2,
+/* The status chips keep their size; a long theme name gives way first. */
 .ad-strip-head > .ad-chip,
 .ad-strip-overlay {
   flex: none;
   white-space: nowrap;
 }
 
-.ad-strip-theme {
-  color: var(--ad-text);
-  font-weight: 600;
-}
-
-.ad-strip-meta {
-  flex: 1 1 auto;
+.ad-strip-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
-  color: var(--ad-muted);
-  font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ad-strip-meta b {
+.ad-strip-theme {
   color: var(--ad-text);
-  font-weight: 650;
-}
-
-.ad-backdrops {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 8px;
-  background: var(--ad-hover);
+  font-weight: 600;
 }
 
 .ad-backdrop {
@@ -2442,8 +2495,21 @@ tr[aria-selected="true"] .ad-row-open {
   border-radius: 6px;
 }
 
-.ad-backdrop[aria-checked="true"] {
-  box-shadow: 0 0 0 2px var(--ad-surface), 0 0 0 4px var(--ad-accent);
+/* The backdrop swatches in the Preview menu. */
+.ad-menu-item .ad-backdrop {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+}
+
+.ad-menu-label {
+  padding: 6px 8px 2px;
+  color: var(--ad-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Fixed checkerboards, independent of the admin theme: the backdrop is about the graphics, not the UI. */
@@ -2513,21 +2579,54 @@ tr[aria-selected="true"] .ad-row-open {
   background: var(--ad-surface);
 }
 
-.ad-strip-live {
+/* Over an empty preview while the scoreboard is hidden, so it never looks like a fault. */
+.ad-strip-hidden {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
+  top: 50%;
+  left: 50%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 8px;
+  margin: 0;
+  padding: 6px 12px;
   border-radius: 999px;
   background: var(--ad-surface);
   box-shadow: var(--ad-shadow-contact);
   color: var(--ad-muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+/* The raw feed under the render, so the two can be compared at a glance. It never shrinks away; it wraps. */
+.ad-strip-feed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 38px;
+  padding: 7px 16px;
+  border-top: 1px solid var(--ad-line);
+  font-size: 12.5px;
+}
+
+.ad-strip-feed-k {
+  color: var(--ad-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ad-strip-feed-v {
+  color: var(--ad-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ad-strip-feed-v b {
+  color: var(--ad-text);
+  font-weight: 650;
 }
 
 /* Where a name without a team shows on air. */

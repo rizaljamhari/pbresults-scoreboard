@@ -11,8 +11,7 @@ import {
   CircleCheck,
   Copy,
   Database,
-  Eye,
-  EyeOff,
+  Ellipsis,
   ImageOff,
   Info,
   Layers,
@@ -36,7 +35,7 @@ import { RehearsalPanel } from "../components/RehearsalPanel";
 import { formatAge as formatOverlayAge, summarizeOverlays, type OverlayClient, type OverlayState } from "../../shared/overlayHealth";
 import { showToast } from "../toast";
 import { useEntranceCueToken } from "../appEvents";
-import { Button, Chip, Dot, Grow, Toolbar, type Tone } from "../components/admin/kit";
+import { Button, Chip, Dot, Grow, Menu, Toolbar, type Tone } from "../components/admin/kit";
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
 
 type WarningItem = {
@@ -1433,78 +1432,103 @@ export function OperationsPage() {
   return (
     <div className="ad-page ad-scope">
       <Toolbar title="Operations">
-        <span className="ad-feed-state" role="status" aria-live="polite">
-          <Chip tone={feedTone(feed.variant)}>
-            <Dot tone={feed.variant === "success" ? "live" : feed.variant === "critical" ? "critical" : feed.variant === "warning" ? "warning" : undefined} flat />
-            {feed.label === "Live" ? "Feed live" : feed.label}
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button type="button" className="ad-feed-trigger" title={`${feed.detail} Click for feed controls.`}>
+              <Chip tone={feedTone(feed.variant)}>
+                <Dot tone={feed.variant === "success" ? "live" : feed.variant === "critical" ? "critical" : feed.variant === "warning" ? "warning" : undefined} flat />
+                {feed.label === "Live" ? "Feed live" : feed.label}
+                <ChevronDown aria-hidden className="ad-feed-caret" />
+              </Chip>
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content className="ad-scope ad-pop ad-feed-pop" align="start" sideOffset={6}>
+              <p className="ad-feed-pop-status" role="status" aria-live="polite">
+                <b>{feed.label === "Live" ? "Feed live" : feed.label}</b>
+                {feed.detail}
+              </p>
+              {live.data?.errorMessage ? <p className="ad-hint ad-feed-pop-error">{live.data.errorMessage}</p> : null}
+              <p className="ad-hint">
+                {live.data?.fetchedAt ? `Last successful fetch ${formatAge(live.data.fetchedAt)}.` : "No successful fetch yet."}
+                {settings.data.pollEnabled ? ` Checking every ${settings.data.pollIntervalMs} ms.` : " Polling is stopped."}
+              </p>
+              <div className="ad-feed-pop-actions">
+                <Button
+                  variant={settings.data.pollEnabled ? "default" : "primary"}
+                  onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
+                  disabled={togglingPoll}
+                >
+                  {settings.data.pollEnabled ? <Pause aria-hidden /> : <Play aria-hidden />}
+                  {togglingPoll ? "Updating…" : settings.data.pollEnabled ? "Stop polling" : "Start polling"}
+                </Button>
+                <Button variant="ghost" onClick={() => void handleRefreshNow()} disabled={refreshing}>
+                  <RefreshCw aria-hidden />
+                  {refreshing ? "Refreshing…" : "Refresh now"}
+                </Button>
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+        {settings.data.reduceMotion ? (
+          <Chip tone="warning" title="The overlay cuts instead of animating. Turn it off from the ⋯ menu.">
+            <Waves aria-hidden />
+            Motion reduced
           </Chip>
-          <span className="ad-hint" title={live.data?.errorMessage ?? undefined}>
-            {feed.detail}
-            {settings.data.pollEnabled ? ` Checking every ${settings.data.pollIntervalMs} ms.` : ""}
-          </span>
-        </span>
-        <Grow />
-        <Button
-          variant="ghost"
-          disabled={rehearsing}
-          title={rehearsing ? "A rehearsal is running" : "Play test cases on the live overlay before a show"}
-          onClick={() => setRehearsalOpen(true)}
-        >
-          <Play aria-hidden />
-          <span className="ad-btn-label">{rehearsing ? "Rehearsing…" : "Rehearse"}</span>
-        </Button>
+        ) : null}
         {goLiveIssues.length ? (
           <a className="ad-btn ad-btn--ghost ad-issues-link" href="#operator-status">
             <TriangleAlert aria-hidden />
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
         ) : null}
-        {themeHasEntrance && scoreboardVisible ? (
-          <Button
-            variant="ghost"
-            disabled={playingEntrance || settings.data.reduceMotion}
-            title={settings.data.reduceMotion ? "Motion is reduced, so pieces appear without their entrance" : "Play each piece's entrance again on the live overlay"}
-            onClick={() => void handlePlayEntrance()}
-          >
-            <Sparkles aria-hidden />
-            <span className="ad-btn-label">Replay entrance</span>
-          </Button>
-        ) : null}
+        <Grow />
+        <Menu
+          trigger={
+            <Button variant="ghost" aria-label="More actions" title="More actions">
+              <Ellipsis aria-hidden />
+            </Button>
+          }
+          items={[
+            {
+              label: rehearsing ? "Rehearsing…" : "Rehearse",
+              icon: <Play aria-hidden />,
+              disabled: rehearsing,
+              onSelect: () => setRehearsalOpen(true)
+            },
+            // Only for a theme whose pieces have an entrance; there is nothing to replay otherwise.
+            ...(themeHasEntrance
+              ? [
+                  {
+                    label: "Replay entrance",
+                    icon: <Sparkles aria-hidden />,
+                    disabled: !scoreboardVisible || playingEntrance || settings.data.reduceMotion,
+                    onSelect: () => void handlePlayEntrance()
+                  }
+                ]
+              : []),
+            { kind: "separator" },
+            {
+              label: "Reduce motion",
+              icon: <Waves aria-hidden />,
+              checked: settings.data.reduceMotion,
+              disabled: togglingMotion,
+              onSelect: () => void handleSetReduceMotion(!settings.data!.reduceMotion)
+            }
+          ]}
+        />
         <Button
+          className="ad-onair-btn"
           variant={scoreboardVisible ? "default" : "primary"}
           aria-pressed={!scoreboardVisible}
           disabled={togglingScoreboard || !scoreboard.data}
-          title={scoreboardVisible ? "Take the scoreboard off air with its transition (H)" : "Bring the scoreboard on air with its transition (H)"}
+          title={scoreboardVisible ? "Take the scoreboard off air with its transition" : "Bring the scoreboard on air with its transition"}
           onClick={() => void handleSetScoreboardVisible(!scoreboardVisible)}
         >
-          {scoreboardVisible ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
-          {scoreboardVisible ? "Hide scoreboard" : "Show scoreboard"}
-        </Button>
-        <Button
-          variant={settings.data.reduceMotion ? "default" : "ghost"}
-          aria-pressed={settings.data.reduceMotion}
-          disabled={togglingMotion}
-          title={
-            settings.data.reduceMotion
-              ? "The overlay cuts instead of animating. Click to bring motion back."
-              : "Make the overlay cut instead of animate: no score pops, pulses or looping event cards"
-          }
-          onClick={() => void handleSetReduceMotion(!settings.data!.reduceMotion)}
-        >
-          <Waves aria-hidden />
-          <span className="ad-btn-label">{settings.data.reduceMotion ? "Motion reduced" : "Reduce motion"}</span>
-        </Button>
-        <Button variant="ghost" title="Fetch the live feed now" onClick={() => void handleRefreshNow()} disabled={refreshing}>
-          <RefreshCw aria-hidden />
-          <span className="ad-btn-label">{refreshing ? "Refreshing…" : "Refresh now"}</span>
-        </Button>
-        <Button
-          variant={settings.data.pollEnabled ? "default" : "primary"}
-          onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
-          disabled={togglingPoll}
-        >
-          {settings.data.pollEnabled ? <Pause aria-hidden /> : <Play aria-hidden />}
-          {togglingPoll ? "Updating…" : settings.data.pollEnabled ? "Stop polling" : "Start polling"}
+          <Dot tone={scoreboardVisible ? "tally" : undefined} flat />
+          <span className="ad-onair-state">{scoreboardVisible ? "On air" : "Hidden"}</span>
+          <span className="ad-onair-action">{scoreboardVisible ? "Hide scoreboard" : "Show scoreboard"}</span>
+          <kbd className="ad-kbd">H</kbd>
         </Button>
       </Toolbar>
 
@@ -1532,8 +1556,6 @@ export function OperationsPage() {
                 live.error ?? "Waiting for live data…"
               )
             }
-            overlayUrl={vmixLiveUrl}
-            onCopyUrl={() => void handleCopyOverlayUrl(vmixLiveUrl)}
             overlayStatus={overlayState ? { level: overlaySummary.level, label: overlaySummary.chip, onOpen: openOverlayPages } : null}
             rehearsalLabel={rehearsing && rehearsal.data ? `Rehearsal · case ${rehearsal.data.caseIndex + 1}` : null}
           />

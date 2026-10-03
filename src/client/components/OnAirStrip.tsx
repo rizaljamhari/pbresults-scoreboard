@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, ArrowUpRight, Monitor, RectangleHorizontal } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Check, ChevronDown, Monitor, RectangleHorizontal } from "lucide-react";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../shared/theme";
 import { OverlayRenderer } from "./OverlayRenderer";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
-import { Chip, Dot, Grow, IconButton, Segmented } from "./admin/kit";
+import { Button, Chip, Dot, Grow } from "./admin/kit";
 import { scoreboardBand, teamSideRect } from "../pages/operationsStrip";
 
 type View = "band" | "frame";
@@ -34,9 +35,17 @@ function readView(): View {
   }
 }
 
+const FEED_STATUS: Record<NormalizedLiveState["sourceStatus"], string> = {
+  ok: "Live",
+  error: "Unreachable",
+  paused: "Paused",
+  idle: "Waiting"
+};
+
 /**
- * What vMix shows, drawn by the same renderer the overlay uses. "Scoreboard" crops to the band the theme actually
- * occupies so names, scores and operator text are readable; "Full frame" shows the whole 1920 × 1080.
+ * What vMix shows, drawn by the same renderer the overlay uses, with the raw feed underneath so the two can be
+ * compared. "Scoreboard" crops to the band the theme actually occupies so names, scores and operator text are
+ * readable; "Full frame" shows the whole 1920 × 1080.
  */
 export function OnAirStrip({
   theme,
@@ -48,8 +57,6 @@ export function OnAirStrip({
   scoreboardVisible = true,
   markers,
   summary,
-  overlayUrl,
-  onCopyUrl,
   overlayStatus = null,
   rehearsalLabel = null
 }: {
@@ -64,9 +71,8 @@ export function OnAirStrip({
   /** Mirrors the operator's Show / Hide, transition included. */
   scoreboardVisible?: boolean;
   markers: StripMarker[];
+  /** The raw feed in one line: names and scores as the feed sends them, clock, state and period. */
   summary: ReactNode;
-  overlayUrl: string;
-  onCopyUrl: () => void;
   /** Whether the page vMix loads is connected and current; opens the overlay pages list. */
   overlayStatus?: { level: "ok" | "info" | "warning" | "critical"; label: string; onOpen: () => void } | null;
   /** While rehearsing, what the strip (and vMix) shows is a test case, not the feed. */
@@ -109,17 +115,16 @@ export function OnAirStrip({
   return (
     <section className="ad-surface ad-strip" aria-labelledby="on-air-title">
       <div className="ad-strip-head">
-        <h2 id="on-air-title" className="ad-title">
-          On air
-        </h2>
         {theme ? (
-          // Neutral, not red: the header already says On air, and red is kept for problems. The dot is the tally light.
-          <Chip className="ad-strip-theme" title="Theme on air">
+          // The theme name is the heading; the red dot is the tally light, so the section reads as on air.
+          <h2 id="on-air-title" className="ad-title ad-strip-title" title="Theme on air">
             <Dot tone="tally" flat />
             {theme.name}
-          </Chip>
+          </h2>
         ) : (
-          <Chip tone="critical">No theme on air</Chip>
+          <h2 id="on-air-title" className="ad-title ad-strip-title">
+            <Chip tone="critical">No theme on air</Chip>
+          </h2>
         )}
         {rehearsalLabel ? (
           <Chip tone="rehearsal">
@@ -135,45 +140,8 @@ export function OnAirStrip({
             </Chip>
           </button>
         ) : null}
-        <span className="ad-strip-meta">{summary}</span>
         <Grow />
-        <Segmented
-          label="Preview"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "band", label: <><RectangleHorizontal aria-hidden />Scoreboard</>, title: "Only the part of the frame the scoreboard uses" },
-            { value: "frame", label: <><Monitor aria-hidden />Full frame</>, title: "The whole 1920 × 1080 frame" }
-          ]}
-        />
-        <div className="ad-backdrops" role="radiogroup" aria-label="Backdrop behind the graphics">
-          {(
-            [
-              { value: "light", label: "Light backdrop" },
-              { value: "dark", label: "Dark backdrop" },
-              { value: "theme", label: theme ? `Theme background (${theme.canvas.backgroundColor}), what vMix keys out` : "Theme background" }
-            ] as const
-          ).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={backdrop === option.value}
-              aria-label={option.label}
-              title={option.label}
-              className={`ad-backdrop ad-backdrop--${option.value}`}
-              style={option.value === "theme" && theme ? { background: theme.canvas.backgroundColor } : undefined}
-              onClick={() => setBackdrop(option.value)}
-            />
-          ))}
-        </div>
-        <span className="ad-tb-sep" />
-        <a className="ad-icon-btn" href={overlayUrl} target="_blank" rel="noreferrer" aria-label="Open the live overlay" title="Open the live overlay">
-          <ArrowUpRight />
-        </a>
-        <IconButton label="Copy the vMix URL" onClick={onCopyUrl}>
-          <Copy />
-        </IconButton>
+        <PreviewMenu view={view} onView={setView} backdrop={backdrop} onBackdrop={setBackdrop} theme={theme} />
       </div>
 
       <div
@@ -224,14 +192,96 @@ export function OnAirStrip({
             </ScaledCanvasFrame>
           </div>
         )}
-        {theme ? (
-          <span className="ad-strip-live">
-            <Dot tone={live?.sourceStatus === "ok" ? "live" : live?.sourceStatus === "error" ? "critical" : "warning"} flat />
-            {live?.sourceStatus === "ok" ? "Live" : live?.sourceStatus === "error" ? "Feed unreachable" : live?.sourceStatus === "paused" ? "Paused" : "Waiting"}
-            {scoreboardVisible ? null : " · Scoreboard hidden"}
-          </span>
+        {theme && !scoreboardVisible ? (
+          // An empty preview should never look like a fault.
+          <p className="ad-strip-hidden" role="status">
+            Scoreboard hidden · press <kbd className="ad-kbd">H</kbd> to show
+          </p>
         ) : null}
       </div>
+
+      <div className="ad-strip-feed">
+        <span className="ad-strip-feed-k">Feed</span>
+        {live && live.sourceStatus !== "ok" ? (
+          <Chip tone={live.sourceStatus === "error" ? "critical" : "warning"}>
+            <Dot tone={live.sourceStatus === "error" ? "critical" : "warning"} flat />
+            {FEED_STATUS[live.sourceStatus]}
+          </Chip>
+        ) : null}
+        <span className="ad-strip-feed-v">{summary}</span>
+      </div>
     </section>
+  );
+}
+
+/** How the preview is drawn: what part of the frame, and on what backdrop. Remembered on this computer. */
+function PreviewMenu({
+  view,
+  onView,
+  backdrop,
+  onBackdrop,
+  theme
+}: {
+  view: View;
+  onView: (view: View) => void;
+  backdrop: Backdrop;
+  onBackdrop: (backdrop: Backdrop) => void;
+  theme: ThemeDefinition | null;
+}) {
+  const backdrops: Array<{ value: Backdrop; label: string; hint?: string }> = [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "theme", label: "Theme background", hint: theme ? `${theme.canvas.backgroundColor}, what vMix keys out` : undefined }
+  ];
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="ghost" size="sm" title="How the preview is drawn">
+          {view === "band" ? <RectangleHorizontal aria-hidden /> : <Monitor aria-hidden />}
+          Preview
+          <ChevronDown aria-hidden />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="ad-scope ad-pop" align="end" sideOffset={6}>
+          <DropdownMenu.Label className="ad-menu-label">Show</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={view} onValueChange={(value) => onView(value as View)}>
+            <PreviewChoice value="band" icon={<RectangleHorizontal aria-hidden />} label="Scoreboard" hint="The part the scoreboard uses" />
+            <PreviewChoice value="frame" icon={<Monitor aria-hidden />} label="Full frame" hint="The whole frame" />
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="ad-menu-sep" />
+          <DropdownMenu.Label className="ad-menu-label">Backdrop</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={backdrop} onValueChange={(value) => onBackdrop(value as Backdrop)}>
+            {backdrops.map((option) => (
+              <PreviewChoice
+                key={option.value}
+                value={option.value}
+                icon={
+                  <span
+                    className={`ad-backdrop ad-backdrop--${option.value}`}
+                    style={option.value === "theme" && theme ? { background: theme.canvas.backgroundColor } : undefined}
+                    aria-hidden
+                  />
+                }
+                label={option.label}
+                hint={option.hint}
+              />
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function PreviewChoice({ value, icon, label, hint }: { value: string; icon: ReactNode; label: string; hint?: string }) {
+  return (
+    <DropdownMenu.RadioItem value={value} className="ad-menu-item" title={hint}>
+      {icon}
+      {label}
+      <DropdownMenu.ItemIndicator className="ad-menu-end">
+        <Check aria-hidden />
+      </DropdownMenu.ItemIndicator>
+    </DropdownMenu.RadioItem>
   );
 }
