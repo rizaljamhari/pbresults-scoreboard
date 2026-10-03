@@ -8,6 +8,17 @@ function theme(): ThemeDefinition {
 }
 
 describe("scoreboardBand", () => {
+  it("crops to where the scoreboard is on air when the theme has a placement", () => {
+    const t = theme();
+    const designed = scoreboardBand(t);
+    Object.assign(t.placement, { enabled: true, scale: 0.5, offsetX: 600, offsetY: 0 });
+    const onAir = scoreboardBand(t);
+    expect(onAir.width).toBeLessThan(designed.width);
+    const name = teamSideRect(t, "left")!;
+    expect(name.x).toBeGreaterThanOrEqual(onAir.x);
+    expect(name.x + name.width).toBeLessThanOrEqual(onAir.x + onAir.width);
+  });
+
   it("covers every visible piece and stays inside the frame", () => {
     const t = theme();
     const band = scoreboardBand(t);

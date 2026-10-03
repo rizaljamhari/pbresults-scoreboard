@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import type { ThemeDefinition } from "../../shared/theme";
 import type { NormalizedLiveState, StoredAsset } from "../../shared/theme";
 import { getThemeComponent, listThemeComponentEntries, type ThemeComponent } from "../../shared/themeComponents";
+import { PlacementFrame } from "./editor/PlacementFrame";
 import { OverlayRenderer } from "./OverlayRenderer";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
 import * as Slider from "@radix-ui/react-slider";
@@ -34,6 +35,11 @@ type ThemeCanvasEditorProps = {
   entranceToken?: number | null;
   /** Editor-only: previews the operator's Show / Hide. */
   scoreboardVisible?: boolean;
+  /**
+   * With an on-air placement: "design" edits the design as built and shows where it lands as a dotted frame;
+   * "onAir" shows exactly what vMix will, to look at, not to edit.
+   */
+  placementView?: "design" | "onAir";
   /** Changing this remounts the overlay render, replaying entrance animations. */
   overlayKey?: number;
   renderChrome?: (api: CanvasChromeApi) => ReactNode;
@@ -144,6 +150,7 @@ export function ThemeCanvasEditor({
   replayChange,
   entranceToken,
   scoreboardVisible = true,
+  placementView = "design",
   overlayKey,
   renderChrome,
   onSelect,
@@ -152,6 +159,7 @@ export function ThemeCanvasEditor({
   onUpdate
 }: ThemeCanvasEditorProps) {
   const fullscreen = layout === "fullscreen";
+  const onAirView = placementView === "onAir" && theme.placement.enabled;
   const [appliedScale, setAppliedScale] = useState(1);
   // True until the viewer pans or zooms; while true, resizes keep the frame fitted.
   const fittedRef = useRef(false);
@@ -495,7 +503,7 @@ export function ThemeCanvasEditor({
     const canPanWithLeft = event.button === 0 && spacePressed;
     const canPanWithMiddle = event.button === 1;
     const canPanWithPlainLeft = false;
-    const canMarqueeSelect = event.button === 0 && !spacePressed && !isFormControl && !isComponentInteractionTarget;
+    const canMarqueeSelect = event.button === 0 && !spacePressed && !isFormControl && !isComponentInteractionTarget && !onAirView;
 
     if (canMarqueeSelect) {
       event.preventDefault();
@@ -682,39 +690,65 @@ export function ThemeCanvasEditor({
                 {theme.canvas.transparentPreview ? "transparent preview" : "theme background"}
               </div>
             ) : null}
-            <OverlayRenderer
-              key={overlayKey}
-              theme={theme}
-              transparentBackground={fullscreen && theme.canvas.transparentPreview}
-              live={live}
-              assets={assets}
-              previewTimeout={previewTimeout}
-              replayChange={replayChange}
-              entranceToken={entranceToken}
-              scoreboardVisible={scoreboardVisible}
-              editable
-              selectedComponentId={selectAll ? null : selectedId}
-              onSelectComponent={onSelect}
-            />
-
-            {marqueeSelection ? (
-              <span
-                className="canvas-marquee"
-                style={getMarqueeWorldRect(marqueeSelection)}
+            {onAirView ? (
+              // Exactly what vMix shows, at its placement. Pieces are not selectable here; edit in Design view.
+              <OverlayRenderer
+                key={`on-air:${overlayKey ?? 0}`}
+                theme={theme}
+                transparentBackground={fullscreen && theme.canvas.transparentPreview}
+                live={live}
+                assets={assets}
+                previewTimeout={previewTimeout}
+                replayChange={replayChange}
+                entranceToken={entranceToken}
+                scoreboardVisible={scoreboardVisible}
+                applyPlacement
               />
-            ) : null}
+            ) : (
+              <>
+                <OverlayRenderer
+                  key={overlayKey}
+                  theme={theme}
+                  transparentBackground={fullscreen && theme.canvas.transparentPreview}
+                  live={live}
+                  assets={assets}
+                  previewTimeout={previewTimeout}
+                  replayChange={replayChange}
+                  entranceToken={entranceToken}
+                  scoreboardVisible={scoreboardVisible}
+                  editable
+                  selectedComponentId={selectAll ? null : selectedId}
+                  onSelectComponent={onSelect}
+                />
 
-            <MoveableLayer
-              theme={theme}
-              selectedIds={selectAll ? listThemeComponentEntries(theme).map((entry) => entry.id) : Array.from(selectedIdSet)}
-              scale={stageScale}
-              snapSettings={snapSettings}
-              lockedIds={lockedIds}
-              overlayTarget={overlayTarget}
-              viewKey={`${camera.x},${camera.y},${stageScale}`}
-              onSelect={onSelect}
-              onCommit={onUpdate}
-            />
+                {marqueeSelection ? (
+                  <span
+                    className="canvas-marquee"
+                    style={getMarqueeWorldRect(marqueeSelection)}
+                  />
+                ) : null}
+
+                <MoveableLayer
+                  theme={theme}
+                  selectedIds={selectAll ? listThemeComponentEntries(theme).map((entry) => entry.id) : Array.from(selectedIdSet)}
+                  scale={stageScale}
+                  snapSettings={snapSettings}
+                  lockedIds={lockedIds}
+                  overlayTarget={overlayTarget}
+                  viewKey={`${camera.x},${camera.y},${stageScale}`}
+                  onSelect={onSelect}
+                  onCommit={onUpdate}
+                />
+
+                {theme.placement.enabled ? (
+                  <PlacementFrame
+                    theme={theme}
+                    stageScale={stageScale}
+                    onCommit={(next) => onUpdate({ ...theme, placement: { ...theme.placement, ...next } })}
+                  />
+                ) : null}
+              </>
+            )}
 
               </>
             );

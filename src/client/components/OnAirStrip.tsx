@@ -163,7 +163,7 @@ export function OnAirStrip({
                 }}
                 aria-hidden
               >
-                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} transparentBackground />
+                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} applyPlacement transparentBackground />
               </div>
               {markers.map((marker) => {
                 const rect = teamSideRect(theme, marker.side);
@@ -188,7 +188,7 @@ export function OnAirStrip({
         ) : (
           <div className="ad-strip-frame">
             <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="ad-strip-frame-box" innerClassName="ad-strip-frame-stage" mode="width">
-              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} transparentBackground />
+              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} applyPlacement transparentBackground />
             </ScaledCanvasFrame>
           </div>
         )}

@@ -27,6 +27,18 @@ function slotTag(markup: string, text: string) {
   return markup.slice(start, markup.indexOf(">", start));
 }
 
+/** Where the div that opens at `from` closes, counting nested divs. */
+function closingDiv(markup: string, from: number) {
+  let depth = 0;
+  const tags = /<div\b|<\/div>/g;
+  tags.lastIndex = markup.lastIndexOf("<div", from);
+  for (let match = tags.exec(markup); match; match = tags.exec(markup)) {
+    depth += match[0] === "</div>" ? -1 : 1;
+    if (depth === 0) return match.index;
+  }
+  return -1;
+}
+
 const plate = () =>
   freeShapeComponentSchema.parse({
     kind: "shape",
@@ -179,6 +191,25 @@ describe("show and hide transition", () => {
     const bigger = transitionBandRect(theme);
     expect(bigger.height).toBe(Math.round(plain.height * 1.5));
     expect(bigger.top + bigger.height / 2).toBeCloseTo(plain.top + plain.height / 2, 0);
+  });
+
+  it("draws the design at its on-air placement only where asked, and keeps pinned pieces where designed", () => {
+    const placedTheme = structuredClone(builtinThemes[0]);
+    Object.assign(placedTheme.placement, { enabled: true, scale: 0.5, offsetX: 480, offsetY: 10 });
+    placedTheme.freeComponents.push({ ...plate(), stayInPlace: true });
+    const onAir = renderToStaticMarkup(<OverlayRenderer theme={placedTheme} live={live} applyPlacement />);
+    expect(onAir).toContain('class="placement-layer" style="transform:translate(480px, 10px) scale(0.5)"');
+    // The pinned plate is drawn after the placement layer closes, so it is not moved or scaled.
+    const layerStart = onAir.indexOf('class="placement-layer"');
+    expect(onAir.indexOf('class="shape-body"')).toBeGreaterThan(closingDiv(onAir, layerStart));
+
+    // The editor's Design view and thumbnails leave it out.
+    expect(renderToStaticMarkup(<OverlayRenderer theme={placedTheme} live={live} />)).toContain('<div class="placement-layer">');
+
+    // The band follows the pieces to their on-air spot.
+    const designBand = transitionBandRect(placedTheme);
+    const onAirBand = transitionBandRect(placedTheme, true);
+    expect(Math.abs(onAirBand.height - designBand.height * 0.5)).toBeLessThanOrEqual(1);
   });
 
   it("darkens the strip colour for its tail", () => {

@@ -22,6 +22,7 @@ import { useThemeFonts } from "./themeFonts";
 import { themeFontFaces } from "../../shared/fonts";
 import { useTimeoutToken } from "./momentTriggers";
 import { TransitionBand, useScoreboardTransition } from "./scoreboardTransition";
+import { movesWithPlacement, placeRect, placementTransform } from "../../shared/placement";
 
 type OverlayRendererProps = {
   theme: ThemeDefinition;
@@ -46,6 +47,11 @@ type OverlayRendererProps = {
    * While hidden, moment and event cards stay hidden too.
    */
   scoreboardVisible?: boolean;
+  /**
+   * Draws the design at the theme's on-air placement: the live overlay, its preview, Operations, and the editor's
+   * On air view. Left out, the design shows as built (the editor's Design view, theme thumbnails).
+   */
+  applyPlacement?: boolean;
 };
 
 type FramedPiece = Pick<ThemeDefinition["components"]["homeName"], "visible" | "opacity" | "enterMotion" | "exitMotion" | "x" | "width" | "zIndex">;
@@ -535,8 +541,11 @@ export function resolveMomentFrame(kind: "timeout" | "gameFinished", theme: Them
  * can't stretch it), with 15% room above and below, then scaled by Band size around the scoreboard's middle.
  * Across, it covers the whole canvas, or with Sweep width on the scoreboard, the scoreboard plus Side room each side.
  */
-export function transitionBandRect(theme: ThemeDefinition) {
-  const shown = (boxes: Array<{ visible: boolean; x: number; y: number; width: number; height: number }>) => boxes.filter((box) => box.visible);
+export function transitionBandRect(theme: ThemeDefinition, onAir = false) {
+  // On air, the band follows the pieces to where the placement puts them.
+  const transform = onAir ? placementTransform(theme.placement) : null;
+  const shown = (boxes: Array<{ visible: boolean; x: number; y: number; width: number; height: number; stayInPlace?: boolean }>) =>
+    boxes.filter((box) => box.visible).map((box) => (movesWithPlacement(box) ? placeRect(box, transform) : box));
   // A theme made only of free pieces still gets a band over them.
   const builtIn = shown(Object.values(theme.components));
   const boxes = builtIn.length ? builtIn : shown(theme.freeComponents);
@@ -603,7 +612,8 @@ export function OverlayRenderer({
   reduceMotion = false,
   replayChange = null,
   entranceToken = null,
-  scoreboardVisible = true
+  scoreboardVisible = true,
+  applyPlacement = false
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const fontFaces = useMemo(() => themeFontFaces(theme, assets), [theme.fonts, assets]);
@@ -936,7 +946,7 @@ export function OverlayRenderer({
     () => Math.max(0, ...framedPieces.filter(({ component }) => component.visible).map(({ component }) => (motionExit(component.exitMotion) ? motionTotalMs(component.exitMotion) : 0))),
     [framedPieces]
   );
-  const bandRect = useMemo(() => transitionBandRect(theme), [theme]);
+  const bandRect = useMemo(() => transitionBandRect(theme, applyPlacement), [theme, applyPlacement]);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const bandRef = useRef<HTMLDivElement | null>(null);
   const { phase: scoreboardPhase, plainShowRun } = useScoreboardTransition({
@@ -1226,29 +1236,12 @@ export function OverlayRenderer({
     );
   }
 
-  return (
-    <div
-      className={editable ? "overlay-canvas editable" : "overlay-canvas"}
-      style={{
-        width: theme.canvas.width,
-        height: theme.canvas.height,
-        // On air, custom fonts load before the graphic shows, so viewers never see a fallback font.
-        ...(!editable && !fontsReady ? { visibility: "hidden" as const } : {}),
-        ...(transparentBackground ? {} : { background: theme.canvas.backgroundColor })
-      }}
-    >
-      {editable && theme.canvas.safeArea ? <div className="safe-area" /> : null}
+  // Pieces draw in two layers: the placement layer, moved and scaled to the on-air placement, and the pinned layer for
+  // pieces set to stay in place. Without a placement everything is in the first layer, untransformed.
+  const placement = applyPlacement ? placementTransform(theme.placement) : null;
+  const pinnedOnAir = (piece: { stayInPlace?: boolean }) => Boolean(placement) && !movesWithPlacement(piece);
 
-      <div
-        ref={stageRef}
-        className="scoreboard-stage"
-        data-phase={scoreboardPhase}
-        style={scoreboardPhase === "hidden" ? { visibility: "hidden" } : undefined}
-      >
-
-      {(
-        Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>
-      ).map(([componentId, component]) => {
+  function renderBuiltIn([componentId, component]: [ComponentId, ThemeDefinition["components"][ComponentId]]) {
         const switchTarget =
           componentId === "homeName" ||
           componentId === "homeTeamLogo" ||
@@ -1528,9 +1521,9 @@ export function OverlayRenderer({
           {componentId === "breakTime" ? momentCards.map((entry) => entry.card.placement === "centreLine" ? renderMomentCard(entry, visible) : null) : null}
           </Fragment>
         );
-      })}
+  }
 
-      {theme.freeComponents.map((component) => {
+  function renderFree(component: ThemeDefinition["freeComponents"][number]) {
         const commonClass = editable && selectedComponentId === component.id ? "component-slot selected" : "component-slot";
         const surface = surfaceStyles(component, assets, theme, live);
 
@@ -1661,7 +1654,44 @@ export function OverlayRenderer({
             </span>
           </button>
         );
-      })}
+  }
+
+  function renderBuiltInLayer(pinned: boolean) {
+    return (Object.entries(theme.components) as Array<[ComponentId, ThemeDefinition["components"][ComponentId]]>)
+      .filter(([, component]) => pinnedOnAir(component) === pinned)
+      .map(renderBuiltIn);
+  }
+
+  function renderFreeLayer(pinned: boolean) {
+    return theme.freeComponents.filter((component) => pinnedOnAir(component) === pinned).map(renderFree);
+  }
+
+  return (
+    <div
+      className={editable ? "overlay-canvas editable" : "overlay-canvas"}
+      style={{
+        width: theme.canvas.width,
+        height: theme.canvas.height,
+        // On air, custom fonts load before the graphic shows, so viewers never see a fallback font.
+        ...(!editable && !fontsReady ? { visibility: "hidden" as const } : {}),
+        ...(transparentBackground ? {} : { background: theme.canvas.backgroundColor })
+      }}
+    >
+      {editable && theme.canvas.safeArea ? <div className="safe-area" /> : null}
+
+      <div
+        ref={stageRef}
+        className="scoreboard-stage"
+        data-phase={scoreboardPhase}
+        style={scoreboardPhase === "hidden" ? { visibility: "hidden" } : undefined}
+      >
+      <div
+        className="placement-layer"
+        style={placement ? { transform: `translate(${placement.x}px, ${placement.y}px) scale(${placement.scale})` } : undefined}
+      >
+
+      {renderBuiltInLayer(false)}
+      {renderFreeLayer(false)}
 
       {momentCards.map((entry) => (entry.card.placement === "free" ? renderMomentCard(entry, false) : null))}
 
@@ -1711,6 +1741,13 @@ export function OverlayRenderer({
             </span>
           </div>
         </div>
+      ) : null}
+      </div>
+      {placement ? (
+        <>
+          {renderBuiltInLayer(true)}
+          {renderFreeLayer(true)}
+        </>
       ) : null}
       </div>
 

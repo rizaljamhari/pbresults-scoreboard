@@ -245,6 +245,13 @@ details[open]:not(.editor-section-card) > summary::after {
   inset: 0;
 }
 
+/* The design, moved and scaled to its on-air placement; untransformed when the theme has none. */
+.placement-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
 /* Contents wait for the band, build in once it has passed, and fade before it comes back. */
 .scoreboard-stage[data-phase="entering"] [data-build] .component-content,
 .scoreboard-stage[data-phase="leaving-wipe"] [data-build] .component-content {
@@ -418,6 +425,44 @@ details[open]:not(.editor-section-card) > summary::after {
   border: 2px dashed rgba(0, 95, 163, 0.3);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Design view: where the design lands on air. Only its label and corner take the pointer; pieces under it stay clickable. */
+.placement-frame {
+  position: absolute;
+  z-index: 10001;
+  border: 2px dashed var(--te-tally, #e5484d);
+  pointer-events: none;
+}
+
+.placement-frame-label {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px 6px 6px 0;
+  background: var(--te-tally, #e5484d);
+  color: #fff;
+  font: 600 12px/1.3 system-ui, sans-serif;
+  white-space: nowrap;
+  transform-origin: left bottom;
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.placement-frame-label:active {
+  cursor: grabbing;
+}
+
+.placement-frame-corner {
+  position: absolute;
+  padding: 0;
+  border: 2px solid var(--te-tally, #e5484d);
+  border-radius: 2px;
+  background: #fff;
+  cursor: nwse-resize;
+  pointer-events: auto;
 }
 
 .component-slot {
@@ -2708,6 +2753,17 @@ details[open]:not(.editor-section-card) > summary::after {
 }
 
 .te-preview-modes {
+  display: flex;
+  gap: 2px;
+}
+
+.te-preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.te-view-toggle {
   display: flex;
   gap: 2px;
 }

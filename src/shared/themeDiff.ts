@@ -42,6 +42,7 @@ const FIELD_LABELS: Record<string, string> = {
   borderWidth: "Border width",
   borderRadius: "Corners",
   opacity: "Opacity",
+  stayInPlace: "Stay in place on air",
   zIndex: "Layer order",
   shadow: "Shadow",
   textShadow: "Text shadow",
@@ -273,6 +274,16 @@ export function diffThemes(before: ThemeDefinition, after: ThemeDefinition, piec
   if (before.motion.enterStaggerMs !== after.motion.enterStaggerMs) motionDetails.push(describe("Build-in gap", before.motion.enterStaggerMs, after.motion.enterStaggerMs));
   if (before.motion.enterOrder !== after.motion.enterOrder) motionDetails.push(describe("Build-in order", before.motion.enterOrder, after.motion.enterOrder));
   push({ key: "motion", pieceId: null, subject: "Motion", details: motionDetails, kind: "changed" });
+
+  const placementDetails: string[] = [];
+  if (before.placement.enabled !== after.placement.enabled) placementDetails.push(after.placement.enabled ? "Placed on air" : "Shown as designed");
+  if (after.placement.enabled) {
+    if (before.placement.scale !== after.placement.scale) {
+      placementDetails.push(`Size: ${Math.round(before.placement.scale * 100)}% → ${Math.round(after.placement.scale * 100)}% of the design`);
+    }
+    if (before.placement.offsetX !== after.placement.offsetX || before.placement.offsetY !== after.placement.offsetY) placementDetails.push("Moved");
+  }
+  push({ key: "placement", pieceId: null, subject: "On-air placement", details: placementDetails, kind: "changed" });
 
   const transitionBefore = record(before.transition);
   const transitionAfter = record(after.transition);

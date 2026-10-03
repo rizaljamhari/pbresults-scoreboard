@@ -49,6 +49,7 @@ export function OverlayPage({ mode }: { mode: "live" | "preview" }) {
           reduceMotion={mode === "live" && settings.data?.reduceMotion === true}
           entranceToken={mode === "live" ? entranceToken : null}
           scoreboardVisible={mode === "live" ? scoreboard.data?.visible ?? true : true}
+          applyPlacement
           operatorTextValues={
             operatorText.data?.themeId === theme.id
               ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))

@@ -206,6 +206,19 @@ export const transitionSchema = z.object({
 export type TransitionSettings = z.infer<typeof transitionSchema>;
 
 /**
+ * Where the design lands on air. Designers can build the scoreboard big in the middle of the canvas; on air it is
+ * moved and scaled as one piece: design point p shows at p × scale + offset. Off, it shows exactly as designed.
+ */
+export const placementSchema = z.object({
+  enabled: z.boolean().default(false),
+  scale: z.number().min(0.05).max(1).default(1),
+  offsetX: z.number().default(0),
+  offsetY: z.number().default(0)
+});
+
+export type PlacementSettings = z.infer<typeof placementSchema>;
+
+/**
  * How a live text piece reacts to its value changing: an animation when it changes (scores, operator text) and a
  * warning in a clock's last seconds. Both off by default.
  */
@@ -285,6 +298,8 @@ const commonFrameBaseSchema = z.object({
   offsetX: z.number(),
   offsetY: z.number(),
   shadow: z.string(),
+  /** With an on-air placement, this piece stays where it was designed instead of moving and scaling with the rest. */
+  stayInPlace: z.boolean().default(false),
   /** Plays as the piece arrives: when the overlay loads, when it is shown, and on the operator's Play entrance. */
   enterMotion: motionField(defaultPieceMotion),
   /** Plays as the piece is hidden. */
@@ -378,6 +393,7 @@ const defaultImageComponentValue = {
   offsetX: 0,
   offsetY: 0,
   shadow: "none",
+  stayInPlace: false,
   assetId: null,
   teamLogoFallbackMode: "slotFallback" as const,
   imageContentMode: "full-canvas" as const,
@@ -904,7 +920,8 @@ const themeObjectSchema = z.object({
       enterOrder: z.enum(enterOrderValues).default("left-to-right")
     })
     .default({}),
-  transition: transitionSchema.default({})
+  transition: transitionSchema.default({}),
+  placement: placementSchema.default({})
 });
 
 export const themeSchema = z.preprocess(migrateMomentOverlays, themeObjectSchema);

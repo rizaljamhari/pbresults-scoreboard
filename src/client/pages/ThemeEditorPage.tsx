@@ -491,6 +491,8 @@ export function ThemeEditorPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [entranceToken, setEntranceToken] = useState<number | null>(null);
   const [previewScoreboardVisible, setPreviewScoreboardVisible] = useState(true);
+  /** With an on-air placement: edit the design as built, or look at it where it lands on air. */
+  const [placementView, setPlacementView] = useState<"design" | "onAir">("design");
   const previewTimeoutTimerRef = useRef<number | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
   const [previewFinished, setPreviewFinished] = useState(false);
@@ -2091,6 +2093,7 @@ export function ThemeEditorPage() {
         replayChange={replayChange}
         entranceToken={entranceToken}
         scoreboardVisible={previewScoreboardVisible}
+        placementView={placementView}
         overlayKey={overlayKey}
         selectAll={selectAllMode}
         zoom={canvasZoom}
@@ -2287,6 +2290,31 @@ export function ThemeEditorPage() {
               <IconButton label="Focus selected piece" shortcut="F" onClick={canvas.focusSelected} disabled={!canvas.canFocus}>
                 <Crosshair />
               </IconButton>
+              {theme.placement.enabled ? (
+                <>
+                  <span className="te-sep" aria-hidden />
+                  <div className="te-view-toggle" role="radiogroup" aria-label="Canvas view">
+                    {(
+                      [
+                        ["design", "Design", "Edit the design as built; the dotted frame shows where it lands on air"],
+                        ["onAir", "On air", "Exactly what vMix shows, at its placement"]
+                      ] as const
+                    ).map(([value, label, hint]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={placementView === value}
+                        title={hint}
+                        className="te-preview-mode"
+                        onClick={() => setPlacementView(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               <span className="te-sep" aria-hidden />
               <IconButton label="Undo" shortcut="⌘Z" onClick={undo} disabled={history.length <= 1}>
                 <Undo2 />
@@ -2598,6 +2626,7 @@ export function ThemeEditorPage() {
                 onPlayEntrance={() => setEntranceToken(Date.now())}
                 previewScoreboardVisible={previewScoreboardVisible}
                 onPreviewScoreboard={setPreviewScoreboardVisible}
+                onShowOnAir={() => setPlacementView("onAir")}
                 onSelectPieces={(ids) => selectComponents(ids)}
                 assets={assets.data ?? []}
                 onUploadFont={(file) => void uploadFont(file)}

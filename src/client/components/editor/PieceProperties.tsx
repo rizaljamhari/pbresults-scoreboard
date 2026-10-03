@@ -766,6 +766,14 @@ export function PieceProperties({
             <NumberInput label="Vertical padding" prefix="↕" value={Number(component.paddingY)} min={0} onChange={(value) => patch((draft) => (draft.paddingY = value))} />
           </div>
         </Field>
+        {theme.placement.enabled ? (
+          <SwitchRow
+            label="Stay in place on air"
+            hint="Keeps this piece exactly where it is designed on air, instead of moving and scaling with the scoreboard. For a corner logo or sponsor bug."
+            checked={Boolean(component.stayInPlace)}
+            onChange={(checked) => patch((draft) => (draft.stayInPlace = checked))}
+          />
+        ) : null}
         <Field label="Content offset" hint="Moves the content inside its box without moving the box.">
           <div className="te-grid-2">
             <NumberInput label="Horizontal offset" prefix="X" value={Number(component.offsetX)} onChange={(value) => patch((draft) => (draft.offsetX = value))} />

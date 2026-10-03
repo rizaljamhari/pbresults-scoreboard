@@ -7,6 +7,7 @@ import type { StoredAsset, ThemeDefinition } from "../../../shared/theme";
 import { FontsProperties } from "./FontsProperties";
 import { VersionsProperties } from "./VersionsProperties";
 import { TransitionProperties } from "./TransitionProperties";
+import { PlacementProperties } from "./PlacementProperties";
 import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, SelectInput, SwitchRow, TextInput } from "./fields";
 
 /** What Properties shows when nothing is selected: the theme and its canvas. */
@@ -22,6 +23,7 @@ export function ThemeProperties({
   onPlayEntrance,
   previewScoreboardVisible,
   onPreviewScoreboard,
+  onShowOnAir,
   onSelectPieces,
   assets,
   onUploadFont,
@@ -41,6 +43,8 @@ export function ThemeProperties({
   /** Whether the canvas shows the scoreboard, and plays Show / Hide on it. */
   previewScoreboardVisible: boolean;
   onPreviewScoreboard: (visible: boolean) => void;
+  /** Switches the canvas to the On air view. */
+  onShowOnAir: () => void;
   /** Selects these pieces on the canvas (from a colour's or style's "Select"). */
   onSelectPieces: (pieceIds: string[]) => void;
   assets: StoredAsset[];
@@ -133,6 +137,8 @@ export function ThemeProperties({
           Play entrance
         </button>
       </PanelSection>
+
+      <PlacementProperties theme={theme} patchTheme={patchTheme} onShowOnAir={onShowOnAir} />
 
       <TransitionProperties
         theme={theme}
