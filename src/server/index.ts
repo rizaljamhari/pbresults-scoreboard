@@ -5,6 +5,7 @@ import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
+import compress from "@fastify/compress";
 import { z } from "zod";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
@@ -323,6 +324,9 @@ function findPreferredLanAddress() {
 
 // First, so every route and hook after it sees requests already classified as local or remote.
 registerRemoteRequestBoundary(app, { markers: remoteSessionMarkers, localOrigins: devClientOrigins });
+// Gzip only: much smaller pages and API replies (notably through the remote-access tunnel's quota) for little CPU.
+// Images are already compressed and skipped; the hijacked event stream compresses itself, and only when remote.
+await app.register(compress, { global: true, encodings: ["gzip"], threshold: 1024 });
 await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 await app.register(fastifyStatic, {
   root: uploadsDir,
@@ -870,9 +874,19 @@ if (fs.existsSync(clientRoot)) {
     root: clientRoot,
     decorateReply: false
   });
+  // Vite names built files by content hash, so a cached copy can never be stale: keep it for good. index.html is
+  // still revalidated on every load, which is how browsers find a new build's new file names. (An onSend hook,
+  // because @fastify/static applies its own Cache-Control after its setHeaders option.)
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (reply.statusCode === 200 && request.url.startsWith("/assets/")) {
+      reply.header("Cache-Control", "public, max-age=31536000, immutable");
+    }
+    return payload;
+  });
 
   app.setNotFoundHandler((request, reply) => {
-    if (request.url.startsWith("/api/") || request.url.startsWith("/uploads/")) {
+    // A missing built file is a 404, never the app page: that would be cached for good under an asset URL.
+    if (request.url.startsWith("/api/") || request.url.startsWith("/uploads/") || request.url.startsWith("/assets/")) {
       return reply.code(404).send({ message: "Not found" });
     }
     return reply.type("text/html").send(fs.readFileSync(clientIndex, "utf8"));

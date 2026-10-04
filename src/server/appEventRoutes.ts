@@ -7,6 +7,13 @@ import type { RehearsalStatus } from "../shared/rehearsal.js";
 import type { ScoreboardState } from "../shared/scoreboard.js";
 import { AppEventHub, formatAppEventFrame } from "./appEventHub.js";
 import type { OverlayRegistry } from "./overlayRegistry.js";
+import {
+  REMOTE_STREAM_MAX_BUFFER_BYTES,
+  acceptsGzip,
+  createFlushingGzip,
+  createRemoteLiveStateFilter,
+  writeFlushed
+} from "./remoteStreamShaping.js";
 
 type AppEventRouteOptions = {
   hub: AppEventHub;
@@ -38,6 +45,11 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     let detachOverlay: (() => void) | null = null;
     let releaseRemote: (() => void) | null = null;
     let cleanedUp = false;
+    // Only streams through remote access are shaped (compressed, live states thinned); local ones, vMix's overlay
+    // included, get every frame exactly as before.
+    const remote = Boolean(request.remoteAccess);
+    const gzip = remote && acceptsGzip(request.headers["accept-encoding"]) ? createFlushingGzip() : null;
+    const remoteFilter = remote ? createRemoteLiveStateFilter() : null;
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
@@ -48,11 +60,22 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
       detachOverlay = null;
       releaseRemote?.();
       releaseRemote = null;
+      gzip?.destroy();
     };
     const writeFrame = (frame: string) => {
       if (reply.raw.destroyed || reply.raw.writableEnded) {
         cleanup();
         return false;
+      }
+      if (remoteFilter && !remoteFilter(frame)) return true;
+      if (gzip) {
+        writeFlushed(gzip, frame);
+        if (reply.raw.writableLength + gzip.writableLength > REMOTE_STREAM_MAX_BUFFER_BYTES) {
+          cleanup();
+          reply.raw.destroy();
+          return false;
+        }
+        return true;
       }
       const accepted = reply.raw.write(frame);
       if (!accepted) {
@@ -76,8 +99,16 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
-      "x-accel-buffering": "no"
+      "x-accel-buffering": "no",
+      ...(gzip ? { "content-encoding": "gzip", vary: "accept-encoding" } : {})
     });
+    if (gzip) {
+      gzip.pipe(reply.raw);
+      gzip.on("error", () => {
+        cleanup();
+        reply.raw.destroy();
+      });
+    }
     reply.raw.on("close", cleanup);
     reply.raw.on("error", cleanup);
     const query = request.query as { client?: unknown; role?: unknown; page?: unknown } | undefined;

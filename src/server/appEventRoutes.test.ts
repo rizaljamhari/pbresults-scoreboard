@@ -129,3 +129,79 @@ describe("remote event streams", () => {
     expect(hub.getStats().connectedClients).toBe(0);
   });
 });
+
+describe("event stream shaping", () => {
+  async function openShapingApp() {
+    const app = Fastify({ logger: false });
+    const hub = new AppEventHub({ instanceId: "shape-instance" });
+    apps.push(app);
+    hubs.push(hub);
+    app.decorateRequest("remoteAccess", null);
+    app.addHook("onRequest", async (request) => {
+      if (request.headers["x-test-remote"]) request.remoteAccess = { kind: "ngrok", sessionId: "s", publicOrigin: "https://x.ngrok-free.app" };
+    });
+    registerAppEventRoutes(app, {
+      hub,
+      openStreams: new Set(),
+      getRuntime: () => ({ appVersion: "1.8.0", releaseTag: "v1.8.0" }),
+      getLiveState: () => normalizeLiveState(null, { sourceStatus: "idle", fetchedAt: null, errorMessage: null }),
+      getOperatorTextState: () => ({ themeId: null, fields: [] }),
+      trackRemoteStream: () => () => {}
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const { port } = app.server.address() as AddressInfo;
+    return { hub, port };
+  }
+
+  /** Reads decoded stream text until `done` says so, or fails after `ms`. */
+  async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, done: (text: string) => boolean, ms = 1_000) {
+    const decoder = new TextDecoder();
+    let text = "";
+    const deadline = Date.now() + ms;
+    while (!done(text)) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(`timed out; got: ${text.slice(-300)}`);
+      const chunk = await Promise.race([reader.read(), new Promise<never>((_r, reject) => setTimeout(() => reject(new Error("timed out")), remaining))]);
+      if (chunk.done) break;
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return text;
+  }
+
+  const live = (fetchedAt: string, sourceStatus: "ok" | "error" = "ok") => normalizeLiveState(null, { sourceStatus, fetchedAt, errorMessage: null });
+  const count = (text: string) => text.split("event: live.state").length - 1;
+
+  it("leaves local streams untouched: no compression, every live state delivered", async () => {
+    const { hub, port } = await openShapingApp();
+    const response = await fetch(`http://127.0.0.1:${port}/api/events`, { headers: { "accept-encoding": "gzip" } });
+    expect(response.headers.get("content-encoding")).toBeNull();
+    const reader = response.body!.getReader();
+    await readUntil(reader, (text) => text.includes("system.snapshot"));
+    for (let index = 0; index < 4; index += 1) hub.publishLiveState(live(`2026-10-05T00:00:0${index}.000Z`));
+    const text = await readUntil(reader, (value) => count(value) >= 4);
+    expect(count(text)).toBe(4);
+    await reader.cancel();
+  });
+
+  it("compresses remote streams, thins unchanged states, and still delivers a real change at once", async () => {
+    const { hub, port } = await openShapingApp();
+    const response = await fetch(`http://127.0.0.1:${port}/api/events`, { headers: { "x-test-remote": "1", "accept-encoding": "gzip" } });
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    const reader = response.body!.getReader();
+    await readUntil(reader, (text) => text.includes("system.snapshot"));
+
+    hub.publishLiveState(live("2026-10-05T00:00:00.000Z"));
+    hub.publishLiveState(live("2026-10-05T00:00:00.500Z"));
+    hub.publishLiveState(live("2026-10-05T00:00:01.000Z"));
+    const first = await readUntil(reader, (text) => count(text) >= 1, 500);
+    expect(count(first)).toBe(1);
+
+    const sentAt = Date.now();
+    hub.publishLiveState(live("2026-10-05T00:00:01.500Z", "error"));
+    const change = await readUntil(reader, (text) => text.includes('"sourceStatus":"error"'), 500);
+    expect(change).toContain("event: live.state");
+    // Flushed per frame: compression never holds an update back.
+    expect(Date.now() - sentAt).toBeLessThan(250);
+    await reader.cancel();
+  });
+});
