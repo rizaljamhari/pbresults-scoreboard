@@ -117,10 +117,14 @@ export function Switch({
   disabled?: boolean;
   id?: string;
 }) {
+  // Inside a form, Radix adds a hidden absolutely positioned checkbox next to the switch. The wrapper gives it a
+  // containing block, so it scrolls with the switch instead of stretching the whole page.
   return (
-    <SwitchPrimitive.Root id={id} className="ad-switch" checked={checked} onCheckedChange={onChange} aria-label={label} disabled={disabled}>
-      <SwitchPrimitive.Thumb className="ad-switch-thumb" />
-    </SwitchPrimitive.Root>
+    <span className="ad-switch-wrap">
+      <SwitchPrimitive.Root id={id} className="ad-switch" checked={checked} onCheckedChange={onChange} aria-label={label} disabled={disabled}>
+        <SwitchPrimitive.Thumb className="ad-switch-thumb" />
+      </SwitchPrimitive.Root>
+    </span>
   );
 }
 

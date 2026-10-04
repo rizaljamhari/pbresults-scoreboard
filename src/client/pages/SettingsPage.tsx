@@ -219,7 +219,12 @@ export function SettingsPage() {
                   aria-current={activeSection === section.id ? "true" : undefined}
                   onClick={(event) => {
                     event.preventDefault();
-                    document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    // Scroll only the settings body; scrollIntoView would also scroll the page around it.
+                    const root = bodyRef.current;
+                    const target = document.getElementById(section.id);
+                    if (root && target) {
+                      root.scrollTo({ top: target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop, behavior: "smooth" });
+                    }
                     setActiveSection(section.id);
                   }}
                 >
