@@ -2808,6 +2808,8 @@ tr[aria-selected="true"] .ad-row-open {
 
 .ad-asset-preview {
   display: grid;
+  /* A definite track, so the image's percentage max-height resolves; an auto row lets tall images overflow. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   height: 200px;
   place-items: center;
   overflow: hidden;
