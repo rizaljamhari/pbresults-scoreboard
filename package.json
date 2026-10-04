@@ -24,6 +24,7 @@
     "@fontsource/bebas-neue": "^5.1.1",
     "@fontsource/oswald": "^5.1.1",
     "@imgly/background-removal-node": "^1.4.5",
+    "@ngrok/ngrok": "1.7.0",
     "@radix-ui/react-context-menu": "^2.3.7",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-popover": "^1.1.23",

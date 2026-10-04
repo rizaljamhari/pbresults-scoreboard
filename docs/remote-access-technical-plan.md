@@ -1,6 +1,6 @@
 # Temporary ngrok Remote Access Technical Plan
 
-Status: Phases 1–2 implemented (shared model, token storage, configuration API, request boundary); Phases 3–5 not started
+Status: Phases 1–3 implemented (shared model, token storage, configuration API, request boundary, ngrok provider and session lifecycle); Phases 4–5 not started. Not yet run against a real ngrok account.
 
 Last reviewed: 2026-10-05 (re-checked against the Node update coordinators, the application event hub, and backup/restore)
 
@@ -967,7 +967,7 @@ Exit criteria: packaged Windows can save, restart, read, replace, and delete an 
 Implemented in `src/shared/remoteAccess.ts`, `src/server/remoteAccessSecrets.ts`, `src/server/remoteAccessService.ts`, and `src/server/remoteAccessRoutes.ts`. Two deliberate stand-ins remain until later phases:
 
 - The configuration routes take the onsite check as an injected `isManagementRequest`; `index.ts` passes `isLoopbackRequest` for now. That is sufficient while no tunnel can exist, and Phase 2 must swap in `isOnsiteManagementRequest()` before Phase 3 lands.
-- **Save and test** runs an injected `AuthtokenVerifier`; production uses `acceptAuthtoken`, which accepts any token that passes the request schema's shape check. Phase 3 replaces it with the ngrok control-session check.
+- **Save and test** runs an injected `AuthtokenVerifier`. Phase 3 replaced the shape-check stand-in with the ngrok control-session check.
 
 ### Phase 2: request boundary hardening
 
@@ -990,6 +990,18 @@ Implemented in `src/server/remoteRequestSecurity.ts`, registered first in `index
 - Add lifecycle logs with redaction.
 
 Exit criteria: fake-provider tests pass and no start failure leaves accepted credentials or a live application session.
+
+Implemented in `src/server/ngrokRemoteAccessProvider.ts`, `src/server/remoteAccessService.ts`, `src/server/remoteAccessRoutes.ts`, `src/server/remoteAccessLog.ts`, and `src/server/remoteAccessErrors.ts`. Differences from the wording above:
+
+- The provider uses the SDK's explicit `SessionBuilder` → `Session.httpEndpoint()` API rather than the global `forward()`. It owns its session handle, connects a session with no endpoint for **Save and test**, and maps `handleDisconnection`/`handleHeartbeat` to the degraded and reconnected states. `disconnectAll()` (SDK `kill()`) is only a last resort on shutdown.
+- The Traffic Policy has three rules in this order: `basic-auth`, a single `deny` rule for every machine-lifecycle route, then `add-headers` for the marker. Authenticating first means strangers learn nothing about routes.
+- The probe route counts only when the request carries the provisional marker, Basic Auth has already been stripped, `X-Forwarded-Proto` is `https`, and the onsite predicate rejects it. The service also requires the probe route to have actually run (`probeSeen`), so a 204 from anything else cannot pass.
+- A failed start leaves nothing open, so Start may be retried directly from `failed`. A failed stop keeps its tunnel handle and must be stopped again first.
+- Status changes publish `remote-access.changed` through `AppEventHub` (new `remoteAccess` revision domain).
+- `gracefulShutdown()` now calls `remoteAccess.shutdown()` first (revoke the marker, ≤2 s close, then SDK `kill()`), arms a 10-second hard exit, and ends with `process.exit(0)`. Checked on a compiled server: SIGTERM exits with code 0 in about 0.1 s.
+- Pino redaction covers `authorization`, the marker header, and credential-shaped fields.
+- Packaging asserts `@ngrok/ngrok` and `@ngrok/ngrok-win32-x64-msvc` are staged and imports the SDK on the bundled `node.exe`.
+- Checked against real ngrok with a made-up token: rejected in about 150 ms and reported as `REMOTE_ACCESS_TOKEN_INVALID` with no provider text. A real tunnel, the free-plan interstitial, and whether ngrok really sends `X-Forwarded-Proto` upstream are left for Phase 5.
 
 ### Phase 4: operator UI
 
@@ -1026,7 +1038,7 @@ Code rollback is safe because older application versions ignore the root `secret
 
 ## 26. Implementation checklist
 
-- [ ] Add `@ngrok/ngrok` and lockfile changes.
+- [x] Add `@ngrok/ngrok` and lockfile changes.
 - [x] Add shared remote-access schemas and errors.
 - [x] Add root secrets runtime paths.
 - [x] Implement plaintext file storage in root `secrets/` with atomic writes.
@@ -1035,18 +1047,18 @@ Code rollback is safe because older application versions ignore the root `secret
 - [x] Add request marker and strict onsite-loopback security helpers.
 - [x] Migrate every update mutation, backup restore, and backup config to the strict predicate.
 - [x] Exclude recognized remote requests from overlay health.
-- [ ] Make `gracefulShutdown()` close the tunnel first, force SDK teardown on timeout, and exit explicitly within the coordinator deadline.
-- [ ] Add the SDK import to the bundled-`node.exe` packaging smoke test.
+- [x] Make `gracefulShutdown()` close the tunnel first, force SDK teardown on timeout, and exit explicitly within the coordinator deadline.
+- [x] Add the SDK import to the bundled-`node.exe` packaging smoke test.
 - [x] Remove arbitrary CORS origin reflection.
 - [x] Add remote unsafe-method Origin validation.
-- [ ] Implement in-memory Traffic Policy generation.
-- [ ] Implement ngrok start and HTTPS URL validation.
-- [ ] Implement public authenticated self-probe.
-- [ ] Implement lifecycle state machine, expiry, degraded state, and stop retry.
-- [ ] Integrate listener closure into graceful shutdown and managed-update restart.
-- [ ] Add redacted lifecycle log and logger redaction.
+- [x] Implement in-memory Traffic Policy generation.
+- [x] Implement ngrok start and HTTPS URL validation.
+- [x] Implement public authenticated self-probe.
+- [x] Implement lifecycle state machine, expiry, degraded state, and stop retry.
+- [x] Integrate listener closure into graceful shutdown and managed-update restart.
+- [x] Add redacted lifecycle log and logger redaction.
 - [ ] Add client API, status hook, Settings card, dialogs, and global banner.
-- [ ] Publish `remote-access.changed` through `AppEventHub`.
-- [ ] Extend package validation for the Windows native SDK.
+- [x] Publish `remote-access.changed` through `AppEventHub`.
+- [x] Extend package validation for the Windows native SDK.
 - [ ] Complete unit, route, fake-provider, real-ngrok, and Windows matrices.
 - [ ] Update README, API reference, project context, portable readme, and operator instructions after implementation.

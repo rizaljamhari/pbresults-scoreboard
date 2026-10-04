@@ -8,7 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { z } from "zod";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
-import { clientDistDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
+import { clientDistDir, logsDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
 import {
   backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
@@ -66,11 +66,27 @@ import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
 import { createFileSecretStore } from "./remoteAccessSecrets.js";
 import { RemoteAccessService } from "./remoteAccessService.js";
+import { createNgrokProvider } from "./ngrokRemoteAccessProvider.js";
+import { createLifecycleLog } from "./remoteAccessLog.js";
 import { registerRemoteAccessRoutes } from "./remoteAccessRoutes.js";
 import { isOnsiteManagementRequest, isRemoteRequest, registerRemoteRequestBoundary, RemoteSessionMarkers } from "./remoteRequestSecurity.js";
 
 const app = Fastify({
-  logger: true,
+  logger: {
+    // Request logs carry no headers or bodies today; this keeps it so if that ever changes.
+    redact: {
+      paths: [
+        "req.headers.authorization",
+        'req.headers["x-pbresults-remote-session"]',
+        "headers.authorization",
+        'headers["x-pbresults-remote-session"]',
+        "*.authtoken",
+        "*.password",
+        "*.credentials"
+      ],
+      censor: "[redacted]"
+    }
+  },
   bodyLimit: 200 * 1024 * 1024
 });
 
@@ -83,6 +99,15 @@ const appEventHub = new AppEventHub({
       app.log.warn(details ?? {}, message);
     }
   }
+});
+const remoteAccess = new RemoteAccessService({
+  store: createFileSecretStore({ filePath: remoteAccessSecretPath }),
+  provider: createNgrokProvider(),
+  markers: remoteSessionMarkers,
+  port,
+  appVersion: runtimeBuild.info.appVersion,
+  onChange: () => appEventHub.publish("remote-access.changed"),
+  log: createLifecycleLog(path.join(logsDir, "remote-access.log"))
 });
 // What the overlay and admin see: the real feed, or rehearsal frames while a rehearsal runs.
 const liveGate = new LiveGate(
@@ -167,9 +192,15 @@ function scheduleVisibleContentBackfill() {
   })();
 }
 
+/** The update coordinator gives the old server 20 seconds to exit; stay well inside that whatever hangs. */
+const shutdownDeadlineMs = 10_000;
+
 async function gracefulShutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  setTimeout(() => process.exit(1), shutdownDeadlineMs).unref();
+  // First: revoke remote access and close the tunnel, before the slower shutdown backup.
+  await remoteAccess.shutdown().catch((error) => app.log.warn({ code: (error as { code?: string }).code }, "Remote access shutdown failed"));
   updateService.stop();
   unsubscribeLiveEventBridge();
   unsubscribeOperatorTextEventBridge();
@@ -185,6 +216,8 @@ async function gracefulShutdown() {
     }
   }
   await app.close();
+  // An ngrok session is a native handle that can keep the event loop alive; never rely on it draining.
+  process.exit(0);
 }
 
 const shutdownBackupTimeoutMs = 3000;
@@ -395,7 +428,7 @@ app.post("/api/overlay/entrance", async () => {
 });
 
 registerRemoteAccessRoutes(app, {
-  service: new RemoteAccessService({ store: createFileSecretStore({ filePath: remoteAccessSecretPath }) }),
+  service: remoteAccess,
   isManagementRequest: isOnsiteRequest,
   isRemoteRequest
 });

@@ -183,7 +183,9 @@ async function materializeNodeModules() {
   const requiredRuntimePackages = [
     path.join(sourceNodeModulesDir, "fastify", "package.json"),
     path.join(sourceNodeModulesDir, "react", "package.json"),
-    path.join(sourceNodeModulesDir, "sharp", "package.json")
+    path.join(sourceNodeModulesDir, "sharp", "package.json"),
+    path.join(sourceNodeModulesDir, "@ngrok", "ngrok", "package.json"),
+    path.join(sourceNodeModulesDir, "@ngrok", "ngrok-win32-x64-msvc", "package.json")
   ];
 
   for (const requiredPath of requiredRuntimePackages) {
@@ -317,6 +319,24 @@ if (maskedMetadata.width !== 2 || maskedMetadata.height !== 2 || maskedMetadata.
   throw new Error("IMG.LY background-removal runtime operation failed.");
 }
 process.stdout.write("IMAGE_RUNTIME_OK\\n");
+`;
+  await fs.writeFile(smokeTestPath, smokeTest, "utf8");
+  try {
+    run(path.join(runtimeDir, "node.exe"), [smokeTestPath], { cwd: appDir });
+  } finally {
+    rmSync(smokeTestPath, { force: true });
+  }
+}
+
+/** Remote access loads ngrok's native module on demand; prove it loads here, without opening any connection. */
+async function verifyPackagedRemoteAccessRuntime() {
+  const smokeTestPath = path.join(appDir, `.remote-access-runtime-smoke-${process.pid}.mjs`);
+  const smokeTest = `
+const ngrok = await import("@ngrok/ngrok");
+if (typeof ngrok.SessionBuilder !== "function" || typeof ngrok.kill !== "function") {
+  throw new Error("The ngrok SDK loaded without its native bindings.");
+}
+process.stdout.write("REMOTE_ACCESS_RUNTIME_OK\\n");
 `;
   await fs.writeFile(smokeTestPath, smokeTest, "utf8");
   try {
@@ -564,6 +584,7 @@ async function main() {
   await pruneDeployedApp();
   await installBundledNodeRuntime();
   await verifyPackagedImageRuntime();
+  await verifyPackagedRemoteAccessRuntime();
   await writeBootstrapData();
   await writeLauncherFiles();
   await createZipArchive();

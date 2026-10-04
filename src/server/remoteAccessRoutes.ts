@@ -1,15 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
+  REMOTE_ACCESS_CONFIRMATIONS,
   remoteAccessConfigurationRequestSchema,
-  remoteAccessRemoveConfigurationRequestSchema
+  remoteAccessRemoveConfigurationRequestSchema,
+  remoteAccessStartRequestSchema,
+  remoteAccessStopRequestSchema
 } from "../shared/remoteAccess.js";
 import { RemoteAccessFailure, type RemoteAccessService } from "./remoteAccessService.js";
+import { REMOTE_ACCESS_PROBE_PATH } from "./remoteRequestSecurity.js";
 
 type RemoteAccessRouteOptions = {
   service: RemoteAccessService;
   /** Whether a request comes from the scoreboard computer itself and may manage remote access. */
   isManagementRequest: (request: FastifyRequest) => boolean;
-  /** Whether a request arrived through the tunnel. Always false until the ngrok provider exists. */
+  /** Whether a request arrived through the tunnel. */
   isRemoteRequest?: (request: FastifyRequest) => boolean;
 };
 
@@ -26,7 +30,7 @@ export function registerRemoteAccessRoutes(app: FastifyInstance, options: Remote
     if (options.isManagementRequest(request)) return true;
     void reply.code(403).send({
       code: "REMOTE_ACCESS_LOCAL_REQUEST_REQUIRED",
-      message: "Remote access can be configured only on the scoreboard computer, from localhost."
+      message: "Remote access can be managed only on the scoreboard computer, from localhost."
     });
     return false;
   };
@@ -62,6 +66,54 @@ export function registerRemoteAccessRoutes(app: FastifyInstance, options: Remote
       return sendFailure(reply, error);
     }
   });
+
+  app.post("/api/remote-access/start", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    if (!requireManagement(request, reply)) return reply;
+    const body = remoteAccessStartRequestSchema.safeParse(request.body);
+    if (!body.success) {
+      const confirmed = (request.body as { confirmation?: unknown } | undefined)?.confirmation === REMOTE_ACCESS_CONFIRMATIONS.start;
+      return confirmed
+        ? reply.code(400).send({ code: "REMOTE_ACCESS_INVALID_DURATION", message: "Choose one of the offered session lengths." })
+        : sendInvalid(reply, "Confirm starting remote access.");
+    }
+    try {
+      await options.service.start(body.data.durationMinutes);
+      return reply.code(201).send(status(request));
+    } catch (error) {
+      return sendFailure(reply, error);
+    }
+  });
+
+  app.post("/api/remote-access/stop", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    if (!requireManagement(request, reply)) return reply;
+    const body = remoteAccessStopRequestSchema.safeParse(request.body);
+    if (!body.success) return sendInvalid(reply, "Confirm stopping remote access.");
+    try {
+      await options.service.stop("manual");
+      return status(request);
+    } catch (error) {
+      return sendFailure(reply, error);
+    }
+  });
+
+  // Internal: the server calls this through its own public URL while starting. It answers only for that session's
+  // provisional marker, after the boundary has stripped Basic Auth, and only when the request really came via ngrok.
+  app.get(REMOTE_ACCESS_PROBE_PATH, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const remote = request.remoteAccess;
+    const accepted =
+      remote !== null &&
+      remote !== undefined &&
+      !options.isManagementRequest(request) &&
+      options.service.acceptProbe({
+        sessionId: remote.sessionId,
+        authorizationPresent: request.headers.authorization !== undefined,
+        forwardedProto: typeof request.headers["x-forwarded-proto"] === "string" ? request.headers["x-forwarded-proto"] : undefined
+      });
+    return accepted ? reply.code(204).send() : reply.code(404).send({ message: "Not found" });
+  });
 }
 
 function sendInvalid(reply: FastifyReply, message: string) {
@@ -73,5 +125,5 @@ function sendFailure(reply: FastifyReply, error: unknown) {
     return reply.code(error.statusCode).send({ code: error.code, message: error.message });
   }
   // Unknown errors may carry provider text; never forward it.
-  return reply.code(500).send({ code: "REMOTE_ACCESS_SECRET_STORE_FAILED", message: "Remote access configuration failed." });
+  return reply.code(500).send({ code: "REMOTE_ACCESS_PROVIDER_UNAVAILABLE", message: "Remote access failed." });
 }
