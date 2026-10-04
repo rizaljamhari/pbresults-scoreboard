@@ -18,6 +18,8 @@ type AppEventRouteOptions = {
   overlays?: OverlayRegistry;
   getOverlayState?: () => OverlayState;
   getRehearsalStatus?: () => RehearsalStatus;
+  /** Count a stream opened through remote access; returns the release to call when it closes. */
+  trackRemoteStream?: (sessionId: string, close: () => void) => () => void;
   getScoreboardState?: () => ScoreboardState;
 };
 
@@ -34,6 +36,7 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
 
     let unsubscribe: (() => void) | null = null;
     let detachOverlay: (() => void) | null = null;
+    let releaseRemote: (() => void) | null = null;
     let cleanedUp = false;
     const cleanup = () => {
       if (cleanedUp) return;
@@ -43,6 +46,8 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
       unsubscribe = null;
       detachOverlay?.();
       detachOverlay = null;
+      releaseRemote?.();
+      releaseRemote = null;
     };
     const writeFrame = (frame: string) => {
       if (reply.raw.destroyed || reply.raw.writableEnded) {
@@ -76,6 +81,12 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     reply.raw.on("close", cleanup);
     reply.raw.on("error", cleanup);
     const query = request.query as { client?: unknown; role?: unknown; page?: unknown } | undefined;
+    if (request.remoteAccess && options.trackRemoteStream) {
+      releaseRemote = options.trackRemoteStream(request.remoteAccess.sessionId, () => {
+        cleanup();
+        reply.raw.destroy();
+      });
+    }
     // A remote browser looking at the overlay is not the overlay vMix shows; keep it out of overlay health.
     if (options.overlays && !request.remoteAccess && query?.role === "overlay" && typeof query.client === "string" && CLIENT_ID.test(query.client)) {
       detachOverlay = options.overlays.attachStream(query.client, query.page === "preview" ? "preview" : "live", {

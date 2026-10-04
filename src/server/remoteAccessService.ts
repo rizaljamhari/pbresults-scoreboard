@@ -121,6 +121,8 @@ export class RemoteAccessService {
   private session: ActiveSession | null = null;
   private shuttingDown = false;
   private lifecycle: Promise<unknown> = Promise.resolve();
+  /** Closers for remote pages' open event streams, by session; revoking a session ends them at once. */
+  private remoteStreams = new Map<string, Set<() => void>>();
 
   constructor(options: {
     store: RemoteAccessSecretStore;
@@ -170,6 +172,7 @@ export class RemoteAccessService {
       url: visible ? (session?.url ?? null) : null,
       startedAt: visible ? (session?.startedAt ?? null) : null,
       expiresAt: visible ? (session?.expiresAt ?? null) : null,
+      remoteConnections: visible && session ? (this.remoteStreams.get(session.id)?.size ?? 0) : 0,
       lastError: this.lastError
     };
     if (!request.managementAllowed) return status;
@@ -310,13 +313,37 @@ export class RemoteAccessService {
   }
 
   /**
+   * Count a remote page's open event stream for "who is connected", and remember how to end it. Returns the release
+   * to call when the stream closes. A stream for anything but the current session is ended immediately.
+   */
+  trackRemoteStream(sessionId: string, close: () => void): () => void {
+    if (!this.session || this.session.id !== sessionId) {
+      close();
+      return () => {};
+    }
+    let streams = this.remoteStreams.get(sessionId);
+    if (!streams) {
+      streams = new Set();
+      this.remoteStreams.set(sessionId, streams);
+    }
+    const tracked = streams;
+    tracked.add(close);
+    this.changed();
+    return () => {
+      if (!tracked.delete(close)) return;
+      if (tracked.size === 0) this.remoteStreams.delete(sessionId);
+      this.changed();
+    };
+  }
+
+  /**
    * First step of a graceful shutdown. Revokes the session at once, then gives the tunnel a short, bounded chance to
    * close. Does not wait for other lifecycle work, so a hung start cannot hold the process past the update
    * coordinator's deadline; process exit drops whatever is left.
    */
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
-    this.markers?.clear();
+    this.revoke();
     const session = this.session;
     if (!session) return;
     if (session.expiryTimer) this.timers.clearTimeout(session.expiryTimer);
@@ -344,7 +371,7 @@ export class RemoteAccessService {
       }
       return;
     }
-    this.markers?.clear();
+    this.revoke();
     if (session.expiryTimer) this.timers.clearTimeout(session.expiryTimer);
     session.expiryTimer = null;
     this.sessionPhase = "stopping";
@@ -374,10 +401,29 @@ export class RemoteAccessService {
   private expire(session: ActiveSession) {
     // Revoke immediately, even if another lifecycle operation is running; the close follows in turn.
     if (this.session !== session) return;
-    this.markers?.clear();
+    this.revoke();
     void this.serialize(async () => {
       if (this.session === session) await this.stopNow("expiry");
     }).catch(() => undefined);
+  }
+
+  /** Refuse the marker and end every remote page's open stream: already-open streams would otherwise keep flowing. */
+  private revoke() {
+    this.markers?.clear();
+    const closers = [...this.remoteStreams.values()].flatMap((streams) => {
+      const list = [...streams];
+      // Emptied first, so each stream's release finds nothing left to count down.
+      streams.clear();
+      return list;
+    });
+    this.remoteStreams.clear();
+    for (const close of closers) {
+      try {
+        close();
+      } catch {
+        // A stream that is already gone needs no ending.
+      }
+    }
   }
 
   private connectionChanged(session: ActiveSession, event: RemoteConnectionEvent) {
@@ -396,7 +442,7 @@ export class RemoteAccessService {
   }
 
   private async abandonFailedStart(session: ActiveSession, failure: RemoteAccessFailure) {
-    this.markers?.clear();
+    this.revoke();
     const tunnel = session.tunnel;
     if (this.session === session) this.session = null;
     session.tunnel = null;

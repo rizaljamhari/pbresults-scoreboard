@@ -366,6 +366,48 @@ describe("remote access session lifecycle", () => {
     await expect(service.start(120)).rejects.toBeInstanceOf(RemoteAccessFailure);
   }, 10_000);
 
+  it("counts remote pages that are connected, and ends their streams when the session stops", async () => {
+    const { edge, local, service, onChange } = setup();
+    const status = (await start(local)).json() as LocalRemoteAccessStatus;
+    const echo = (await edge.request({ url: "/api/settings", auth: basic(status) })).json() as { remote: { sessionId: string } };
+    const sessionId = echo.remote.sessionId;
+    const statusOf = () => service.getStatus({ managementAllowed: true, remoteRequest: false });
+    expect(statusOf().remoteConnections).toBe(0);
+
+    const firstClose = vi.fn();
+    const secondClose = vi.fn();
+    const changesBefore = onChange.mock.calls.length;
+    const releaseFirst = service.trackRemoteStream(sessionId, firstClose);
+    service.trackRemoteStream(sessionId, secondClose);
+    expect(statusOf().remoteConnections).toBe(2);
+    expect(onChange.mock.calls.length).toBe(changesBefore + 2);
+
+    releaseFirst();
+    releaseFirst();
+    expect(statusOf().remoteConnections).toBe(1);
+    expect(firstClose).not.toHaveBeenCalled();
+
+    // A stream from another (old) session is ended at once and never counted.
+    const staleClose = vi.fn();
+    service.trackRemoteStream("old-session", staleClose);
+    expect(staleClose).toHaveBeenCalledTimes(1);
+    expect(statusOf().remoteConnections).toBe(1);
+
+    await local("POST", "/api/remote-access/stop", { confirmation: "STOP_REMOTE_ACCESS" });
+    expect(secondClose).toHaveBeenCalledTimes(1);
+    expect(statusOf().remoteConnections).toBe(0);
+  });
+
+  it("ends remote streams the moment a session expires", async () => {
+    const { edge, local, service, clock } = setup();
+    const status = (await start(local, 30)).json() as LocalRemoteAccessStatus;
+    const { remote } = (await edge.request({ url: "/api/settings", auth: basic(status) })).json() as { remote: { sessionId: string } };
+    const close = vi.fn();
+    service.trackRemoteStream(remote.sessionId, close);
+    clock.advance(30 * 60_000);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("only answers the probe for the provisional session through ngrok", async () => {
     const { app } = setup();
     const probe = await app.inject({ method: "GET", url: "/api/remote-access/probe", headers: { host: "localhost:3000" } });

@@ -22,7 +22,7 @@ import {
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
 import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemoteAccessStatus, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
-import { formatRemaining } from "./RemoteAccessRows";
+import { formatRemaining, formatRemoteConnections, formatTime } from "./RemoteAccessRows";
 import { api } from "../api";
 import { summarizeOverlays } from "../../shared/overlayHealth";
 import type { AppSettings } from "../../shared/theme";
@@ -239,12 +239,14 @@ function RemoteAccessBanner() {
   const status = remote.data;
   if (!status || (status.phase !== "active" && status.phase !== "degraded")) return null;
   const degraded = status.phase === "degraded";
+  const remaining = formatRemaining(status.expiresAt, now);
   return (
     <div className={cn("ad-ra-banner ad-scope", degraded && "ad-ra-banner--critical")} role="status">
       <Globe aria-hidden />
       {degraded ? "Remote access is reconnecting" : status.remoteRequest ? "You are connected remotely" : "Remote access is on"}
       <span>
-        · {status.remoteRequest ? "changes here and on site are shared" : "staff off site can make changes"} · {formatRemaining(status.expiresAt, now)}
+        {status.remoteRequest ? "" : `· ${formatRemoteConnections(status.remoteConnections)} `}·{" "}
+        {remaining === "ending now" ? "ending now" : `ends ${formatTime(status.expiresAt)} (${remaining})`}
       </span>
       <span className="ad-grow" />
       {status.managementAllowed && location.pathname !== "/admin/settings" ? (

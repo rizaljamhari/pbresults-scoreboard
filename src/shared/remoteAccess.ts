@@ -97,6 +97,8 @@ export const remoteAccessStatusSchema = z.object({
   url: z.string().nullable(),
   startedAt: z.string().nullable(),
   expiresAt: z.string().nullable(),
+  /** Admin pages open through the tunnel right now (browser tabs, not people: everyone shares one login). */
+  remoteConnections: z.number().int().nonnegative(),
   lastError: remoteAccessErrorSchema.nullable()
 });
 

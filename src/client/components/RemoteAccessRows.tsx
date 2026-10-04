@@ -13,7 +13,7 @@ import { Button, Chip, SettingRow } from "./admin/kit";
 
 const NGROK_AUTHTOKEN_URL = "https://dashboard.ngrok.com/get-started/your-authtoken";
 
-function formatTime(value: string | null): string {
+export function formatTime(value: string | null): string {
   if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -32,6 +32,12 @@ export function formatRemaining(expiresAt: string | null, now: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours} h ${minutes} min left` : `${minutes} min left`;
+}
+
+/** Open admin pages through the tunnel. Tabs, not people: everyone off site shares one login. */
+export function formatRemoteConnections(count: number): string {
+  if (count === 0) return "no one off site is connected";
+  return count === 1 ? "1 person off site is connected" : `${count} people off site are connected`;
 }
 
 function errorText(error: unknown, fallback: string): string {
@@ -362,7 +368,7 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
             Remote access <Chip tone={degraded ? "critical" : "warning"}>{degraded ? "Reconnecting" : "On"}</Chip>
           </>
         }
-        hint={`Started ${formatTime(status.startedAt)} · ends ${formatTime(status.expiresAt)} · ${formatRemaining(status.expiresAt, now)}`}
+        hint={`Started ${formatTime(status.startedAt)} · ends ${formatTime(status.expiresAt)} · ${formatRemaining(status.expiresAt, now)} · ${formatRemoteConnections(status.remoteConnections)}`}
       >
         <Button
           variant="danger"

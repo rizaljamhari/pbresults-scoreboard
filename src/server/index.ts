@@ -345,6 +345,7 @@ app.get("/api/runtime-info", async () => {
 });
 
 registerAppEventRoutes(app, {
+  trackRemoteStream: (sessionId, close) => remoteAccess.trackRemoteStream(sessionId, close),
   hub: appEventHub,
   openStreams,
   getRuntime: () => ({

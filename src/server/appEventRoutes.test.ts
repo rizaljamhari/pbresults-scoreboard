@@ -77,3 +77,55 @@ describe("application event route", () => {
     expect(openStreams.size).toBe(0);
   });
 });
+
+describe("remote event streams", () => {
+  it("reports streams opened through remote access, and can end them", async () => {
+    const app = Fastify({ logger: false });
+    const hub = new AppEventHub({ instanceId: "remote-instance" });
+    apps.push(app);
+    hubs.push(hub);
+    app.decorateRequest("remoteAccess", null);
+    app.addHook("onRequest", async (request) => {
+      if (request.headers["x-test-remote"]) request.remoteAccess = { kind: "ngrok", sessionId: "session-9", publicOrigin: "https://x.ngrok-free.app" };
+    });
+    const release = vi.fn();
+    let close: (() => void) | null = null;
+    const trackRemoteStream = vi.fn((_sessionId: string, closeStream: () => void) => {
+      close = closeStream;
+      return release;
+    });
+    registerAppEventRoutes(app, {
+      hub,
+      openStreams: new Set(),
+      getRuntime: () => ({ appVersion: "1.8.0", releaseTag: "v1.8.0" }),
+      getLiveState: () => normalizeLiveState(null, { sourceStatus: "idle", fetchedAt: null, errorMessage: null }),
+      getOperatorTextState: () => ({ themeId: null, fields: [] }),
+      trackRemoteStream
+    });
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const { port } = app.server.address() as AddressInfo;
+
+    const local = new AbortController();
+    const localResponse = await fetch(`http://127.0.0.1:${port}/api/events`, { signal: local.signal });
+    await localResponse.body!.getReader().read();
+    expect(trackRemoteStream).not.toHaveBeenCalled();
+    local.abort();
+
+    const remoteResponse = await fetch(`http://127.0.0.1:${port}/api/events`, { headers: { "x-test-remote": "1" } });
+    const reader = remoteResponse.body!.getReader();
+    await reader.read();
+    expect(trackRemoteStream).toHaveBeenCalledWith("session-9", expect.any(Function));
+
+    close!();
+    await expect(
+      (async () => {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) return "ended";
+        }
+      })()
+    ).rejects.toThrow();
+    await vi.waitFor(() => expect(release).toHaveBeenCalled());
+    expect(hub.getStats().connectedClients).toBe(0);
+  });
+});
