@@ -50,6 +50,7 @@ import type { BackupPreview } from "../shared/backup.js";
 import { defaultScoreboardState, type ScoreboardState } from "../shared/scoreboard.js";
 import { runtimeBuild } from "./buildInfo.js";
 import { dataDir, isPathInside, uploadsDir } from "./runtimePaths.js";
+import { assetVersion } from "../shared/assetVersion.js";
 const settingsPath = path.join(dataDir, "settings.json");
 const themesPath = path.join(dataDir, "themes.json");
 const assetsPath = path.join(dataDir, "assets.json");
@@ -1046,6 +1047,13 @@ export function listAssets(): StoredAsset[] {
     .map((asset) => assetSchema.parse(asset))
     .filter((asset) => !asset.hiddenFromPicker)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+/** The current version of the uploaded file served at `/uploads/<fileName>`, or null when no asset owns it. */
+export function getUploadVersion(fileName: string): string | null {
+  const url = `/uploads/${fileName}`;
+  const record = readJson<StoredAssetRecord[]>(assetsPath, []).find((asset) => asset.url === url);
+  return record ? assetVersion(record) : null;
 }
 
 export function getAsset(id: string): StoredAssetRecord | null {

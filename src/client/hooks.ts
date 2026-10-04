@@ -5,6 +5,7 @@ import type { AppSettings, NormalizedLiveState, OperatorTextState, StoredAsset, 
 import type { RuntimeInfo } from "./api";
 import type { UpdateStatus } from "../shared/update";
 import type { AppResourceDomain } from "../shared/appEvents";
+import { assetVersion, type AssetVersionSource } from "../shared/assetVersion";
 import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEventRehearsalStatus, useAppEventScoreboardState, useAppEvents } from "./appEvents";
 import { ResourceRefreshCoordinator } from "./resourceRefresh";
 
@@ -15,20 +16,13 @@ function nextResourceRefreshToken(prefix: string) {
   return `${prefix}:${resourceRefreshToken}`;
 }
 
-type VersionedFile = { url: string; contentHash?: string | null; updatedAt?: string | null; createdAt?: string | null };
+type VersionedFile = AssetVersionSource & { url: string };
 
 /**
- * The file's own version: its content hash, or failing that when it last changed. Replacing an image in place keeps
- * its file name, so the version is what makes browsers fetch the new bytes; anything else (a reload, a server
- * restart, an edit to some other asset) leaves the address alone, so browsers reuse their copy instead of
- * downloading every image again.
+ * Replacing an image in place keeps its file name, so the file's own version in the address is what makes browsers
+ * fetch the new bytes; anything else (a reload, a server restart, an edit to some other asset) leaves the address
+ * alone, so browsers reuse their copy.
  */
-export function assetVersion(file: Omit<VersionedFile, "url">): string {
-  if (file.contentHash) return file.contentHash.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
-  const changed = Date.parse(file.updatedAt ?? file.createdAt ?? "");
-  return Number.isFinite(changed) ? String(changed) : "0";
-}
-
 export function versionAssetUrl(file: VersionedFile) {
   const parsed = new URL(file.url, window.location.origin);
   parsed.searchParams.set("v", assetVersion(file));

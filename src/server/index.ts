@@ -33,6 +33,7 @@ import {
   importThemePackage,
   listTeamRecords,
   listAssets,
+  getUploadVersion,
   listThemes,
   matchTeamInput,
   publishTheme,
@@ -331,6 +332,24 @@ await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 }
 await app.register(fastifyStatic, {
   root: uploadsDir,
   prefix: "/uploads/"
+});
+// An upload's address carries its version (?v=, see shared/assetVersion), so a browser may keep that exact version
+// for good and never ask again. Only when the version matches the file as it is now: "Revert to original" brings
+// old bytes back under an old version, so a stale or missing ?v= keeps the usual check-every-time caching.
+app.addHook("onSend", async (request, reply, payload) => {
+  if ((reply.statusCode !== 200 && reply.statusCode !== 304) || !request.url.startsWith("/uploads/")) return payload;
+  const url = new URL(request.url, "http://upload.local");
+  const requested = url.searchParams.get("v");
+  if (!requested) return payload;
+  let fileName: string;
+  try {
+    fileName = decodeURIComponent(url.pathname.slice("/uploads/".length));
+  } catch {
+    return payload;
+  }
+  if (fileName.includes("/") || getUploadVersion(fileName) !== requested) return payload;
+  reply.header("Cache-Control", "public, max-age=31536000, immutable");
+  return payload;
 });
 
 livePoller.start();

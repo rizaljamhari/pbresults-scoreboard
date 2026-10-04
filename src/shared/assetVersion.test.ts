@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetVersion } from "./hooks";
+import { assetVersion } from "./assetVersion";
 
 describe("asset versions", () => {
   it("follows the file's own content, so unrelated changes never move its address", () => {

@@ -353,3 +353,22 @@ describe("named versions and assets", () => {
     expect(exported.assets.map((item) => item.asset.id)).toContain(asset.id);
   });
 });
+
+describe("upload versions", () => {
+  it("reports each file's current version, and a new one when its bytes are replaced in place", async () => {
+    const { assetVersion } = await import("../shared/assetVersion");
+    const asset = await storePlain("versioned.png", { r: 1, g: 2, b: 3 });
+    const fileName = path.basename(asset.url);
+    const before = storage.getUploadVersion(fileName);
+    expect(before).toBe(assetVersion(asset));
+
+    const { asset: replaced } = await storage.replaceAssetFile(asset.id, await png(4, 4, { r: 9, g: 9, b: 9 }), "versioned.png", "image/png", {
+      removeBackground: false
+    });
+    // Same address, new bytes: the version is what tells browsers apart.
+    expect(replaced.url).toBe(asset.url);
+    expect(storage.getUploadVersion(fileName)).not.toBe(before);
+    expect(storage.getUploadVersion(fileName)).toBe(assetVersion(replaced));
+    expect(storage.getUploadVersion("not-an-upload.png")).toBeNull();
+  });
+});
