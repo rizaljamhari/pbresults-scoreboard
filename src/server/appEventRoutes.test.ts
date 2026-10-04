@@ -183,12 +183,14 @@ describe("event stream shaping", () => {
     await reader.cancel();
   });
 
-  it("compresses remote streams, thins unchanged states, and still delivers a real change at once", async () => {
+  it("thins remote streams without compressing them, sends the snapshot first, and delivers a real change at once", async () => {
     const { hub, port } = await openShapingApp();
     const response = await fetch(`http://127.0.0.1:${port}/api/events`, { headers: { "x-test-remote": "1", "accept-encoding": "gzip" } });
-    expect(response.headers.get("content-encoding")).toBe("gzip");
+    // Never gzip: ngrok holds back a compressed streaming response until it ends.
+    expect(response.headers.get("content-encoding")).toBeNull();
     const reader = response.body!.getReader();
-    await readUntil(reader, (text) => text.includes("system.snapshot"));
+    const opening = await readUntil(reader, (text) => text.includes("system.snapshot"));
+    expect(opening.indexOf("event: system.snapshot")).toBe(opening.indexOf("event: "));
 
     hub.publishLiveState(live("2026-10-05T00:00:00.000Z"));
     hub.publishLiveState(live("2026-10-05T00:00:00.500Z"));
@@ -200,7 +202,6 @@ describe("event stream shaping", () => {
     hub.publishLiveState(live("2026-10-05T00:00:01.500Z", "error"));
     const change = await readUntil(reader, (text) => text.includes('"sourceStatus":"error"'), 500);
     expect(change).toContain("event: live.state");
-    // Flushed per frame: compression never holds an update back.
     expect(Date.now() - sentAt).toBeLessThan(250);
     await reader.cancel();
   });

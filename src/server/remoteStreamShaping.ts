@@ -1,61 +1,76 @@
-import zlib from "node:zlib";
-
 /**
  * Bandwidth shaping for event streams opened through remote access, where every byte counts against the tunnel's
  * quota. Local and LAN streams, including vMix's overlay, never pass through here and stay exactly as they were.
+ *
+ * Not compressed: ngrok holds back a gzip-encoded streaming response until it ends (checked against a real tunnel:
+ * no headers within 6 s), so the browser's event stream fails and the page falls back to polling. Ordinary gzipped
+ * responses pass through ngrok fine.
  */
 
 /** Remote pages still see the feed as fresh: their staleness threshold is at least 5 seconds. */
 export const REMOTE_LIVE_FRESHNESS_MS = 2_000;
 
-/** A remote stream this far behind is abandoned; the browser reconnects and starts from a fresh snapshot. */
-export const REMOTE_STREAM_MAX_BUFFER_BYTES = 1024 * 1024;
+/**
+ * Overlay health changes (connected, lost, wrong theme, behind) go out at once; otherwise the list is resent this
+ * often, which only refreshes its "last seen" times. The admin's summary reads the server's verdicts, not the times.
+ */
+export const REMOTE_OVERLAY_REFRESH_MS = 15_000;
 
-export function acceptsGzip(header: string | string[] | undefined): boolean {
-  const value = Array.isArray(header) ? header.join(",") : (header ?? "");
-  return value
-    .split(",")
-    .map((part) => part.trim().split(";"))
-    .some(([coding, ...params]) => coding.trim().toLowerCase() === "gzip" && !params.some((param) => /^\s*q\s*=\s*0(\.0*)?\s*$/i.test(param)));
-}
+type FrameRule = { type: string; key: (event: Record<string, unknown>) => string; refreshMs: number };
+
+const liveStateRule: FrameRule = {
+  type: "live.state",
+  // The poller pushes on every poll even when only fetchedAt moved.
+  key: (event) => JSON.stringify({ ...(event.state as Record<string, unknown>), fetchedAt: null }),
+  refreshMs: REMOTE_LIVE_FRESHNESS_MS
+};
+
+const overlayStateRule: FrameRule = {
+  type: "overlay.state",
+  // Each overlay report moves timestamps and lag; what remote Operations shows depends on the rest.
+  key: (event) => {
+    const state = event.state as { clients?: Array<Record<string, unknown>> } | undefined;
+    return JSON.stringify(
+      (state?.clients ?? []).map((client) => {
+        const report = client.report as Record<string, unknown> | null | undefined;
+        return {
+          id: client.clientId,
+          page: client.page,
+          connection: client.connection,
+          streamOpen: client.streamOpen,
+          issues: (client.issues as Array<{ code: unknown }> | undefined)?.map((issue) => issue.code),
+          themeId: report?.themeId ?? null,
+          appVersion: report?.appVersion ?? null,
+          visibility: report?.visibility ?? null
+        };
+      })
+    );
+  },
+  refreshMs: REMOTE_OVERLAY_REFRESH_MS
+};
 
 /**
- * Decides which frames a remote stream receives. The poller pushes a live state on every poll even when only its
- * timestamp moved; a remote page gets each real change at once, and otherwise one refresh every `freshnessMs` so it
- * keeps showing the feed as current. Every other kind of frame passes untouched.
+ * Decides which frames a remote stream receives: each real change at once, an unchanged one only as an occasional
+ * refresh. Every other kind of frame passes untouched.
  */
-export function createRemoteLiveStateFilter(options: { now?: () => number; freshnessMs?: number } = {}) {
+export function createRemoteFrameFilter(options: { now?: () => number; rules?: FrameRule[] } = {}) {
   const now = options.now ?? Date.now;
-  const freshnessMs = options.freshnessMs ?? REMOTE_LIVE_FRESHNESS_MS;
-  let lastKey: string | null = null;
-  let lastSentAt = -Infinity;
+  const rules = options.rules ?? [liveStateRule, overlayStateRule];
+  const last = new Map<string, { key: string; at: number }>();
   return (frame: string): boolean => {
-    if (!frame.includes("\nevent: live.state\n")) return true;
+    const rule = rules.find((candidate) => frame.includes(`\nevent: ${candidate.type}\n`));
+    if (!rule) return true;
     const dataLine = frame.split("\n").find((line) => line.startsWith("data: "));
     let key: string;
     try {
-      const event = JSON.parse(dataLine!.slice("data: ".length)) as { state?: { fetchedAt?: unknown } };
-      key = JSON.stringify({ ...event.state, fetchedAt: null });
+      key = rule.key(JSON.parse(dataLine!.slice("data: ".length)) as Record<string, unknown>);
     } catch {
       return true;
     }
     const at = now();
-    if (key === lastKey && at - lastSentAt < freshnessMs) return false;
-    lastKey = key;
-    lastSentAt = at;
+    const previous = last.get(rule.type);
+    if (previous && previous.key === key && at - previous.at < rule.refreshMs) return false;
+    last.set(rule.type, { key, at });
     return true;
   };
-}
-
-/**
- * A gzip encoder for one event stream. Each frame is flushed immediately, so compression never holds an update
- * back; the shared dictionary across frames is what makes near-identical JSON updates shrink.
- */
-export function createFlushingGzip() {
-  return zlib.createGzip({ level: zlib.constants.Z_DEFAULT_COMPRESSION });
-}
-
-export function writeFlushed(gzip: zlib.Gzip, frame: string) {
-  gzip.write(frame);
-  gzip.flush(zlib.constants.Z_SYNC_FLUSH);
 }
