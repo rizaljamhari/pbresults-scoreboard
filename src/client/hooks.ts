@@ -141,6 +141,11 @@ export function useBackups() {
   return useResource(api.getBackups, [], { domain: "backups", refreshOnEvents: true });
 }
 
+/** Remote access status, refreshed whenever the server announces a change (start, stop, expiry, reconnect). */
+export function useRemoteAccessStatus() {
+  return useResource(api.getRemoteAccessStatus, [], { domain: "remoteAccess", refreshOnEvents: true });
+}
+
 export function useTeams() {
   return useResource(api.getTeams, [], { domain: "teams", refreshOnEvents: true });
 }

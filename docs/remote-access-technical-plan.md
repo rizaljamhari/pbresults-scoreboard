@@ -1,6 +1,6 @@
 # Temporary ngrok Remote Access Technical Plan
 
-Status: Phases 1–3 implemented (shared model, token storage, configuration API, request boundary, ngrok provider and session lifecycle); Phases 4–5 not started. Not yet run against a real ngrok account.
+Status: Phases 1–4 implemented (shared model, token storage, configuration API, request boundary, ngrok provider and session lifecycle, operator UI); Phase 5 (real ngrok and Windows qualification) not started. Not yet run against a real ngrok account.
 
 Last reviewed: 2026-10-05 (re-checked against the Node update coordinators, the application event hub, and backup/restore)
 
@@ -1012,6 +1012,15 @@ Implemented in `src/server/ngrokRemoteAccessProvider.ts`, `src/server/remoteAcce
 
 Exit criteria: an onsite operator can complete the workflow without using a terminal or ngrok dashboard after the one-time token copy.
 
+Implemented in `src/client/components/RemoteAccessRows.tsx` (a **Remote access** section at the end of Settings), `RemoteAccessBanner` in `AppShell.tsx`, `useRemoteAccessStatus` in `hooks.ts`, and the remote-access methods in `api.ts`. Notes:
+
+- The confirmations (start, stop, remove) follow the existing Settings patterns: an inline block with a checkbox for Start, and a browser confirm for Stop and Remove, like Roll back.
+- The banner is Draft Amber, and critical red while reconnecting, per DESIGN.md's tone rules; it adds no new hue. It shows on every admin page for every browser, offers **Manage** only on the scoreboard computer, and is not dismissable.
+- Remote and LAN browsers get a read-only view: on/off, address, end time, and a note that it is managed on the scoreboard computer.
+- The token field sits inside the Settings form, so Enter saves the token and never submits Settings.
+- Settings now honors a section hash (`/admin/settings#set-remote`), keeping that section in view while sections above it finish loading. Fixing that exposed a pre-existing bug: the section list's highlight never followed scrolling, because its observer was created before the sections rendered. It now uses a scroll listener with a reading line just below the top.
+- Checked in the dev browser against the real server for the unconfigured state and **Save and test** with a rejected token. The active, reconnecting, set-up-but-off, and remote-viewer states were rendered from a mocked status response driven by real `remote-access.changed` events.
+
 ### Phase 5: real provider and Windows qualification
 
 - Execute real ngrok browser/API/SSE matrix.
@@ -1057,7 +1066,7 @@ Code rollback is safe because older application versions ignore the root `secret
 - [x] Implement lifecycle state machine, expiry, degraded state, and stop retry.
 - [x] Integrate listener closure into graceful shutdown and managed-update restart.
 - [x] Add redacted lifecycle log and logger redaction.
-- [ ] Add client API, status hook, Settings card, dialogs, and global banner.
+- [x] Add client API, status hook, Settings card, dialogs, and global banner.
 - [x] Publish `remote-access.changed` through `AppEventHub`.
 - [x] Extend package validation for the Windows native SDK.
 - [ ] Complete unit, route, fake-provider, real-ngrok, and Windows matrices.

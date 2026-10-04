@@ -23,6 +23,7 @@ import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/b
 import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
 import type { ScoreboardState } from "../shared/scoreboard";
+import { REMOTE_ACCESS_CONFIRMATIONS, type LocalRemoteAccessStatus, type RemoteAccessStatus } from "../shared/remoteAccess";
 
 type UploadProcessingInfo = {
   status: "processed" | "skipped" | "failed";
@@ -177,6 +178,32 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(config)
     }).then(handle<BackupStatus>),
+  // Local-only fields (configuration source, credentials) are present only on the scoreboard computer.
+  getRemoteAccessStatus: () => fetch("/api/remote-access/status", { cache: "no-store" }).then(handle<RemoteAccessStatus | LocalRemoteAccessStatus>),
+  saveRemoteAccessToken: (authtoken: string) =>
+    fetch("/api/remote-access/configuration", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ authtoken, confirmation: REMOTE_ACCESS_CONFIRMATIONS.saveConfiguration })
+    }).then(handle<LocalRemoteAccessStatus>),
+  removeRemoteAccessToken: () =>
+    fetch("/api/remote-access/configuration", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmation: REMOTE_ACCESS_CONFIRMATIONS.removeConfiguration })
+    }).then(handle<LocalRemoteAccessStatus>),
+  startRemoteAccess: (durationMinutes: number) =>
+    fetch("/api/remote-access/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ durationMinutes, confirmation: REMOTE_ACCESS_CONFIRMATIONS.start })
+    }).then(handle<LocalRemoteAccessStatus>),
+  stopRemoteAccess: () =>
+    fetch("/api/remote-access/stop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmation: REMOTE_ACCESS_CONFIRMATIONS.stop })
+    }).then(handle<LocalRemoteAccessStatus>),
   exportTeams: () => fetch("/api/teams/export").then(handle<TeamRegistryExportPackage>),
   importTeams: (payload: TeamRegistryExportPackage) =>
     fetch("/api/teams/import", {

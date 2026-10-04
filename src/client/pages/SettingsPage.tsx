@@ -7,6 +7,7 @@ import type { AppSettings, ThemeDefinition } from "../../shared/theme";
 import { Button, Chip, Grow, SettingRow, Switch, Toolbar } from "../components/admin/kit";
 import { SoftwareUpdateRows } from "../components/SoftwareUpdateRows";
 import { BackupRows } from "../components/BackupRows";
+import { RemoteAccessRows } from "../components/RemoteAccessRows";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 const SECTIONS = [
@@ -14,7 +15,8 @@ const SECTIONS = [
   { id: "set-air", label: "On air" },
   { id: "set-uploads", label: "Uploads" },
   { id: "set-updates", label: "Software updates" },
-  { id: "set-backup", label: "Backup and restore" }
+  { id: "set-backup", label: "Backup and restore" },
+  { id: "set-remote", label: "Remote access" }
 ] as const;
 
 export function SettingsPage() {
@@ -57,6 +59,32 @@ export function SettingsPage() {
       setExternallyChanged(true);
     }
   }, [settings.data]);
+
+  // Links such as the remote access banner's "Manage" open a section directly; the sections render once settings load.
+  const draftReady = draft !== null;
+  useEffect(() => {
+    if (!draftReady) return;
+    const id = window.location.hash.slice(1);
+    const root = bodyRef.current;
+    const target = SECTIONS.some((section) => section.id === id) ? document.getElementById(id) : null;
+    if (!root || !target) return;
+    // Scroll only the settings body: scrollIntoView would also scroll the page and hide the toolbar and banners.
+    const pin = () => root.scrollTo({ top: target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop });
+    pin();
+    setActiveSection(id);
+    // Sections above it (backups, updates) are still loading and push it down; keep it in view until they settle or the reader takes over.
+    const resizes = new ResizeObserver(pin);
+    if (root.firstElementChild) resizes.observe(root.firstElementChild);
+    const release = () => resizes.disconnect();
+    const timer = window.setTimeout(release, 3000);
+    const takeover = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    takeover.forEach((type) => root.addEventListener(type, release, { passive: true }));
+    return () => {
+      release();
+      window.clearTimeout(timer);
+      takeover.forEach((type) => root.removeEventListener(type, release));
+    };
+  }, [draftReady]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -104,27 +132,31 @@ export function SettingsPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hasUnsavedChanges, saving, draft]);
 
-  // The section list follows the scroll position.
+  // The section list follows the scroll position: the last section whose heading has passed the reading line.
   useEffect(() => {
     const root = bodyRef.current;
-    if (!root) {
+    if (!root || !draftReady) {
       return;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) {
-          setActiveSection(visible[0].target.id);
-        }
-      },
-      { root, rootMargin: "0px 0px -60% 0px" }
-    );
-    SECTIONS.forEach((section) => {
-      const element = document.getElementById(section.id);
-      if (element) observer.observe(element);
-    });
-    return () => observer.disconnect();
-  }, [Boolean(settings.data)]);
+    const update = () => {
+      // Short last sections never reach the reading line; at the bottom of the page, they are the one being read.
+      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 2) {
+        setActiveSection(SECTIONS[SECTIONS.length - 1].id);
+        return;
+      }
+      // Just below the top, where a heading lands when its section is opened from the list.
+      const readingLine = root.getBoundingClientRect().top + 64;
+      let current: string = SECTIONS[0].id;
+      for (const section of SECTIONS) {
+        const top = document.getElementById(section.id)?.getBoundingClientRect().top;
+        if (top !== undefined && top <= readingLine) current = section.id;
+      }
+      setActiveSection(current);
+    };
+    update();
+    root.addEventListener("scroll", update, { passive: true });
+    return () => root.removeEventListener("scroll", update);
+  }, [draftReady]);
 
   function patch(next: Partial<AppSettings>) {
     setDraft((current) => (current ? { ...current, ...next } : current));
@@ -326,6 +358,13 @@ export function SettingsPage() {
                 <h2>Backup and restore</h2>
                 <div className="ad-surface" style={{ overflow: "hidden" }}>
                   <BackupRows hasUnsavedChanges={hasUnsavedChanges} onRestored={handleRestored} />
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-remote">
+                <h2>Remote access</h2>
+                <div className="ad-surface" style={{ overflow: "hidden" }}>
+                  <RemoteAccessRows />
                 </div>
               </section>
             </form>

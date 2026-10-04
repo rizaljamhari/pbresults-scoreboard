@@ -3086,6 +3086,43 @@ tr[aria-selected="true"] .ad-row-open {
   font-weight: 400;
 }
 
+/* Remote access on: a standing warning, so it is Draft Amber, never a new hue (DESIGN.md, the One Blue Rule). */
+.ad-ra-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 7px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ad-draft) 30%, transparent);
+  background: var(--ad-draft-soft);
+  color: var(--ad-draft);
+  font-weight: 600;
+}
+
+.ad-ra-banner span {
+  min-width: 0;
+  color: var(--ad-text);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.ad-ra-banner svg.lucide {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.ad-ra-banner--critical {
+  border-bottom-color: color-mix(in srgb, var(--ad-crit) 30%, transparent);
+  background: var(--ad-crit-soft);
+  color: var(--ad-crit);
+}
+
+/* Long generated values (addresses, usernames) wrap instead of widening the row. */
+.ad-break {
+  overflow-wrap: anywhere;
+}
+
 .ad-btn--rehearsal {
   border-color: var(--ad-rh);
   background: var(--ad-rh);

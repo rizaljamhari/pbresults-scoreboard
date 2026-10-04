@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   CircleAlert,
   CircleCheck,
+  Globe,
   Images,
   Monitor,
   MonitorPlay,
@@ -20,7 +21,8 @@ import {
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
-import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemoteAccessStatus, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { formatRemaining } from "./RemoteAccessRows";
 import { api } from "../api";
 import { summarizeOverlays } from "../../shared/overlayHealth";
 import type { AppSettings } from "../../shared/theme";
@@ -153,6 +155,7 @@ export function AppShell() {
         </aside>
         <main className="ad-main">
           {/* Teams and Assets keep one page while their side panel opens different records, so the list and filters stay put. */}
+          <RemoteAccessBanner />
           <RehearsalBanner />
           <Outlet key={outletKey(location.pathname)} />
         </main>
@@ -222,6 +225,34 @@ function SidebarLiveStatus({
         <Dot tone={summary.tone === "ok" ? "live" : summary.tone} />
       </div>
     </Link>
+  );
+}
+
+/**
+ * On every admin page, for every browser, while remote access is on. Not dismissable: it is how everyone editing
+ * knows changes may be coming from off site too.
+ */
+function RemoteAccessBanner() {
+  const remote = useRemoteAccessStatus();
+  const now = useNow(30_000);
+  const location = useLocation();
+  const status = remote.data;
+  if (!status || (status.phase !== "active" && status.phase !== "degraded")) return null;
+  const degraded = status.phase === "degraded";
+  return (
+    <div className={cn("ad-ra-banner ad-scope", degraded && "ad-ra-banner--critical")} role="status">
+      <Globe aria-hidden />
+      {degraded ? "Remote access is reconnecting" : status.remoteRequest ? "You are connected remotely" : "Remote access is on"}
+      <span>
+        · {status.remoteRequest ? "changes here and on site are shared" : "staff off site can make changes"} · {formatRemaining(status.expiresAt, now)}
+      </span>
+      <span className="ad-grow" />
+      {status.managementAllowed && location.pathname !== "/admin/settings" ? (
+        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/settings#set-remote">
+          Manage
+        </Link>
+      ) : null}
+    </div>
   );
 }
 
