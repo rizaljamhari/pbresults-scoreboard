@@ -2,7 +2,7 @@
 
 Status: implementation-ready design; not yet implemented
 
-Last reviewed: 2026-08-18
+Last reviewed: 2026-10-05 (re-checked against the Node update coordinators, the application event hub, and backup/restore)
 
 Target: Windows x64 portable application, with injectable development and test adapters
 
@@ -14,7 +14,7 @@ The onsite operator configures one ngrok account authtoken, then starts a sessio
 
 The first version does not add application users, roles, a login page, session cookies, or per-person auditing. The shared credential represents one remote session, not an individual person.
 
-Remote-access configuration and lifecycle controls remain onsite-loopback-only. Managed-update mutations also remain onsite-loopback-only because they stop or replace the application process. These are machine-lifecycle boundaries, not user permission levels.
+Remote-access configuration and lifecycle controls remain onsite-loopback-only. Managed-update mutations also remain onsite-loopback-only because they stop or replace the application process. Backup restore and backup folder configuration are onsite-loopback-only because they replace all application data or write to arbitrary paths on the scoreboard computer. These are machine-lifecycle boundaries, not user permission levels.
 
 The official SDK supports in-process endpoint creation, Traffic Policy, public URL discovery, and explicit listener closure. ngrok Basic Auth rejects unauthenticated requests at the edge before they reach the application:
 
@@ -33,7 +33,7 @@ The official SDK supports in-process endpoint creation, Traffic Policy, public U
 - Revoke access immediately in the application and close the ngrok endpoint on stop or expiry.
 - Never resume a remote session automatically after application restart.
 - Preserve local admin, polling, SSE, and overlay behavior if ngrok or the internet fails.
-- Store the long-lived ngrok authtoken separately from portable data and protect it on Windows.
+- Store the long-lived ngrok authtoken outside portable data, backups, exports, and logs, and never return it from the API.
 - Keep all temporary credentials, request markers, and generated Traffic Policy contents in memory only.
 - Keep the existing updater safety boundary effective even though ngrok forwards from loopback.
 - Provide clear operator status, failure messages, and a visible active-session warning.
@@ -53,6 +53,9 @@ The official SDK supports in-process endpoint creation, Traffic Policy, public U
 - Making an accidentally router-forwarded application port safe for public use. Only the built-in ngrok path is protected by this feature.
 - A general multi-provider abstraction in the first implementation.
 - Hiding ngrok's free-plan browser interstitial.
+- Encrypting the stored authtoken at rest in v1 (see section 9.2).
+- Remote backup restore or backup folder configuration.
+- Packaged remote access on macOS or Linux. The provider and request-security code is cross-platform and runs in development there; operators run the Windows portable build only.
 
 ## 4. Trust model and accepted trade-offs
 
@@ -78,7 +81,7 @@ The Fastify server listens on `0.0.0.0`, and the admin UI, overlay, uploads, and
 
 ### 5.2 Update mutations rely on socket loopback
 
-Update mutations currently accept a request when `request.ip` is loopback. An ngrok agent or SDK also connects to the upstream service over loopback, so tunnelling directly to the existing port without additional classification could make a remote update request appear local.
+Update mutations (`requireLocalUpdateRequest()` in `src/server/index.ts`) and `PUT /api/backups/config` currently accept a request when `request.ip` is loopback. An ngrok agent or SDK also connects to the upstream service over loopback, so tunnelling directly to the existing port without additional classification could make a remote update request appear local.
 
 The implementation must replace the updater's simple loopback test with a stricter onsite-management predicate and must explicitly reject recognized tunnel traffic.
 
@@ -88,13 +91,27 @@ The server currently registers CORS with `origin: true`. The browser client uses
 
 Remote access must remove arbitrary origin reflection and add Origin validation for state-changing tunnel requests.
 
-### 5.4 The application already uses long-lived HTTP streams
+### 5.4 The application uses one long-lived event stream
 
-The live scoreboard and operator-text paths use Server-Sent Events. The remote-access qualification matrix must test both streams through ngrok and through the Basic Auth challenge. The tunnel must not buffer, truncate, or repeatedly reconnect healthy streams.
+The admin UI and overlay receive live state, operator text, rehearsal, overlay, and resource-change events through one Server-Sent Events stream, `GET /api/events`, served by `AppEventHub`. The hub sends a heartbeat every 15 seconds and accepts at most 100 subscribers; remote browsers count toward that limit. Clients fall back to slow polling (60 seconds for the runtime-version watcher) only while the stream is disconnected.
+
+The remote-access qualification matrix must test this stream through ngrok and through the Basic Auth challenge. The tunnel must not buffer, truncate, or repeatedly reconnect a healthy stream.
 
 ### 5.5 Portable updates preserve root runtime data
 
-The packaged application keeps mutable runtime directories at the portable root while application versions are replaced independently. The ngrok authtoken envelope belongs in a root `secrets/` directory so it survives an application version switch but is not part of `data/`, exports, or backup payloads.
+The packaged application keeps mutable runtime directories at the portable root while application versions are replaced independently. The ngrok authtoken file belongs in a root `secrets/` directory so it survives an application version switch but is not part of `data/`, exports, or backup payloads.
+
+### 5.6 Backup restore replaces all data and is currently ungated
+
+`POST /api/backups/:file/restore` replaces the whole data directory and has no request gate. `PUT /api/backups/config` accepts an arbitrary folder path and is gated only by socket loopback. Both are machine-lifecycle operations for remote-access purposes and move to the strict onsite predicate (section 12.3). Creating, listing, and downloading backups remain available remotely.
+
+### 5.7 Updates hand off to a detached Node coordinator
+
+Install and rollback spawn `pbresults-updater.mjs` as a detached process on the server's own `node.exe`, then call `gracefulShutdown()` on a short timer. The coordinator waits up to 20 seconds (`shutdownTimeoutMs`) for the old server pid to exit and otherwise fails the update with `UPDATE_SHUTDOWN_TIMEOUT`. Elsewhere it stops process trees with `taskkill /T /F`, which runs no application cleanup.
+
+`gracefulShutdown()` currently ends with `app.close()` and relies on the event loop draining; it never calls `process.exit`. An open ngrok session is a native handle that keeps the event loop alive, so a hung listener close would hold the old process past the coordinator deadline. Section 18 addresses this.
+
+The coordinator itself talks to the server only through `GET http://127.0.0.1:<port>/api/health`, which the strict onsite predicate does not affect.
 
 ## 6. High-level architecture
 
@@ -158,10 +175,11 @@ Keep provider-specific behavior isolated without prematurely building a general 
 
 ### `src/server/remoteAccessSecrets.ts`
 
-- read, write, replace, and delete the encrypted authtoken envelope
-- Windows DPAPI bridge
-- environment-backed development mode
+- read, write, replace, and delete the authtoken file
+- atomic same-directory write and rename
+- environment-backed override
 - injectable in-memory implementation for tests
+- the single seam where at-rest encryption can be added later
 
 ### `src/server/remoteRequestSecurity.ts`
 
@@ -183,7 +201,7 @@ Keep provider-specific behavior isolated without prematurely building a general 
 
 ## 8. Dependency and packaging changes
 
-Add `@ngrok/ngrok` as a production dependency. Use the SDK rather than spawning the standalone `ngrok` executable.
+Add `@ngrok/ngrok` as a production dependency pinned to an exact version (1.7.0 at review time; its last release was December 2025, so keep it behind `ngrokRemoteAccessProvider.ts` and review upgrades deliberately). Use the SDK rather than spawning the standalone `ngrok` executable.
 
 Reasons:
 
@@ -193,16 +211,16 @@ Reasons:
 - the SDK directly returns a listener and public URL
 - the listener exposes an explicit close operation
 
-The package supplies platform-specific native modules. The Windows packaging workflow already performs a production install on Windows and copies materialized `node_modules`, so it should select the Windows x64 package. Extend packaging validation to assert that:
+The package supplies platform-specific native modules as optional dependencies (`@ngrok/ngrok-win32-x64-msvc` for the portable build; darwin and linux packages cover development hosts). The SDK ships prebuilt binaries and has no install script, so it needs no `onlyBuiltDependencies` entry. `build-windows-portable.yml` runs on `windows-latest`, and `package-windows-portable.mjs` performs `pnpm install --prod` there and copies the materialized `node_modules`, so it selects the Windows x64 package. Extend packaging validation to assert that:
 
 - `@ngrok/ngrok/package.json` exists in the staged application
-- the Windows x64 native package exists
-- a packaged Node process can import the SDK without opening a tunnel
+- `@ngrok/ngrok-win32-x64-msvc` exists in the staged application
+- the existing bundled-`node.exe` smoke test (which already exercises Sharp) also runs `await import("@ngrok/ngrok")` without opening a tunnel
 - the production lockfile contains the expected optional platform package
 
 Do not let the SDK perform network work at normal server startup. Load or connect it only for authtoken testing or an explicit Start action.
 
-The SDK documentation notes that Windows requires the Microsoft Visual C++ Redistributable. Add this to Windows qualification and surface a specific setup error when native module loading fails.
+The SDK documentation notes that Windows requires the Microsoft Visual C++ Redistributable. The existing `onnxruntime-node` and Sharp native modules likely depend on the same runtime, so confirm during Windows qualification whether this adds a new requirement, and surface a specific setup error when native module loading fails.
 
 ## 9. Long-lived authtoken storage
 
@@ -219,40 +237,45 @@ This directory is outside `data/`, is not included in app exports, and is not co
 
 Do not add the authtoken to `AppSettings`, `settings.json`, build information, update transactions, or support bundles.
 
-### 9.2 Windows protection
+### 9.2 Plaintext at rest, by decision
 
-The packaged Windows implementation uses DPAPI with current-user scope. Normally only the same Windows user on the same machine can decrypt a current-user DPAPI blob. See [Microsoft's CryptProtectData documentation](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata).
+v1 stores the authtoken as plaintext in the file above. It does not use DPAPI or another at-rest encryption scheme.
 
-Persist an envelope rather than plaintext:
+Rationale:
+
+- The token cannot reach the scoreboard by itself. Every session also needs a fresh Basic Auth credential that is never persisted.
+- Current-user DPAPI would protect against the portable folder being copied to another computer or read by another Windows account, but not against malware or a person using the same Windows account, which can decrypt it exactly as the application does.
+- The only practical DPAPI route without a second native addon is a `powershell.exe` bridge, which fails on machines where PowerShell Constrained Language Mode or AppLocker blocks `Add-Type`. The update workflow no longer depends on PowerShell, and remote access should not reintroduce it.
+- A leaked token is revocable in the ngrok dashboard within minutes.
+
+Accepted risk: anyone who obtains the token can start endpoints on the ngrok account, consume its quota, and serve their own content on the account's development domain while no session is active. That domain is a URL offsite staff trust, so a stolen token could host a phishing page for the session password. Operational documentation must say to revoke and replace the token in the ngrok dashboard if the portable folder or the `secrets/` file may have been copied.
+
+File format:
 
 ```json
 {
   "version": 1,
   "provider": "ngrok",
-  "protection": "windows-dpapi-current-user",
-  "ciphertext": "<base64>",
-  "updatedAt": "2026-08-18T12:00:00.000Z"
+  "protection": "none",
+  "authtoken": "<token>",
+  "updatedAt": "2026-10-05T12:00:00.000Z"
 }
 ```
 
-Use a non-interactive PowerShell DPAPI bridge. (The update workflow no longer uses PowerShell, so reconsider a native Node DPAPI binding when this is built.)
+Rules:
 
-- invoke `powershell.exe` with a static encoded script
-- send plaintext or ciphertext through stdin, never a command-line argument
-- return only ciphertext during protection and plaintext during unprotection
-- use `DataProtectionScope.CurrentUser`
-- use fixed application-specific optional entropy
-- impose a short timeout and output-size limit
-- sanitize stderr before logging
-- write the envelope atomically through a same-directory temporary file and rename
+- write atomically through a same-directory temporary file and rename
+- validate the file with Zod on read; a malformed file reports `unconfigured` and is never partially used
+- keep the token out of `data/`, `AppSettings`, `settings.json`, build information, update transactions, backups, exports, support bundles, and logs
+- never return the token, a prefix, or a hash from the API
 
-If the protected value cannot be decrypted after moving the portable directory to another computer or Windows account, report the integration as unconfigured and ask the onsite operator to paste the token again. Never fall back to treating ciphertext as plaintext.
+When to revisit: add at-rest protection if the portable folder is routinely synced to cloud storage, copied between machines, or shared across Windows accounts. `remoteAccessSecrets.ts` is the only module that changes; the `protection` field lets a later release read a v1 plaintext file and rewrite it protected.
 
-### 9.3 Development and tests
+### 9.3 Environment override, development, and tests
 
-- On non-Windows development hosts, support `NGROK_AUTHTOKEN` as a non-persistent override.
+- `NGROK_AUTHTOKEN`, when set, overrides the stored file and is never persisted.
 - When the environment override is active, the UI reports **Configured by environment** and cannot replace or delete it.
-- Do not implement automatic plaintext persistence for macOS or Linux in v1.
+- The file store works the same on macOS and Linux development hosts; no OS-specific storage is involved.
 - Unit tests use an injected in-memory secret store.
 
 ### 9.4 Configuration rules
@@ -260,7 +283,7 @@ If the protected value cannot be decrypted after moving the portable directory t
 - Configuration, replacement, testing, and deletion are onsite-loopback-only.
 - The API never returns the token or its prefix.
 - Replacing or deleting the token is forbidden while a session is starting, active, degraded, or stopping.
-- **Save and test** first verifies connectivity with an ngrok control session that does not create a durable public endpoint, then commits the encrypted value.
+- **Save and test** first verifies connectivity with an ngrok control session that does not create a durable public endpoint, then commits the file.
 - If validation fails, retain the previously working token unchanged.
 
 ## 10. Temporary session secrets
@@ -297,8 +320,12 @@ Return `403` without forwarding for:
 
 - unsafe methods under `/api/remote-access/`
 - unsafe methods under `/api/update/`
+- `PUT /api/backups/config`
+- `POST /api/backups/<file>/restore` (match the path with an expression such as `req.url.path.startsWith('/api/backups/') && req.url.path.endsWith('/restore')`)
 
-`GET /api/remote-access/status` and `GET /api/update/status` may pass after authentication so the normal UI can render redacted status.
+`GET /api/remote-access/status`, `GET /api/update/status`, and the backup list and download routes may pass after authentication so the normal UI can render status.
+
+Combine these blocks into a single `deny` rule with one CEL expression so the whole policy stays at two rules: one block rule and one authenticate-and-mark rule. That leaves room within the free plan's five-rule allowance.
 
 The application repeats these checks. The edge rule is defense in depth, not the authoritative authorization layer.
 
@@ -361,7 +388,11 @@ Replace `isLoopbackRequest()` for machine-lifecycle mutations with `isOnsiteMana
 Use this predicate for:
 
 - all remote-access configuration and lifecycle mutations
-- every managed-update mutation, including check, download, install, skip, rollback, and result dismissal
+- every managed-update mutation, including check, download, install, skip, rollback, and result dismissal (currently `requireLocalUpdateRequest()`)
+- `POST /api/backups/:file/restore` (currently ungated)
+- `PUT /api/backups/config` (currently `isLoopbackRequest()`)
+
+After migration, `isLoopbackRequest()` should have no remaining route callers; delete it or keep it only as a building block of the new predicate.
 
 Client-side hostname checks remain useful UI affordances but are never the security control.
 
@@ -378,7 +409,13 @@ This intentionally permits:
 - theme creation, editing, publishing, import, and export
 - asset upload
 - app/team import and export
-- future backup actions unless separately classified as process-lifecycle operations
+- creating, listing, and downloading backups
+
+It does not permit backup restore or backup folder configuration. New routes that replace all data, touch arbitrary filesystem paths, or stop or replace the process must be added to the strict predicate and the edge block rule when they are introduced.
+
+### 12.5 Overlay health
+
+The overlay page reports itself to `OverlayRegistry`, and Operations shows whether the live overlay is connected and current. A remote browser opening the overlay URL would otherwise count as a connected overlay and mislead the onsite operator. Overlay reports from recognized remote requests must be ignored by overlay health (or recorded separately as remote viewers and excluded from the connected/current decision).
 
 ## 13. Origin and CORS protection
 
@@ -489,13 +526,13 @@ At expiry:
 1. Verify the strict onsite-loopback predicate.
 2. Parse the duration and exact confirmation phrase.
 3. Acquire the lifecycle mutex.
-4. Require phase `inactive` and a decryptable authtoken.
+4. Require phase `inactive` and a readable authtoken.
 5. Generate the session ID, username, password, and marker.
 6. Build the Traffic Policy without logging it.
 7. Enter `starting` with a provisional marker accepted only by the probe route.
 8. Call `ngrok.forward()` with:
    - `addr: "127.0.0.1:<active-port>"`
-   - the decrypted authtoken
+   - the stored authtoken
    - HTTP endpoint type with HTTPS scheme only
    - generated Traffic Policy
    - sanitized application metadata containing no secrets
@@ -555,12 +592,17 @@ If listener closure fails, retain only the listener handle and retired-marker re
 
 ### Application shutdown
 
-Add remote access to `gracefulShutdown()` before closing Fastify:
+Add remote access as the first step of `gracefulShutdown()`, before the shutdown backup and before closing Fastify:
 
 - disable marker acceptance first
-- attempt listener close with a short bounded timeout
+- attempt listener close with a hard timeout of about 2 seconds
+- if the close does not acknowledge in time, call the SDK's global `disconnect()`/`kill()` to tear down the native session
 - continue application shutdown even if ngrok does not acknowledge closure
-- rely on process termination to drop the in-process control connection
+- end `gracefulShutdown()` with an explicit `process.exit()` after `app.close()` resolves, guarded by an overall deadline, so a lingering native ngrok handle cannot keep the process alive
+
+The whole shutdown, including the existing 3-second shutdown backup, must finish well inside the update coordinator's 20-second `shutdownTimeoutMs`; otherwise an install or rollback fails with `UPDATE_SHUTDOWN_TIMEOUT` (section 5.7).
+
+Not every exit runs this path. The coordinator stops process trees with `taskkill /T /F`, and closing the console window gives Node little or no time. In those cases no cleanup runs; the in-process control connection drops when the process dies and ngrok takes the endpoint offline. This is the expected behavior, not a failure, and qualification must measure how long the public URL keeps answering after a forced kill.
 
 A managed update therefore ends the remote session. The restarted application does not reopen it.
 
@@ -606,7 +648,7 @@ When the request passes strict onsite-loopback management checks, add local conf
 
 ```ts
 type LocalRemoteAccessStatus = RemoteAccessStatus & {
-  configurationSource: "windows-dpapi" | "environment" | null;
+  configurationSource: "file" | "environment" | null;
   credentials: {
     username: string;
     password: string;
@@ -639,7 +681,7 @@ Strict onsite-loopback-only and inactive-only:
 }
 ```
 
-Deletes the protected envelope and returns `unconfigured` status.
+Deletes the stored authtoken file and returns `unconfigured` status.
 
 ### `POST /api/remote-access/start`
 
@@ -701,7 +743,7 @@ The Settings card explains:
 - an ngrok account is required
 - the authtoken connects the app to that account
 - offsite staff never receive the authtoken
-- the token will be protected on this Windows user account
+- the token is saved on this computer, outside event data and backups, and can be revoked in the ngrok dashboard if this folder is copied
 
 Controls:
 
@@ -760,7 +802,7 @@ They never receive the password, marker, or authtoken configuration state beyond
 
 Add a non-dismissable banner to the admin shell while active or degraded. It must be visible on Operations, Settings, Teams, and Themes pages.
 
-If Feature 2's event hub exists, emit `remote-access.changed` with only phase and revision and refetch status. Otherwise use a slow local fallback poll. Do not add another fast remote poll that unnecessarily consumes ngrok's request quota.
+Publish `remote-access.changed` through `AppEventHub` with only phase and revision, and have `useRemoteAccessStatus` refetch status on that event. Rely on the hub's existing disconnected-only fallback polling; do not add a separate timer that unnecessarily consumes ngrok's request quota.
 
 The live overlay itself should not display the banner. vMix continues using the local overlay URL.
 
@@ -789,7 +831,6 @@ Never log:
 - marker
 - Basic Auth or Authorization header
 - generated Traffic Policy
-- DPAPI plaintext
 - request or response bodies
 - clipboard content
 
@@ -812,7 +853,13 @@ Product implications:
 - Present quota exhaustion as a provider error without affecting local operation.
 - Recommend a paid plan only when event-critical availability or frequent usage justifies it.
 
-The current admin runtime-version watcher performs a request every five seconds: roughly 720 requests per hour for one continuously open browser, before other API traffic. At that rate, the 20,000-request allowance represents about 27 hours of active remote use per month. Feature 2 should reduce unnecessary polling before frequent remote use; until then, describe the free tier as suitable for occasional support sessions rather than guaranteed event-critical availability.
+Request count is no longer the main constraint. Admin pages receive changes through the single `/api/events` stream and poll only while it is disconnected (section 5.4). The remaining periodic remote requests are:
+
+- the Settings page's update-status poll, every 10 seconds while idle (360 requests per hour while a remote browser stays on Settings); consider pausing it for recognized remote requests or driving it from the event hub
+- event-stream reconnects after network interruptions
+- normal reads after each resource-change event
+
+The 1 GB monthly transfer allowance is the more likely limit: every remote page load downloads the client bundle and fonts, and theme editing pulls theme images and uploaded assets. Measure transfer for a typical remote editing session during qualification and state the result in operator documentation. Until then, describe the free tier as suitable for occasional support sessions rather than guaranteed event-critical availability.
 
 ## 23. Test strategy
 
@@ -833,7 +880,7 @@ The current admin runtime-version watcher performs a request every five seconds:
 - remote Origin validation and normalization
 - status credential projection for localhost versus LAN/remote
 - SDK error sanitization
-- DPAPI envelope parsing and atomic replacement through an injected bridge
+- secret file Zod parsing, malformed-file handling, atomic replacement, and environment override precedence
 
 ### 23.2 Fastify route tests
 
@@ -870,7 +917,7 @@ Run manually or in a protected CI job with a dedicated ngrok test account:
 - unauthenticated HTML, API, upload, and SSE requests receive 401
 - wrong Basic Auth receives 401
 - correct Basic Auth loads the React application and relative assets
-- both existing SSE streams remain connected and deliver events
+- the `/api/events` stream stays connected through heartbeats and delivers live, operator-text, and resource-change events
 - theme editing, publish, settings, teams, operator text, uploads, import, and export work remotely
 - update and remote-management mutations return 403 remotely
 - the same update controls continue to work through onsite localhost
@@ -890,12 +937,13 @@ Run manually or in a protected CI job with a dedicated ngrok test account:
 
 - clean Windows x64 machine can import the SDK native module
 - required Visual C++ runtime behavior is understood and documented
-- DPAPI store survives application restart and managed version switch
-- DPAPI value cannot be decrypted under a different Windows user
-- moving the portable directory to another machine produces a recoverable reconfiguration prompt
-- authtoken envelope is absent from app export and backup
+- stored token survives application restart, managed version switch, and rollback
+- install and rollback complete within the coordinator's 20-second shutdown deadline while a session is active, including when listener close hangs
+- after a forced `taskkill /T /F`, measure how long the public URL keeps answering
+- overlay health ignores a remote browser opening the overlay URL
+- the authtoken file is absent from app export, backup v2 payloads, and logs
 - update install closes the tunnel before shutdown and does not reopen it
-- rollback preserves the encrypted authtoken but leaves remote access inactive
+- rollback preserves the stored authtoken but leaves remote access inactive
 - antivirus does not quarantine the packaged SDK native module
 - packaged size increase is measured and accepted
 
@@ -905,16 +953,17 @@ Run manually or in a protected CI job with a dedicated ngrok test account:
 
 - Add schemas and stable errors.
 - Add runtime secret paths.
-- Implement injectable secret store and Windows DPAPI bridge.
+- Implement the injectable secret store, file store, and environment override.
 - Add configuration API and tests.
 
-Exit criteria: packaged Windows can save, restart, decrypt, replace, and delete an ngrok authtoken without exposing it in data exports or logs.
+Exit criteria: packaged Windows can save, restart, read, replace, and delete an ngrok authtoken without exposing it in data exports, backups, or logs.
 
 ### Phase 2: request boundary hardening
 
 - Add remote marker classification.
 - Add strict onsite-loopback predicate.
-- Apply it to all update mutations.
+- Apply it to all update mutations, backup restore, and backup folder configuration.
+- Ignore remote overlay reports in overlay health.
 - Remove permissive CORS reflection.
 - Add unsafe-method Origin validation.
 
@@ -941,7 +990,7 @@ Exit criteria: an onsite operator can complete the workflow without using a term
 ### Phase 5: real provider and Windows qualification
 
 - Execute real ngrok browser/API/SSE matrix.
-- Execute Windows portable and DPAPI matrix.
+- Execute the Windows portable matrix.
 - Measure request usage, endpoint teardown time, and packaging impact.
 - Resolve all security-boundary and shutdown failures before release.
 
@@ -957,7 +1006,7 @@ If qualification or production use reveals a tunnel problem:
 
 - stop the active listener
 - disable the Start control with a clear provider error
-- preserve the encrypted authtoken for a later fixed release
+- preserve the stored authtoken for a later fixed release
 - leave all local/LAN functionality unchanged
 
 Code rollback is safe because older application versions ignore the root `secrets/remote-access.json` file. Data formats and existing exports do not change.
@@ -967,11 +1016,14 @@ Code rollback is safe because older application versions ignore the root `secret
 - [ ] Add `@ngrok/ngrok` and lockfile changes.
 - [ ] Add shared remote-access schemas and errors.
 - [ ] Add root secrets runtime paths.
-- [ ] Implement Windows current-user DPAPI storage.
+- [ ] Implement plaintext file storage in root `secrets/` with atomic writes.
 - [ ] Add environment and in-memory secret-store adapters.
 - [ ] Add configuration/test/delete APIs.
 - [ ] Add request marker and strict onsite-loopback security helpers.
-- [ ] Migrate every update mutation to the strict predicate.
+- [ ] Migrate every update mutation, backup restore, and backup config to the strict predicate.
+- [ ] Exclude recognized remote requests from overlay health.
+- [ ] Make `gracefulShutdown()` close the tunnel first, force SDK teardown on timeout, and exit explicitly within the coordinator deadline.
+- [ ] Add the SDK import to the bundled-`node.exe` packaging smoke test.
 - [ ] Remove arbitrary CORS origin reflection.
 - [ ] Add remote unsafe-method Origin validation.
 - [ ] Implement in-memory Traffic Policy generation.
@@ -981,7 +1033,7 @@ Code rollback is safe because older application versions ignore the root `secret
 - [ ] Integrate listener closure into graceful shutdown and managed-update restart.
 - [ ] Add redacted lifecycle log and logger redaction.
 - [ ] Add client API, status hook, Settings card, dialogs, and global banner.
-- [ ] Add optional `remote-access.changed` event-hub integration.
+- [ ] Publish `remote-access.changed` through `AppEventHub`.
 - [ ] Extend package validation for the Windows native SDK.
 - [ ] Complete unit, route, fake-provider, real-ngrok, and Windows matrices.
 - [ ] Update README, API reference, project context, portable readme, and operator instructions after implementation.
