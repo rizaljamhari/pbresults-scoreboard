@@ -1,6 +1,6 @@
 # Temporary ngrok Remote Access Technical Plan
 
-Status: implementation-ready design; not yet implemented
+Status: Phase 1 implemented (shared model, token storage, configuration API); Phases 2–5 not started
 
 Last reviewed: 2026-10-05 (re-checked against the Node update coordinators, the application event hub, and backup/restore)
 
@@ -719,7 +719,9 @@ Initial stable codes:
 - `REMOTE_ACCESS_LOCAL_REQUEST_REQUIRED`
 - `REMOTE_ACCESS_ORIGIN_REQUIRED`
 - `REMOTE_SESSION_INVALID`
+- `REMOTE_ACCESS_INVALID_REQUEST` (malformed body or missing confirmation; never echoes the submitted token)
 - `REMOTE_ACCESS_NOT_CONFIGURED`
+- `REMOTE_ACCESS_CONFIGURED_BY_ENVIRONMENT` (409; `NGROK_AUTHTOKEN` is set, so the token cannot be replaced or removed here)
 - `REMOTE_ACCESS_BUSY`
 - `REMOTE_ACCESS_ALREADY_ACTIVE`
 - `REMOTE_ACCESS_INVALID_DURATION`
@@ -958,6 +960,11 @@ Run manually or in a protected CI job with a dedicated ngrok test account:
 
 Exit criteria: packaged Windows can save, restart, read, replace, and delete an ngrok authtoken without exposing it in data exports, backups, or logs.
 
+Implemented in `src/shared/remoteAccess.ts`, `src/server/remoteAccessSecrets.ts`, `src/server/remoteAccessService.ts`, and `src/server/remoteAccessRoutes.ts`. Two deliberate stand-ins remain until later phases:
+
+- The configuration routes take the onsite check as an injected `isManagementRequest`; `index.ts` passes `isLoopbackRequest` for now. That is sufficient while no tunnel can exist, and Phase 2 must swap in `isOnsiteManagementRequest()` before Phase 3 lands.
+- **Save and test** runs an injected `AuthtokenVerifier`; production uses `acceptAuthtoken`, which accepts any token that passes the request schema's shape check. Phase 3 replaces it with the ngrok control-session check.
+
 ### Phase 2: request boundary hardening
 
 - Add remote marker classification.
@@ -1014,11 +1021,11 @@ Code rollback is safe because older application versions ignore the root `secret
 ## 26. Implementation checklist
 
 - [ ] Add `@ngrok/ngrok` and lockfile changes.
-- [ ] Add shared remote-access schemas and errors.
-- [ ] Add root secrets runtime paths.
-- [ ] Implement plaintext file storage in root `secrets/` with atomic writes.
-- [ ] Add environment and in-memory secret-store adapters.
-- [ ] Add configuration/test/delete APIs.
+- [x] Add shared remote-access schemas and errors.
+- [x] Add root secrets runtime paths.
+- [x] Implement plaintext file storage in root `secrets/` with atomic writes.
+- [x] Add environment and in-memory secret-store adapters.
+- [x] Add configuration/test/delete APIs.
 - [ ] Add request marker and strict onsite-loopback security helpers.
 - [ ] Migrate every update mutation, backup restore, and backup config to the strict predicate.
 - [ ] Exclude recognized remote requests from overlay health.

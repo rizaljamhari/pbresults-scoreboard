@@ -20,6 +20,9 @@ export const backupStatePath = path.resolve(path.join(appRootDir, "backups", "ba
 export const currentVersionPath = path.resolve(path.join(appRootDir, "current-version.json"));
 export const portableLauncherPath = path.resolve(path.join(appRootDir, "pbresults-launcher.mjs"));
 export const portableUpdaterPath = path.resolve(path.join(appRootDir, "pbresults-updater.mjs"));
+/** Outside data/, so secrets never reach exports or backups, and at the root, so they survive version switches. */
+export const secretsDir = path.resolve(process.env.APP_SECRETS_DIR ?? path.join(appRootDir, "secrets"));
+export const remoteAccessSecretPath = path.join(secretsDir, "remote-access.json");
 
 export function isPathInside(parent: string, candidate: string): boolean {
   const relative = path.relative(path.resolve(parent), path.resolve(candidate));

@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import { z } from "zod";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
-import { clientDistDir, uploadsDir } from "./runtimePaths.js";
+import { clientDistDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
 import {
   backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
@@ -66,6 +66,9 @@ import { behindThreshold, overlayReportSchema } from "../shared/overlayHealth.js
 import { scoreboardVisibilityRequestSchema } from "../shared/scoreboard.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
+import { createFileSecretStore } from "./remoteAccessSecrets.js";
+import { RemoteAccessService } from "./remoteAccessService.js";
+import { registerRemoteAccessRoutes } from "./remoteAccessRoutes.js";
 
 const app = Fastify({
   logger: true,
@@ -369,6 +372,12 @@ app.post("/api/overlay/entrance", async () => {
   const token = Date.now();
   appEventHub.publishEntranceCue(token);
   return { token };
+});
+
+registerRemoteAccessRoutes(app, {
+  service: new RemoteAccessService({ store: createFileSecretStore({ filePath: remoteAccessSecretPath }) }),
+  // Sufficient while no tunnel exists; the strict onsite predicate replaces it before the ngrok provider lands.
+  isManagementRequest: isLoopbackRequest
 });
 
 app.get("/api/update/status", async () => updateService.getStatus());

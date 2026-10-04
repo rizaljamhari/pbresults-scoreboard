@@ -25,3 +25,5 @@ data/uploads/*
 .vscode/
 .impeccable/
 backups/
+
+secrets/
