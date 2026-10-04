@@ -188,6 +188,7 @@ export class AppEventHub {
       | { type: "overlay.state"; state: OverlayState }
       | { type: "rehearsal.state"; state: RehearsalStatus }
       | { type: "overlay.cue"; cue: "entrance"; token: number }
+      | { type: "scoreboard.state"; state: ScoreboardState }
   ): AppRealtimeEvent {
     this.sequence += 1;
     const event = {
