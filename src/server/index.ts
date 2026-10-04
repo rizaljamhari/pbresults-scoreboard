@@ -2,8 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import type { FastifyReply } from "fastify";
-import cors from "@fastify/cors";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { z } from "zod";
@@ -55,7 +54,6 @@ import {
 } from "../shared/update.js";
 import { runtimeBuild } from "./buildInfo.js";
 import { getHealthStatus, runStartupHealthProbe } from "./health.js";
-import { isLoopbackRequest } from "./updateSecurity.js";
 import { UpdateFailure, updateService } from "./updateService.js";
 import { AppEventHub } from "./appEventHub.js";
 import { registerAppEventRoutes } from "./appEventRoutes.js";
@@ -69,6 +67,7 @@ import { BackupFailure, backupService } from "./backupService.js";
 import { createFileSecretStore } from "./remoteAccessSecrets.js";
 import { RemoteAccessService } from "./remoteAccessService.js";
 import { registerRemoteAccessRoutes } from "./remoteAccessRoutes.js";
+import { isOnsiteManagementRequest, isRemoteRequest, registerRemoteRequestBoundary, RemoteSessionMarkers } from "./remoteRequestSecurity.js";
 
 const app = Fastify({
   logger: true,
@@ -76,6 +75,7 @@ const app = Fastify({
 });
 
 const port = Number(process.env.PORT ?? 3000);
+const remoteSessionMarkers = new RemoteSessionMarkers();
 const openStreams = new Set<import("node:http").ServerResponse>();
 const appEventHub = new AppEventHub({
   logger: {
@@ -224,12 +224,29 @@ function publishFullRestore() {
   scheduleVisibleContentBackfill();
 }
 
-function requireLocalUpdateRequest(request: Parameters<typeof isLoopbackRequest>[0], reply: FastifyReply) {
-  if (isLoopbackRequest(request)) return true;
+const onsitePorts: ReadonlySet<number> = new Set([port]);
+/** In development the Vite client proxies /api and rewrites Host, so its pages carry an Origin on another port. */
+const devClientOrigins: ReadonlySet<string> = new Set(
+  process.env.APP_CLIENT_PORT ? ["localhost", "127.0.0.1", "[::1]"].map((host) => `http://${host}:${Number(process.env.APP_CLIENT_PORT)}`) : []
+);
+
+function isOnsiteRequest(request: FastifyRequest) {
+  return isOnsiteManagementRequest(request, onsitePorts);
+}
+
+function requireLocalUpdateRequest(request: FastifyRequest, reply: FastifyReply) {
+  if (isOnsiteRequest(request)) return true;
   reply.code(403).send({
     code: "UPDATE_LOCAL_REQUEST_REQUIRED",
     message: "Software update controls are available only from the local computer."
   });
+  return false;
+}
+
+/** Restoring replaces every setting, theme, team, and asset, so it stays with the scoreboard computer. */
+function requireLocalRestoreRequest(request: FastifyRequest, reply: FastifyReply) {
+  if (isOnsiteRequest(request)) return true;
+  reply.code(403).send({ message: "Backups can be restored only on the scoreboard computer, from localhost." });
   return false;
 }
 
@@ -271,7 +288,8 @@ function findPreferredLanAddress() {
   return privateCandidate ?? ipv4Candidates[0] ?? null;
 }
 
-await app.register(cors, { origin: true });
+// First, so every route and hook after it sees requests already classified as local or remote.
+registerRemoteRequestBoundary(app, { markers: remoteSessionMarkers, localOrigins: devClientOrigins });
 await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 await app.register(fastifyStatic, {
   root: uploadsDir,
@@ -349,6 +367,8 @@ function safeJson(text: string): unknown {
 
 // Overlay pages report what they render; a bad or oversized report is dropped, never an error on air.
 app.post("/api/overlay/report", { bodyLimit: 4 * 1024 }, async (request, reply) => {
+  // A remote browser looking at the overlay is not the overlay vMix shows; keep it out of overlay health.
+  if (isRemoteRequest(request)) return reply.code(204).send();
   const body = typeof request.body === "string" ? safeJson(request.body) : request.body;
   const parsed = overlayReportSchema.safeParse(body);
   if (!parsed.success) {
@@ -376,8 +396,8 @@ app.post("/api/overlay/entrance", async () => {
 
 registerRemoteAccessRoutes(app, {
   service: new RemoteAccessService({ store: createFileSecretStore({ filePath: remoteAccessSecretPath }) }),
-  // Sufficient while no tunnel exists; the strict onsite predicate replaces it before the ngrok provider lands.
-  isManagementRequest: isLoopbackRequest
+  isManagementRequest: isOnsiteRequest,
+  isRemoteRequest
 });
 
 app.get("/api/update/status", async () => updateService.getStatus());
@@ -571,6 +591,7 @@ app.delete("/api/operations/resolve/:side", async (request, reply) => {
 });
 app.get("/api/app/export", async () => exportAppPackage());
 app.post("/api/app/import", async (request, reply) => {
+  if (!requireLocalRestoreRequest(request, reply)) return;
   try {
     const restored = await backupService.restorePackage(request.body);
     publishFullRestore();
@@ -603,6 +624,7 @@ app.post("/api/backups/:file/inspect", async (request, reply) => {
   }
 });
 app.post("/api/backups/:file/restore", async (request, reply) => {
+  if (!requireLocalRestoreRequest(request, reply)) return;
   try {
     const restored = await backupService.restoreFile((request.params as { file: string }).file);
     publishFullRestore();
@@ -612,7 +634,7 @@ app.post("/api/backups/:file/restore", async (request, reply) => {
   }
 });
 app.put("/api/backups/config", async (request, reply) => {
-  if (!isLoopbackRequest(request)) {
+  if (!isOnsiteRequest(request)) {
     return reply.code(403).send({ message: "Backup folders can be changed only from the scoreboard computer." });
   }
   const body = (request.body as { extraFolder?: unknown; retainAutomatic?: unknown } | undefined) ?? {};

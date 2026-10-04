@@ -1,6 +1,6 @@
 # Temporary ngrok Remote Access Technical Plan
 
-Status: Phase 1 implemented (shared model, token storage, configuration API); Phases 2–5 not started
+Status: Phases 1–2 implemented (shared model, token storage, configuration API, request boundary); Phases 3–5 not started
 
 Last reviewed: 2026-10-05 (re-checked against the Node update coordinators, the application event hub, and backup/restore)
 
@@ -321,6 +321,7 @@ Return `403` without forwarding for:
 - unsafe methods under `/api/remote-access/`
 - unsafe methods under `/api/update/`
 - `PUT /api/backups/config`
+- `POST /api/app/import` (the UI's **Restore from file…**, a full restore)
 - `POST /api/backups/<file>/restore` (match the path with an expression such as `req.url.path.startsWith('/api/backups/') && req.url.path.endsWith('/restore')`)
 
 `GET /api/remote-access/status`, `GET /api/update/status`, and the backup list and download routes may pass after authentication so the normal UI can render status.
@@ -389,10 +390,13 @@ Use this predicate for:
 
 - all remote-access configuration and lifecycle mutations
 - every managed-update mutation, including check, download, install, skip, rollback, and result dismissal (currently `requireLocalUpdateRequest()`)
-- `POST /api/backups/:file/restore` (currently ungated)
-- `PUT /api/backups/config` (currently `isLoopbackRequest()`)
+- `POST /api/backups/:file/restore`
+- `POST /api/app/import`, which calls `backupService.restorePackage()` and is the UI's **Restore from file…**; it replaces all data exactly like a stored-backup restore
+- `PUT /api/backups/config`
 
-After migration, `isLoopbackRequest()` should have no remaining route callers; delete it or keep it only as a building block of the new predicate.
+Implemented as `isOnsiteManagementRequest()` in `src/server/remoteRequestSecurity.ts`; `isLoopbackRequest()` no longer has route callers.
+
+Development note: the Vite dev client's shorthand proxy rewrites `Host` to the server port, so the onsite Host check needs no dev exception. Its pages do send `Origin: http://localhost:<APP_CLIENT_PORT>`, so the boundary trusts that origin for local requests only when the dev launcher sets `APP_CLIENT_PORT`. Remote requests never accept it.
 
 Client-side hostname checks remain useful UI affordances but are never the security control.
 
@@ -408,10 +412,10 @@ This intentionally permits:
 - team resolution and team management
 - theme creation, editing, publishing, import, and export
 - asset upload
-- app/team import and export
-- creating, listing, and downloading backups
+- app export, and team import and export
+- creating, listing, inspecting, and downloading backups
 
-It does not permit backup restore or backup folder configuration. New routes that replace all data, touch arbitrary filesystem paths, or stop or replace the process must be added to the strict predicate and the edge block rule when they are introduced.
+It does not permit backup restore (stored file or **Restore from file…** via `/api/app/import`) or backup folder configuration. The Settings page disables both Restore controls on browsers not opened through localhost, matching the backup-folder controls. New routes that replace all data, touch arbitrary filesystem paths, or stop or replace the process must be added to the strict predicate and the edge block rule when they are introduced.
 
 ### 12.5 Overlay health
 
@@ -976,6 +980,8 @@ Implemented in `src/shared/remoteAccess.ts`, `src/server/remoteAccessSecrets.ts`
 
 Exit criteria: route tests prove a loopback-forwarded remote request cannot invoke machine-lifecycle APIs.
 
+Implemented in `src/server/remoteRequestSecurity.ts`, registered first in `index.ts`. `RemoteSessionMarkers` holds the single accepted marker; Phase 3's service activates it (provisional, probe route only), confirms it after the self-probe, and clears it first on stop, expiry, or shutdown. `@fastify/cors` is removed entirely. The predicate and boundary are covered by unit tests; the `index.ts` wiring was checked against a running dev server, since `index.ts` is a script and has no route-level test harness.
+
 ### Phase 3: ngrok provider and lifecycle
 
 - Add the SDK dependency and packaging assertions.
@@ -1026,13 +1032,13 @@ Code rollback is safe because older application versions ignore the root `secret
 - [x] Implement plaintext file storage in root `secrets/` with atomic writes.
 - [x] Add environment and in-memory secret-store adapters.
 - [x] Add configuration/test/delete APIs.
-- [ ] Add request marker and strict onsite-loopback security helpers.
-- [ ] Migrate every update mutation, backup restore, and backup config to the strict predicate.
-- [ ] Exclude recognized remote requests from overlay health.
+- [x] Add request marker and strict onsite-loopback security helpers.
+- [x] Migrate every update mutation, backup restore, and backup config to the strict predicate.
+- [x] Exclude recognized remote requests from overlay health.
 - [ ] Make `gracefulShutdown()` close the tunnel first, force SDK teardown on timeout, and exit explicitly within the coordinator deadline.
 - [ ] Add the SDK import to the bundled-`node.exe` packaging smoke test.
-- [ ] Remove arbitrary CORS origin reflection.
-- [ ] Add remote unsafe-method Origin validation.
+- [x] Remove arbitrary CORS origin reflection.
+- [x] Add remote unsafe-method Origin validation.
 - [ ] Implement in-memory Traffic Policy generation.
 - [ ] Implement ngrok start and HTTPS URL validation.
 - [ ] Implement public authenticated self-probe.

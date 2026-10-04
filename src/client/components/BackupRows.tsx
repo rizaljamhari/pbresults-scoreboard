@@ -227,12 +227,19 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
         ) : null}
       </div>
 
-      <SettingRow title="Backup file" hint="Download everything as one file, or restore from a file you saved earlier.">
+      <SettingRow
+        title="Backup file"
+        hint={
+          isLocal
+            ? "Download everything as one file, or restore from a file you saved earlier."
+            : "Download everything as one file. Open Settings through localhost on the scoreboard computer to restore."
+        }
+      >
         <Button disabled={locked} onClick={() => void exportFile()}>
           <Download aria-hidden />
           Export
         </Button>
-        <Button variant="ghost" disabled={locked} onClick={() => importInputRef.current?.click()}>
+        <Button variant="ghost" disabled={!isLocal || locked} onClick={() => importInputRef.current?.click()}>
           <Upload aria-hidden />
           {busyAction === "inspect:upload" ? "Checking…" : "Restore from file…"}
         </Button>
@@ -307,7 +314,13 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
                   <td>{entry.automatic ? reasonLabels[entry.reason] : <Chip tone="blue">{reasonLabels[entry.reason]}</Chip>}</td>
                   <td className="ad-num">{formatBytes(entry.sizeBytes)}</td>
                   <td className="ad-num">
-                    <Button size="sm" variant="ghost" disabled={locked} onClick={() => void previewStored(entry.file, entry.createdAt)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={!isLocal || locked}
+                      title={isLocal ? undefined : "Restore on the scoreboard computer, through localhost"}
+                      onClick={() => void previewStored(entry.file, entry.createdAt)}
+                    >
                       <RotateCcw aria-hidden />
                       {busyAction === `inspect:${entry.file}` ? "Checking…" : "Restore…"}
                     </Button>

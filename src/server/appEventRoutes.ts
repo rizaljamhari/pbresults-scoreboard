@@ -76,7 +76,8 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     reply.raw.on("close", cleanup);
     reply.raw.on("error", cleanup);
     const query = request.query as { client?: unknown; role?: unknown; page?: unknown } | undefined;
-    if (options.overlays && query?.role === "overlay" && typeof query.client === "string" && CLIENT_ID.test(query.client)) {
+    // A remote browser looking at the overlay is not the overlay vMix shows; keep it out of overlay health.
+    if (options.overlays && !request.remoteAccess && query?.role === "overlay" && typeof query.client === "string" && CLIENT_ID.test(query.client)) {
       detachOverlay = options.overlays.attachStream(query.client, query.page === "preview" ? "preview" : "live", {
         remoteAddress: request.ip,
         userAgent: String(request.headers["user-agent"] ?? "").slice(0, 300)

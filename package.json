@@ -18,7 +18,6 @@
     "check:overlay-scope": "node scripts/check-overlay-tailwind.mjs"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.1",
     "@fastify/multipart": "^9.0.3",
     "@fastify/static": "^8.0.4",
     "@fontsource/barlow-condensed": "^5.1.1",
