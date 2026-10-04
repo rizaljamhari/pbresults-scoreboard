@@ -15,9 +15,23 @@ function nextResourceRefreshToken(prefix: string) {
   return `${prefix}:${resourceRefreshToken}`;
 }
 
-function versionAssetUrl(url: string, token: string) {
-  const parsed = new URL(url, window.location.origin);
-  parsed.searchParams.set("v", token);
+type VersionedFile = { url: string; contentHash?: string | null; updatedAt?: string | null; createdAt?: string | null };
+
+/**
+ * The file's own version: its content hash, or failing that when it last changed. Replacing an image in place keeps
+ * its file name, so the version is what makes browsers fetch the new bytes; anything else (a reload, a server
+ * restart, an edit to some other asset) leaves the address alone, so browsers reuse their copy instead of
+ * downloading every image again.
+ */
+export function assetVersion(file: Omit<VersionedFile, "url">): string {
+  if (file.contentHash) return file.contentHash.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
+  const changed = Date.parse(file.updatedAt ?? file.createdAt ?? "");
+  return Number.isFinite(changed) ? String(changed) : "0";
+}
+
+export function versionAssetUrl(file: VersionedFile) {
+  const parsed = new URL(file.url, window.location.origin);
+  parsed.searchParams.set("v", assetVersion(file));
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
@@ -41,7 +55,7 @@ export function useAssets() {
   return useResource(api.getAssets, [], {
     domain: "assets",
     refreshOnEvents: true,
-    transform: (assets, token) => assets.map((asset) => ({ ...asset, url: versionAssetUrl(asset.url, token) }))
+    transform: (assets) => assets.map((asset) => ({ ...asset, url: versionAssetUrl(asset) }))
   });
 }
 
@@ -52,11 +66,11 @@ export function useAssetLibrary() {
     domain: "assets",
     refreshOnEvents: true,
     alsoRefreshOn: assetLibraryExtraDomains,
-    transform: (assets, token) =>
+    transform: (assets) =>
       assets.map((asset) => ({
         ...asset,
-        url: versionAssetUrl(asset.url, token),
-        original: asset.original ? { ...asset.original, url: versionAssetUrl(asset.original.url, token) } : null
+        url: versionAssetUrl(asset),
+        original: asset.original ? { ...asset.original, url: versionAssetUrl(asset.original) } : null
       }))
   });
 }
