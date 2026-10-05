@@ -59,7 +59,9 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
 - `/admin/teams`
   - team registry, logos, aliases, live match names, and side-panel editing
 - `/admin/settings`
-  - upstream URL, publishing, polling, backup/import, software updates
+  - feed address and check interval, branding, upload preferences (saved together)
+- `/admin/maintenance`
+  - backup and restore, software updates, remote access (each action applies right away)
 - `/overlay/live`
   - live overlay output for OBS/vMix/browser source use
 
@@ -153,7 +155,7 @@ Important:
 
 The updater runs on the bundled Node runtime (updater protocol 2). Installations from before this change used
 PowerShell coordinators and cannot update themselves to it: extract the new portable ZIP once and copy the old
-`data/` folder into it (or restore a backup in Settings).
+`data/` folder into it (or restore a backup in Maintenance).
 
 See also:
 
@@ -171,7 +173,7 @@ pnpm release 1.7.0
 
 The command validates the version and repository, runs the local checks, creates the annotated `v1.7.0` tag, and pushes only that tag. The tag triggers GitHub Actions, which builds the Windows portable package, validates its manifest and SHA-256, creates the matching GitHub Release, attaches both the versioned ZIP and update manifest, and publishes it.
 
-The first release containing the managed updater must still be installed using the earlier manual `app/` replacement process. Starting it once bootstraps the stable root launcher; later updater-protocol-1 releases can then be installed from Settings. Existing v1.9 installations additionally require the one-time root-script repair described above.
+The first release containing the managed updater must still be installed using the earlier manual `app/` replacement process. Starting it once bootstraps the stable root launcher; later updater-protocol-1 releases can then be installed from Maintenance. Existing v1.9 installations additionally require the one-time root-script repair described above.
 
 Useful options:
 

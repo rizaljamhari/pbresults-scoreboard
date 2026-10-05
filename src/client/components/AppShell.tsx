@@ -17,7 +17,8 @@ import {
   Settings2,
   Shield,
   Sun,
-  TriangleAlert
+  TriangleAlert,
+  Wrench
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
 import { cn } from "../lib/utils";
@@ -114,6 +115,7 @@ export function AppShell() {
     { to: "/admin/themes", label: "Themes", icon: Palette, active: location.pathname.startsWith("/admin/themes"), count: themes.data?.length },
     { to: "/admin/teams", label: "Teams", icon: Shield, active: location.pathname.startsWith("/admin/teams"), count: teams.data?.length },
     { to: "/admin/assets", label: "Assets", icon: Images, active: location.pathname.startsWith("/admin/assets"), count: assets.data?.length },
+    { to: "/admin/maintenance", label: "Maintenance", icon: Wrench, active: location.pathname === "/admin/maintenance" },
     { to: "/admin/settings", label: "Settings", icon: Settings2, active: location.pathname === "/admin/settings" }
   ];
 
@@ -277,8 +279,8 @@ function RemoteAccessBanner() {
         {remaining === "ending now" ? "ending now" : `ends ${formatTime(status.expiresAt)} (${remaining})`}
       </span>
       <span className="ad-grow" />
-      {status.managementAllowed && location.pathname !== "/admin/settings" ? (
-        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/settings#set-remote">
+      {status.managementAllowed && location.pathname !== "/admin/maintenance" ? (
+        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/maintenance#set-remote">
           Manage
         </Link>
       ) : null}

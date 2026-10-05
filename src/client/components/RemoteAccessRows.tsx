@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
-import { ArrowUpRight, CircleAlert, Copy, Eye, EyeOff, Info, Power, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, CircleAlert, Copy, Eye, EyeOff, Globe, Info, Power, TriangleAlert } from "lucide-react";
 import { api } from "../api";
 import { useNow, useRemoteAccessStatus } from "../hooks";
 import { showToast } from "../toast";
@@ -57,7 +57,7 @@ async function copy(text: string, what: string) {
   }
 }
 
-/** Remote access status and controls, drawn as rows inside the Settings "Remote access" group. */
+/** Remote access status and controls, drawn as rows inside the Maintenance "Remote access" group. */
 export function RemoteAccessRows() {
   const remote = useRemoteAccessStatus();
   const status = remote.data;
@@ -153,7 +153,7 @@ function RemoteAccessReadOnly({ status }: { status: RemoteAccessStatus }) {
       <div className="ad-set-block">
         <b>
           Remote access{" "}
-          {sessionOn ? <Chip tone={status.phase === "degraded" ? "critical" : "warning"}>{status.phase === "degraded" ? "Reconnecting" : "On"}</Chip> : <Chip>Off</Chip>}
+          {sessionOn ? <Chip tone="critical">{status.phase === "degraded" ? "Reconnecting" : "Open to the internet"}</Chip> : <Chip>Off</Chip>}
         </b>
         <p className="ad-hint ad-break" style={{ margin: 0 }}>
           {sessionOn ? `${status.url ?? ""} · until ${formatTime(status.expiresAt)} · ${formatRemaining(status.expiresAt, now)}` : status.configured ? "Ready to start." : "Not set up."}
@@ -169,7 +169,7 @@ function TokenInput({ busy, onSubmit, submitLabel, onCancel }: { busy: boolean; 
   const submit = () => {
     if (trimmed && !busy) onSubmit(trimmed);
   };
-  // This sits inside the Settings form: Enter must save the token, never the whole page.
+  // Enter saves the token here and never submits anything around it.
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -191,7 +191,7 @@ function TokenInput({ busy, onSubmit, submitLabel, onCancel }: { busy: boolean; 
         onChange={(event) => setToken(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      <Button variant="primary" disabled={!trimmed || busy} onClick={submit}>
+      <Button disabled={!trimmed || busy} onClick={submit}>
         {busy ? "Testing…" : submitLabel}
       </Button>
       {onCancel ? (
@@ -284,7 +284,7 @@ function ConfiguredInactive({
 
       {!confirming ? (
         <SettingRow title="Remote access" hint="Off. Start it when someone off site needs to help, for a limited time.">
-          <Button variant="primary" disabled={busy} onClick={() => setConfirming(true)}>
+          <Button disabled={busy} onClick={() => setConfirming(true)}>
             <Power aria-hidden />
             Start remote access…
           </Button>
@@ -360,12 +360,17 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
           <TriangleAlert aria-hidden />
           <span>The connection to ngrok dropped and is reconnecting. Everything on this computer keeps working; staff off site may be cut off for now.</span>
         </div>
-      ) : null}
+      ) : (
+        <div className="ad-callout ad-callout--critical" role="status">
+          <Globe aria-hidden />
+          <span>This scoreboard is open to the internet. Anyone with the details below can control it until {formatTime(status.expiresAt)}.</span>
+        </div>
+      )}
 
       <SettingRow
         title={
           <>
-            Remote access <Chip tone={degraded ? "critical" : "warning"}>{degraded ? "Reconnecting" : "On"}</Chip>
+            Remote access <Chip tone="critical">{degraded ? "Reconnecting" : "Open to the internet"}</Chip>
           </>
         }
         hint={`Started ${formatTime(status.startedAt)} · ends ${formatTime(status.expiresAt)} · ${formatRemaining(status.expiresAt, now)} · ${formatRemoteConnections(status.remoteConnections)}`}

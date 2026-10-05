@@ -1,35 +1,36 @@
 import type { AppSettings } from "../../shared/theme";
 
-export function areSettingsEqual(left: AppSettings, right: AppSettings): boolean {
-  return (
-    left.upstreamBaseUrl === right.upstreamBaseUrl &&
-    left.publishedThemeId === right.publishedThemeId &&
-    left.pollEnabled === right.pollEnabled &&
-    left.pollIntervalMs === right.pollIntervalMs &&
-    left.autoRemoveBackgroundUploads === right.autoRemoveBackgroundUploads &&
-    left.reduceMotion === right.reduceMotion &&
-    left.updateCheckEnabled === right.updateCheckEnabled &&
-    left.updateCheckIntervalHours === right.updateCheckIntervalHours &&
-    left.updateAutoDownload === right.updateAutoDownload &&
-    left.brandName === right.brandName &&
-    left.brandLogoAssetId === right.brandLogoAssetId &&
-    left.brandPoweredBy === right.brandPoweredBy
-  );
+/** The settings the Settings page edits. Everything else is changed elsewhere and must never be saved from here. */
+export const settingsFormFields = [
+  "upstreamBaseUrl",
+  "pollIntervalMs",
+  "autoRemoveBackgroundUploads",
+  "brandName",
+  "brandLogoAssetId",
+  "brandPoweredBy"
+] as const satisfies ReadonlyArray<keyof AppSettings>;
+
+export type SettingsDraft = Pick<AppSettings, (typeof settingsFormFields)[number]>;
+
+export function areSettingsEqual(left: SettingsDraft, right: SettingsDraft): boolean {
+  return settingsFormFields.every((field) => left[field] === right[field]);
 }
 
-export function createSettingsDraft(source: AppSettings): AppSettings {
-  return {
-    upstreamBaseUrl: source.upstreamBaseUrl,
-    publishedThemeId: source.publishedThemeId,
-    pollEnabled: source.pollEnabled,
-    pollIntervalMs: source.pollIntervalMs,
-    autoRemoveBackgroundUploads: source.autoRemoveBackgroundUploads,
-    reduceMotion: source.reduceMotion,
-    updateCheckEnabled: source.updateCheckEnabled,
-    updateCheckIntervalHours: source.updateCheckIntervalHours,
-    updateAutoDownload: source.updateAutoDownload,
-    brandName: source.brandName,
-    brandLogoAssetId: source.brandLogoAssetId,
-    brandPoweredBy: source.brandPoweredBy
-  };
+export function createSettingsDraft(source: SettingsDraft): SettingsDraft {
+  return Object.fromEntries(settingsFormFields.map((field) => [field, source[field]])) as SettingsDraft;
+}
+
+/** The draft on top of the latest saved settings, so a save never undoes a change made on another page. */
+export function applySettingsDraft(latest: AppSettings, draft: SettingsDraft): AppSettings {
+  return { ...latest, ...createSettingsDraft(draft) };
+}
+
+export const POLL_INTERVAL_MIN_MS = 100;
+export const POLL_INTERVAL_MAX_MS = 10000;
+
+export function pollIntervalError(value: number): string | null {
+  if (!Number.isInteger(value) || value < POLL_INTERVAL_MIN_MS || value > POLL_INTERVAL_MAX_MS) {
+    return `Use a whole number from ${POLL_INTERVAL_MIN_MS} to ${POLL_INTERVAL_MAX_MS} ms.`;
+  }
+  return null;
 }

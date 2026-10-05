@@ -1002,12 +1002,27 @@
   padding: 20px 20px 48px;
 }
 
-.ad-toc {
+.ad-toc-col {
   position: sticky;
   top: 20px;
   display: grid;
   align-self: start;
+  gap: 14px;
+}
+
+.ad-toc {
+  display: grid;
   gap: 2px;
+}
+
+.ad-toc-note {
+  margin: 0;
+  padding: 0 8px;
+}
+
+.ad-toc-note a {
+  color: var(--ad-accent-ink);
+  text-underline-offset: 2px;
 }
 
 .ad-toc a {
@@ -1025,20 +1040,26 @@
 }
 
 .ad-toc a[aria-current="true"] {
-  background: var(--ad-hover);
-  color: var(--ad-text);
+  background: var(--ad-accent-soft);
+  color: var(--ad-accent-ink);
   font-weight: 600;
 }
 
 .ad-set-group {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
   scroll-margin-top: 20px;
 }
 
 .ad-set-group > h2 {
-  margin: 0 0 8px 2px;
-  font-size: 13px;
+  margin: 0 0 10px 2px;
+  font-size: 16px;
   font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.ad-set-group > .ad-set-lede {
+  margin: -4px 0 10px 2px;
 }
 
 .ad-set-row {
@@ -1056,13 +1077,18 @@
   border-top: 1px solid var(--ad-line);
 }
 
-.ad-set-row.is-dim .ad-set-text {
-  opacity: 0.5;
+/* Dimmed, not faded: opacity would drop the already quiet hint below readable contrast. */
+.ad-set-row.is-dim .ad-set-title {
+  color: var(--ad-muted);
 }
 
-.ad-set-text b {
+.ad-set-title {
   display: block;
   font-weight: 550;
+}
+
+label.ad-set-title {
+  cursor: default;
 }
 
 .ad-set-text .ad-hint {
@@ -1080,6 +1106,72 @@
   display: grid;
   gap: 8px;
   padding: 12px 16px;
+}
+
+/* A warning tied to one control: icon plus text, never colour alone. */
+.ad-inline-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--ad-crit);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ad-inline-warning svg.lucide {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.ad-input[aria-invalid="true"] {
+  border-color: var(--ad-crit);
+}
+
+/* ---------- Dialog ---------- */
+.ad-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 18px 14px;
+  border: 1px solid var(--ad-line);
+  border-radius: 10px;
+  background: var(--ad-surface);
+  color: var(--ad-text);
+  box-shadow: var(--ad-shadow-pop);
+}
+
+.ad-dialog::backdrop {
+  background: rgb(10 10 12 / 0.38);
+}
+
+.ad-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-dialog-head svg.lucide {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ad-draft);
+}
+
+.ad-dialog-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.ad-dialog > .ad-hint {
+  margin: 8px 0 16px;
+}
+
+.ad-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 /* ---------- Toasts inside the admin ---------- */

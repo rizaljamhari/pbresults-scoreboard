@@ -141,12 +141,33 @@ export function Field({ label, children, hint }: { label: string; children: (id:
   );
 }
 
-/** A settings row: what it is and why on the left, the control on the right. */
-export function SettingRow({ title, hint, children, dim = false }: { title: ReactNode; hint?: ReactNode; children: ReactNode; dim?: boolean }) {
+/**
+ * A settings row: what it is and why on the left, the control on the right. Pass `htmlFor` with the control's id so
+ * the title is its label and clicking it focuses the control.
+ */
+export function SettingRow({
+  title,
+  hint,
+  children,
+  dim = false,
+  htmlFor
+}: {
+  title: ReactNode;
+  hint?: ReactNode;
+  children: ReactNode;
+  dim?: boolean;
+  htmlFor?: string;
+}) {
   return (
     <div className={cn("ad-set-row", dim && "is-dim")}>
       <div className="ad-set-text">
-        <b>{title}</b>
+        {htmlFor ? (
+          <label className="ad-set-title" htmlFor={htmlFor}>
+            {title}
+          </label>
+        ) : (
+          <b className="ad-set-title">{title}</b>
+        )}
         {hint ? <p className="ad-hint">{hint}</p> : null}
       </div>
       <div className="ad-set-ctl">{children}</div>

@@ -22,8 +22,8 @@ function localControlAvailable(): boolean {
   return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
-/** Update status and actions, drawn as rows inside the Settings "Software updates" group. */
-export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: ReturnType<typeof useUpdateStatus>; hasUnsavedChanges: boolean }) {
+/** Update status and actions, drawn as rows inside the Maintenance "Software updates" group. */
+export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUpdateStatus> }) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [showInstallConfirmation, setShowInstallConfirmation] = useState(false);
   const [restartAcknowledged, setRestartAcknowledged] = useState(false);
@@ -56,10 +56,15 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
 
   if (!status.managedUpdatesSupported) {
     return (
-      <div className="ad-callout">
-        <Info aria-hidden />
-        <span>{status.unsupportedReason ?? "Managed updates only work in the Windows portable package."}</span>
-      </div>
+      <>
+        <div className="ad-callout">
+          <Info aria-hidden />
+          <span>{status.unsupportedReason ?? "Managed updates only work in the Windows portable package."}</span>
+        </div>
+        <SettingRow title={`Version ${status.current.version}`} hint={status.current.releaseTag ?? "Development build"}>
+          {null}
+        </SettingRow>
+      </>
     );
   }
 
@@ -71,7 +76,7 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
       {!isLocal ? (
         <div className="ad-callout ad-callout--info">
           <Info aria-hidden />
-          <span>Open Settings through localhost on the scoreboard computer to control updates.</span>
+          <span>Open Maintenance through localhost on the scoreboard computer to control updates.</span>
         </div>
       ) : null}
 
@@ -95,7 +100,7 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
         {status.rollbackAvailable ? (
           <Button
             variant="ghost"
-            disabled={locked || hasUnsavedChanges}
+            disabled={locked}
             onClick={() => {
               if (window.confirm("Roll back to the previous healthy version and restart? Your current data is snapshotted first.")) {
                 void runAction("rollback", api.rollbackUpdate);
@@ -173,10 +178,9 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
             Choose a moment when nothing is live. The updater stops the server, snapshots your data, restarts on the same port, and rolls back
             by itself if the health checks fail.
           </p>
-          {hasUnsavedChanges ? <p className="ad-hint" style={{ color: "var(--ad-crit)" }}>Save or discard your Settings changes first.</p> : null}
           {!showInstallConfirmation ? (
             <div>
-              <Button variant="primary" disabled={!isLocal || hasUnsavedChanges} onClick={() => setShowInstallConfirmation(true)}>
+              <Button disabled={!isLocal} onClick={() => setShowInstallConfirmation(true)}>
                 Install and restart…
               </Button>
             </div>
@@ -184,7 +188,7 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
             <>
               <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input className="ad-check" type="checkbox" checked={restartAcknowledged} onChange={(event) => setRestartAcknowledged(event.target.checked)} />
-                The admin and the overlay will disconnect briefly.
+                The admin and the overlay will disconnect briefly. Nothing is live right now.
               </label>
               <div style={{ display: "flex", gap: 6 }}>
                 <Button
@@ -216,7 +220,7 @@ export function SoftwareUpdateRows({ update, hasUnsavedChanges }: { update: Retu
         <div className="ad-callout ad-callout--critical">
           <CircleAlert aria-hidden />
           <span>
-            <b>{status.error.code}</b> · {status.error.message}
+            {status.error.message} ({status.error.code})
           </span>
         </div>
       ) : null}

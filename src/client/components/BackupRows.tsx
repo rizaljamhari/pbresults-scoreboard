@@ -40,8 +40,8 @@ function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** Backup status, the extra folder, stored backups and restore, drawn as rows inside the Settings "Backup and restore" group. */
-export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChanges: boolean; onRestored: (result: RestoreResult) => void }) {
+/** Backup status, the extra folder, stored backups and restore, drawn as rows inside the Maintenance "Backup and restore" group. */
+export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult) => void }) {
   const backups = useBackups();
   const status = backups.data;
   const isLocal = localControlAvailable();
@@ -51,6 +51,14 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
   const [folderDraft, setFolderDraft] = useState("");
   const [retainDraft, setRetainDraft] = useState(30);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const pendingRef = useRef<HTMLDivElement>(null);
+
+  // The confirmation sits above the backup list; bring it into view when a row lower down asks for it.
+  useEffect(() => {
+    if (!pending) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    pendingRef.current?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [pending]);
 
   useEffect(() => {
     if (!status) return;
@@ -191,7 +199,7 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
         <p className="ad-hint">
           {isLocal
             ? "Optional second copy of every backup, such as a USB drive."
-            : "Open Settings through localhost on the scoreboard computer to change backup folders."}
+            : "Open Maintenance through localhost on the scoreboard computer to change backup folders."}
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
           <input
@@ -203,6 +211,9 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
             disabled={!isLocal || locked}
             onChange={(event) => setFolderDraft(event.target.value)}
           />
+          <span className="ad-hint" aria-hidden>
+            Automatic backups
+          </span>
           <label className="ad-unit" title="How many automatic backups to keep">
             <input
               className="ad-input"
@@ -232,7 +243,7 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
         hint={
           isLocal
             ? "Download everything as one file, or restore from a file you saved earlier."
-            : "Download everything as one file. Open Settings through localhost on the scoreboard computer to restore."
+            : "Download everything as one file. Open Maintenance through localhost on the scoreboard computer to restore."
         }
       >
         <Button disabled={locked} onClick={() => void exportFile()}>
@@ -257,7 +268,7 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
       </SettingRow>
 
       {pending ? (
-        <div className="ad-set-block">
+        <div className="ad-set-block" ref={pendingRef}>
           <b>Restore {pending.label}?</b>
           <p className="ad-hint">
             {pending.preview.counts.themes} themes · {pending.preview.counts.teams} teams · {pending.preview.counts.assets} logos (
@@ -278,9 +289,8 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
             This replaces the current settings, themes, teams, logos and operations state. A safety backup of the current data is saved
             first.
           </p>
-          {hasUnsavedChanges ? <p className="ad-hint" style={{ color: "var(--ad-crit)" }}>Save or discard your Settings changes first.</p> : null}
           <div style={{ display: "flex", gap: 6 }}>
-            <Button variant="primary" disabled={locked || hasUnsavedChanges} onClick={() => void confirmRestore()}>
+            <Button variant="primary" disabled={locked} onClick={() => void confirmRestore()}>
               {busyAction === "restore" ? "Restoring…" : "Restore"}
             </Button>
             <Button variant="ghost" disabled={busyAction === "restore"} onClick={() => setPending(null)}>
@@ -311,7 +321,7 @@ export function BackupRows({ hasUnsavedChanges, onRestored }: { hasUnsavedChange
               {visibleBackups.map((entry) => (
                 <tr key={entry.file}>
                   <td>{formatDate(entry.createdAt)}</td>
-                  <td>{entry.automatic ? reasonLabels[entry.reason] : <Chip tone="blue">{reasonLabels[entry.reason]}</Chip>}</td>
+                  <td>{entry.automatic ? reasonLabels[entry.reason] : <Chip>{reasonLabels[entry.reason]}</Chip>}</td>
                   <td className="ad-num">{formatBytes(entry.sizeBytes)}</td>
                   <td className="ad-num">
                     <Button
