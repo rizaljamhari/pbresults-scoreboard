@@ -23,6 +23,8 @@ import {
   Replace,
   Sparkles,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   Waves
 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
@@ -37,6 +39,7 @@ import { showToast } from "../toast";
 import { useEntranceCueToken } from "../appEvents";
 import { Button, Chip, Dot, Grow, Menu, Toolbar, type Tone } from "../components/admin/kit";
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
+import { sideNeedsPick, useTeamPickAlert } from "../teamPickAlert";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -947,6 +950,7 @@ export function OperationsPage() {
   const assets = useAssets();
   const runtimeInfo = useRuntimeInfo();
   const live = useLiveState(true, settings.data?.pollIntervalMs);
+  const pickAlert = useTeamPickAlert(live.data);
   const operatorText = useOperatorTextState();
   const [togglingPoll, setTogglingPoll] = useState(false);
   const [togglingMotion, setTogglingMotion] = useState(false);
@@ -1405,7 +1409,7 @@ export function OperationsPage() {
       ["left", live.data.displayLeftTeamMatch],
       ["right", live.data.displayRightTeamMatch]
     ] as const) {
-      if (!match.inputName.trim() || match.status === "matched" || match.resolutionSource === "manual") continue;
+      if (!sideNeedsPick(match)) continue;
       stripMarkers.push({
         side,
         tone: match.status === "uncertain" ? "warning" : "critical",
@@ -1482,6 +1486,12 @@ export function OperationsPage() {
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
         ) : null}
+        {pickAlert.blocked ? (
+          <Chip tone="warning" title="The browser holds sound back until this page gets a click. Click anywhere to allow the team pick alert.">
+            <VolumeX aria-hidden />
+            Sound waiting for a click
+          </Chip>
+        ) : null}
         <Grow />
         <Menu
           trigger={
@@ -1508,6 +1518,12 @@ export function OperationsPage() {
                 ]
               : []),
             { kind: "separator" },
+            {
+              label: "Sound when a team needs picking",
+              icon: pickAlert.soundOn ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />,
+              checked: pickAlert.soundOn,
+              onSelect: () => pickAlert.setSoundOn(!pickAlert.soundOn)
+            },
             {
               label: "Reduce motion",
               icon: <Waves aria-hidden />,
