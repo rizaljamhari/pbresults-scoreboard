@@ -1143,13 +1143,13 @@ label.ad-set-title {
 
 /* The page behind a prompt is tinted and softened so the prompt clearly sits in front of it. */
 .ad-dialog::backdrop {
-  background: rgb(20 20 24 / 0.55);
-  backdrop-filter: blur(4px) saturate(0.8);
-  -webkit-backdrop-filter: blur(4px) saturate(0.8);
+  background: rgb(20 20 24 / 0.44);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
 }
 
 :root[data-admin-theme="dark"] .ad-dialog::backdrop {
-  background: rgb(0 0 0 / 0.68);
+  background: rgb(0 0 0 / 0.52);
 }
 
 :root[data-admin-theme="dark"] .ad-dialog {
