@@ -949,7 +949,7 @@ export function OverlayRenderer({
   const bandRect = useMemo(() => transitionBandRect(theme, applyPlacement), [theme, applyPlacement]);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const bandRef = useRef<HTMLDivElement | null>(null);
-  const { phase: scoreboardPhase, plainShowRun } = useScoreboardTransition({
+  const { phase: scoreboardPhase, plainShowRun, bandMoving } = useScoreboardTransition({
     visible: scoreboardVisible,
     settings: transition,
     reduceMotion,
@@ -1755,7 +1755,7 @@ export function OverlayRenderer({
         <TransitionBand
           bandRef={bandRef}
           settings={transition}
-          active={scoreboardPhase === "entering" || scoreboardPhase === "leaving-wipe"}
+          active={bandMoving}
           top={bandRect.top}
           height={bandRect.height}
           left={bandRect.left}

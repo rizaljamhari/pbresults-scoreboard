@@ -232,3 +232,24 @@ describe("show and hide transition", () => {
     expect(change?.details).toEqual(["Direction: Left to right → Right to left", "Sweep time: 800 → 1200"]);
   });
 });
+
+describe("contents start", () => {
+  it("starts contents three quarters through the sweep for themes saved before the setting existed", () => {
+    const { contentsStart: _dropped, ...savedBefore } = structuredClone(builtinThemes[0]).transition;
+    const theme = { ...structuredClone(builtinThemes[0]), transition: savedBefore };
+    expect(themeSchema.parse(theme).transition.contentsStart).toBe(75);
+  });
+
+  it("keeps it within 30 to 100 percent of the sweep", () => {
+    const theme = structuredClone(builtinThemes[0]);
+    expect(() => themeSchema.parse({ ...theme, transition: { ...theme.transition, contentsStart: 20 } })).toThrow();
+    expect(() => themeSchema.parse({ ...theme, transition: { ...theme.transition, contentsStart: 101 } })).toThrow();
+  });
+
+  it("names the setting when a theme's changes are listed", () => {
+    const before = structuredClone(builtinThemes[0]);
+    const after = structuredClone(before);
+    after.transition.contentsStart = 60;
+    expect(JSON.stringify(diffThemes(before, after, (_id, label) => label))).toContain("Contents start");
+  });
+});

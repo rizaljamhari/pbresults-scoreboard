@@ -199,6 +199,11 @@ export const transitionSchema = z.object({
   logoMotion: motionField(defaultTransitionLogoMotion),
   /** Gap between contents as they build in, in the theme's build-in order. */
   contentGapMs: z.number().min(0).max(1000).default(60),
+  /**
+   * How far through the sweep the contents start building in, as a percentage of the sweep time. The band lands
+   * softly, so waiting for it to stop (100) feels late; contents only show where the band has already passed.
+   */
+  contentsStart: z.number().int().min(30).max(100).default(75),
   /** The centre line shows the band's text for this long after Show, then its usual content; 0 skips it. */
   centreLineIntroMs: z.number().min(0).max(10000).default(1500)
 });

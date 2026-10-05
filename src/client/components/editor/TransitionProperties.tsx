@@ -143,10 +143,21 @@ export function TransitionProperties({
           <SwitchRow label="Motion blur" hint="A light sideways blur while the band moves." checked={transition.motionBlur} onChange={(checked) => set((draft) => (draft.motionBlur = checked))} />
 
           <h3 className="te-group-title">Contents</h3>
-          <p className="te-field-hint">Boxes come in with the band. What is in them builds in after it has passed, in the Build-in order.</p>
+          <p className="te-field-hint">Boxes come in with the band. What is in them builds in behind it, in the Build-in order.</p>
           <MotionFields name="Contents" value={transition.contentMotion} onChange={(next) => set((draft) => Object.assign(draft.contentMotion, next))} />
           <h3 className="te-group-title">Logos</h3>
           <MotionFields name="Logos" value={transition.logoMotion} onChange={(next) => set((draft) => Object.assign(draft.logoMotion, next))} />
+          <Field label="Contents start" hint="How far through the sweep contents start building in. 100% waits for the band to stop.">
+            <NumberInput
+              label="Contents start"
+              value={transition.contentsStart}
+              min={30}
+              max={100}
+              step={5}
+              unit="%"
+              onChange={(value) => set((draft) => (draft.contentsStart = value))}
+            />
+          </Field>
           <FieldRow>
             <Field label="Gap between contents">
               <NumberInput label="Gap between contents" value={transition.contentGapMs} min={0} max={1000} step={10} unit="ms" onChange={(value) => set((draft) => (draft.contentGapMs = value))} />

@@ -5,7 +5,8 @@ import type { TransitionSettings } from "../../shared/theme";
  * Show and Hide for the whole scoreboard.
  *
  * With the transition on, Show sweeps a band across the screen. The scoreboard's plates appear behind its trailing
- * edge (a clip on the stage that moves with the band), then the contents build in. Hide fades the contents, then
+ * edge (a clip on the stage that moves with the band), and the contents start building in once the band is
+ * `contentsStart` percent of the way through, still only showing where the band has passed. Hide fades the contents, then
  * plays the sweep backwards so the band covers the plates as it goes. Pressing the other button part-way through
  * turns the sweep round from where it is.
  *
@@ -16,7 +17,7 @@ export type ScoreboardPhase =
   | "hidden"
   /** The band is sweeping in, uncovering the plates. */
   | "entering"
-  /** The band has passed; contents are building in. */
+  /** Contents are building in, behind the band if it is still finishing its sweep. */
   | "building"
   /** Contents are fading out before the band comes back. */
   | "leaving-contents"
@@ -120,6 +121,8 @@ export function useScoreboardTransition({
   bandRef: RefObject<HTMLDivElement | null>;
 }) {
   const [phase, setPhase] = useState<ScoreboardPhase>(visible ? "shown" : "hidden");
+  /** The band is moving; it can still be finishing after the contents have started building. */
+  const [bandMoving, setBandMoving] = useState(false);
   /** Goes up each time Show should replay the pieces' own entrances (transition off). */
   const [plainShowRun, setPlainShowRun] = useState(0);
   const phaseRef = useRef(phase);
@@ -153,12 +156,24 @@ export function useScoreboardTransition({
     const sweep = sweepRef.current;
     sweepRef.current = null;
     if (sweep) releaseSweep(sweep, bandRef.current);
+    setBandMoving(false);
   }
 
-  function startBuilding() {
-    stopSweep();
+  /** Builds the contents in; with `keepBand`, the band carries on to the end of its sweep meanwhile. */
+  function startBuilding(keepBand = false) {
+    if (!keepBand) stopSweep();
     go("building");
     after(latest.current.buildMs, () => go("shown"));
+  }
+
+  /** Starts the build once the forward sweep reaches the theme's Contents start point. */
+  function scheduleBuild(sweep: Sweep) {
+    const { sweepMs, contentsStart } = latest.current.settings;
+    if (contentsStart >= 100) return;
+    const progress = sweep.stage.effect?.getComputedTiming().progress ?? 0;
+    after(Math.max(0, (contentsStart / 100 - progress) * sweepMs), () => {
+      if (sweepRef.current === sweep && sweep.forward) startBuilding(true);
+    });
   }
 
   function finishHidden() {
@@ -181,6 +196,7 @@ export function useScoreboardTransition({
     }
     // Matches what React draws while the band sweeps; stopSweep may have hidden it by hand.
     band.style.display = "block";
+    setBandMoving(true);
     const { direction, sweepMs } = latest.current.settings;
     const plan = bandSweepFrames(direction, latest.current.bandArea, latest.current.canvasWidth);
     const timing = (easing: string): KeyframeAnimationOptions => ({
@@ -197,9 +213,12 @@ export function useScoreboardTransition({
     sweepRef.current = sweep;
     sweep.stage.onfinish = () => {
       if (sweepRef.current !== sweep) return;
-      if (sweep.forward) startBuilding();
-      else finishHidden();
+      if (!sweep.forward) finishHidden();
+      // The build may already be running behind the band; then only the band is let go.
+      else if (phaseRef.current === "entering") startBuilding();
+      else stopSweep();
     };
+    if (forward) scheduleBuild(sweep);
   }
 
   /** Turns a running sweep round from where it is. */
@@ -241,10 +260,14 @@ export function useScoreboardTransition({
         startBuilding();
       } else if (current === "leaving-wipe" && turnSweep()) {
         go("entering");
+        scheduleBuild(sweepRef.current!);
       } else if (current === "hidden" || current === "leaving-plain" || current === "leaving-wipe") {
         go("entering");
         startSweep(true);
       }
+    } else if (current === "building" && sweepRef.current?.forward && turnSweep()) {
+      // Hide just after Show, while the band is still finishing: it turns round and covers what has built so far.
+      go("leaving-wipe");
     } else if (current === "shown" || current === "building") {
       go("leaving-contents");
       after(CONTENTS_OUT_MS, () => {
@@ -268,7 +291,7 @@ export function useScoreboardTransition({
     []
   );
 
-  return { phase, plainShowRun };
+  return { phase, plainShowRun, bandMoving };
 }
 
 /** A darker shade of a hex colour, for the strip's tail. Anything else is returned as it is. */

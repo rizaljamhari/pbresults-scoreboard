@@ -29,6 +29,7 @@ const TRANSITION_LABELS: Record<string, string> = {
   bandShowLogo: "Event logo on the band",
   motionBlur: "Motion blur",
   contentGapMs: "Gap between contents",
+  contentsStart: "Contents start",
   centreLineIntroMs: "Centre line intro"
 };
 
