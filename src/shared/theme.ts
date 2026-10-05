@@ -203,7 +203,7 @@ export const transitionSchema = z.object({
    * How far through the sweep the contents start building in, as a percentage of the sweep time. The band lands
    * softly, so waiting for it to stop (100) feels late; contents only show where the band has already passed.
    */
-  contentsStart: z.number().int().min(30).max(100).default(75),
+  contentsStart: z.number().int().min(30).max(100).default(50),
   /** The centre line shows the band's text for this long after Show, then its usual content; 0 skips it. */
   centreLineIntroMs: z.number().min(0).max(10000).default(1500)
 });

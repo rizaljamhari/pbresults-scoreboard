@@ -234,10 +234,10 @@ describe("show and hide transition", () => {
 });
 
 describe("contents start", () => {
-  it("starts contents three quarters through the sweep for themes saved before the setting existed", () => {
+  it("starts contents halfway through the sweep for themes saved before the setting existed", () => {
     const { contentsStart: _dropped, ...savedBefore } = structuredClone(builtinThemes[0]).transition;
     const theme = { ...structuredClone(builtinThemes[0]), transition: savedBefore };
-    expect(themeSchema.parse(theme).transition.contentsStart).toBe(75);
+    expect(themeSchema.parse(theme).transition.contentsStart).toBe(50);
   });
 
   it("keeps it within 30 to 100 percent of the sweep", () => {
