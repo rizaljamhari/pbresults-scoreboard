@@ -936,8 +936,19 @@ export const settingsSchema = z.object({
   reduceMotion: z.boolean().default(false),
   updateCheckEnabled: z.boolean().default(true),
   updateCheckIntervalHours: z.number().int().min(1).max(168).default(6),
-  updateAutoDownload: z.boolean().default(false)
+  updateAutoDownload: z.boolean().default(false),
+  /** White-label name for the admin and the Windows console. Empty means the default app name. */
+  brandName: z.string().trim().max(40).default(""),
+  brandLogoAssetId: z.string().nullable().default(null),
+  /** Shows "Powered by PBResults Scoreboard" under a custom name. */
+  brandPoweredBy: z.boolean().default(true)
 });
+
+export const DEFAULT_APP_NAME = "PBResults Scoreboard";
+
+export function appDisplayName(settings: Pick<AppSettings, "brandName"> | null | undefined): string {
+  return settings?.brandName.trim() || DEFAULT_APP_NAME;
+}
 
 export const timerSchema = z.object({
   value: z.number(),
@@ -1164,6 +1175,9 @@ export const assetUsageSchema = z.discriminatedUnion("kind", [
     teamId: z.string(),
     teamName: z.string(),
     slot: z.enum(["primary", "alternate"])
+  }),
+  z.object({
+    kind: z.literal("branding")
   })
 ]);
 
@@ -1320,7 +1334,10 @@ export const defaultSettings: AppSettings = {
   reduceMotion: false,
   updateCheckEnabled: true,
   updateCheckIntervalHours: 6,
-  updateAutoDownload: false
+  updateAutoDownload: false,
+  brandName: "",
+  brandLogoAssetId: null,
+  brandPoweredBy: true
 };
 
 export function createThemeId(prefix = "theme"): string {

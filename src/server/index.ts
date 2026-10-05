@@ -7,6 +7,7 @@ import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import compress from "@fastify/compress";
 import { z } from "zod";
+import { applyConsoleTitle } from "./consoleTitle.js";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { clientDistDir, logsDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
@@ -918,6 +919,7 @@ if (fs.existsSync(clientRoot)) {
 
 updateService.configureLifecycle({ port, shutdown: gracefulShutdown });
 backupService.cleanupInterrupted();
+applyConsoleTitle(getSettings());
 await app.listen({ port, host: "0.0.0.0" });
 void backupService.createBackup("startup", { skipIfUnchanged: true }).catch((error) => {
   app.log.warn({ error }, "Startup backup failed");

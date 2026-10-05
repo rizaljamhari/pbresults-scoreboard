@@ -25,7 +25,8 @@ import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemo
 import { formatRemaining, formatRemoteConnections, formatTime } from "./RemoteAccessRows";
 import { api } from "../api";
 import { summarizeOverlays } from "../../shared/overlayHealth";
-import type { AppSettings } from "../../shared/theme";
+import { DEFAULT_APP_NAME, appDisplayName, type AppSettings } from "../../shared/theme";
+import { setBaseTitle } from "../documentTitle";
 import { AppearanceContext, useAdminAppearance, type AppearancePreference } from "../appearance";
 import { formatClock } from "../../shared/normalize";
 import { liveSummary, overlayDot } from "./liveSummary";
@@ -88,6 +89,24 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const appName = appDisplayName(settings.data);
+  const showPoweredBy = appName !== DEFAULT_APP_NAME && (settings.data?.brandPoweredBy ?? true);
+  const brandLogoId = settings.data?.brandLogoAssetId ?? null;
+  const brandLogoUrl = brandLogoId ? assets.data?.find((asset) => asset.id === brandLogoId)?.url : undefined;
+
+  useEffect(() => {
+    setBaseTitle(appName);
+  }, [appName]);
+
+  useEffect(() => {
+    if (!brandLogoUrl) return;
+    const icon = document.createElement("link");
+    icon.rel = "icon";
+    icon.href = brandLogoUrl;
+    document.head.appendChild(icon);
+    return () => icon.remove();
+  }, [brandLogoUrl]);
+
   const onAirTheme = themes.data?.find((theme) => theme.id === settings.data?.publishedThemeId) ?? null;
 
   const navItems = [
@@ -103,10 +122,19 @@ export function AppShell() {
       <div className={cn("ad-shell", collapsed && "is-collapsed", focusMode && "is-focus")}>
         <aside className="ad-side ad-scope" aria-label="Main" hidden={focusMode}>
           <div className="ad-side-head">
-            <span className="ad-mark" aria-hidden>
-              <ScanLine />
+            {brandLogoUrl ? (
+              <span className="ad-mark ad-mark--logo" aria-hidden>
+                <img src={brandLogoUrl} alt="" />
+              </span>
+            ) : (
+              <span className="ad-mark" aria-hidden>
+                <ScanLine />
+              </span>
+            )}
+            <span className="ad-app-name" title={appName}>
+              {appName}
+              {showPoweredBy ? <small>Powered by {DEFAULT_APP_NAME}</small> : null}
             </span>
-            <span className="ad-app-name">PBResults Scoreboard</span>
           </div>
 
           <nav className="ad-nav">

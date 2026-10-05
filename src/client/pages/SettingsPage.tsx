@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, TriangleAlert } from "lucide-react";
 import { api } from "../api";
-import { useSettings, useThemes, useUpdateStatus } from "../hooks";
+import { useAssets, useSettings, useThemes, useUpdateStatus } from "../hooks";
 import { showToast } from "../toast";
-import type { AppSettings, ThemeDefinition } from "../../shared/theme";
+import { DEFAULT_APP_NAME, type AppSettings, type ThemeDefinition } from "../../shared/theme";
 import { Button, Chip, Grow, SettingRow, Switch, Toolbar } from "../components/admin/kit";
 import { SoftwareUpdateRows } from "../components/SoftwareUpdateRows";
 import { BackupRows } from "../components/BackupRows";
 import { RemoteAccessRows } from "../components/RemoteAccessRows";
+import { AssetLibraryPicker } from "../components/AssetLibraryPicker";
 import { areSettingsEqual, createSettingsDraft } from "./settingsFormUtils";
 
 const SECTIONS = [
   { id: "set-feed", label: "Live feed" },
   { id: "set-air", label: "On air" },
   { id: "set-uploads", label: "Uploads" },
+  { id: "set-brand", label: "Branding" },
   { id: "set-updates", label: "Software updates" },
   { id: "set-backup", label: "Backup and restore" },
   { id: "set-remote", label: "Remote access" }
@@ -23,6 +25,7 @@ export function SettingsPage() {
   const settings = useSettings();
   const themes = useThemes();
   const update = useUpdateStatus();
+  const assets = useAssets();
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(settings.data ? createSettingsDraft(settings.data) : null);
   const [externallyChanged, setExternallyChanged] = useState(false);
@@ -160,6 +163,16 @@ export function SettingsPage() {
 
   function patch(next: Partial<AppSettings>) {
     setDraft((current) => (current ? { ...current, ...next } : current));
+  }
+
+  async function handleUploadBrandLogo(file: File) {
+    try {
+      const result = await api.uploadAsset(file);
+      assets.setData([result.asset, ...(assets.data ?? []).filter((asset) => asset.id !== result.asset.id)]);
+      patch({ brandLogoAssetId: result.asset.id });
+    } catch (error) {
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to upload the logo." });
+    }
   }
 
   function handleDiscardChanges() {
@@ -318,6 +331,40 @@ export function SettingsPage() {
                       label="Remove image backgrounds"
                       checked={draft.autoRemoveBackgroundUploads}
                       onChange={(autoRemoveBackgroundUploads) => patch({ autoRemoveBackgroundUploads })}
+                    />
+                  </SettingRow>
+                </div>
+              </section>
+
+              <section className="ad-set-group" id="set-brand">
+                <h2>Branding</h2>
+                <div className="ad-surface">
+                  <SettingRow title="App name" hint="Shown in the sidebar, the browser tab and the Windows console window. Leave empty to use the default.">
+                    <input
+                      className="ad-input"
+                      aria-label="App name"
+                      maxLength={40}
+                      placeholder={DEFAULT_APP_NAME}
+                      value={draft.brandName}
+                      onChange={(event) => patch({ brandName: event.target.value })}
+                    />
+                  </SettingRow>
+                  <SettingRow title="Logo" hint="Shown in the sidebar and as the browser tab icon. A square image works best.">
+                    <AssetLibraryPicker
+                      label="Logo"
+                      value={draft.brandLogoAssetId}
+                      assets={assets.data ?? []}
+                      onChange={(brandLogoAssetId) => patch({ brandLogoAssetId })}
+                      onUpload={(file) => void handleUploadBrandLogo(file)}
+                      align="end"
+                    />
+                  </SettingRow>
+                  <SettingRow title="Show “Powered by”" hint={`Adds “Powered by ${DEFAULT_APP_NAME}” under your app name.`} dim={!draft.brandName.trim()}>
+                    <Switch
+                      label="Show Powered by"
+                      checked={draft.brandPoweredBy}
+                      disabled={!draft.brandName.trim()}
+                      onChange={(brandPoweredBy) => patch({ brandPoweredBy })}
                     />
                   </SettingRow>
                 </div>

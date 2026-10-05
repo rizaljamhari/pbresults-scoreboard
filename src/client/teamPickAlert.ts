@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NormalizedLiveState, TeamMatchResult } from "../shared/theme";
+import { setTitlePrefix } from "./documentTitle";
 
 const STORAGE_KEY = "pbresults.admin.teamPickSound";
 const TITLE_PREFIX = "● Pick team · ";
@@ -107,11 +108,8 @@ export function useTeamPickAlert(live: NormalizedLiveState | null | undefined) {
   const waiting = keys.size > 0;
   useEffect(() => {
     if (!waiting) return;
-    const original = document.title;
-    document.title = `${TITLE_PREFIX}${original}`;
-    return () => {
-      document.title = original;
-    };
+    setTitlePrefix(TITLE_PREFIX);
+    return () => setTitlePrefix("");
   }, [waiting]);
 
   function setSoundOn(next: boolean) {

@@ -10,7 +10,10 @@ const sample = {
   reduceMotion: false,
   updateCheckEnabled: true,
   updateCheckIntervalHours: 6,
-  updateAutoDownload: false
+  updateAutoDownload: false,
+  brandName: "",
+  brandLogoAssetId: null,
+  brandPoweredBy: true
 };
 
 describe("settingsFormUtils", () => {
@@ -40,5 +43,8 @@ describe("settingsFormUtils", () => {
         autoRemoveBackgroundUploads: false
       })
     ).toBe(false);
+    expect(areSettingsEqual(sample, { ...sample, brandName: "Media Crew" })).toBe(false);
+    expect(areSettingsEqual(sample, { ...sample, brandLogoAssetId: "asset-1" })).toBe(false);
+    expect(areSettingsEqual(sample, { ...sample, brandPoweredBy: false })).toBe(false);
   });
 });

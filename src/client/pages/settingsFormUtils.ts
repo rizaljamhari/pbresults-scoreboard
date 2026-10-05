@@ -10,7 +10,10 @@ export function areSettingsEqual(left: AppSettings, right: AppSettings): boolean
     left.reduceMotion === right.reduceMotion &&
     left.updateCheckEnabled === right.updateCheckEnabled &&
     left.updateCheckIntervalHours === right.updateCheckIntervalHours &&
-    left.updateAutoDownload === right.updateAutoDownload
+    left.updateAutoDownload === right.updateAutoDownload &&
+    left.brandName === right.brandName &&
+    left.brandLogoAssetId === right.brandLogoAssetId &&
+    left.brandPoweredBy === right.brandPoweredBy
   );
 }
 
@@ -24,6 +27,9 @@ export function createSettingsDraft(source: AppSettings): AppSettings {
     reduceMotion: source.reduceMotion,
     updateCheckEnabled: source.updateCheckEnabled,
     updateCheckIntervalHours: source.updateCheckIntervalHours,
-    updateAutoDownload: source.updateAutoDownload
+    updateAutoDownload: source.updateAutoDownload,
+    brandName: source.brandName,
+    brandLogoAssetId: source.brandLogoAssetId,
+    brandPoweredBy: source.brandPoweredBy
   };
 }

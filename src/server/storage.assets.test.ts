@@ -277,6 +277,17 @@ describe("deleting", () => {
     expect(fs.existsSync(originalFile)).toBe(false);
   });
 
+  it("counts the branding logo as in use and clears it on force-delete", async () => {
+    const asset = await storePlain("brand.png", { r: 7, g: 8, b: 9 });
+    storage.updateSettings({ ...storage.getSettings(), brandLogoAssetId: asset.id });
+    expect(storage.computeAssetUsageIndex().get(asset.id)).toEqual([{ kind: "branding" }]);
+    await expect(storage.deleteAsset(asset.id)).rejects.toBeInstanceOf(storage.AssetInUseError);
+
+    await storage.deleteAsset(asset.id, { force: true });
+
+    expect(storage.getSettings().brandLogoAssetId).toBeNull();
+  });
+
   it("throws a not-found error for unknown ids", async () => {
     await expect(storage.deleteAsset("asset-missing")).rejects.toBeInstanceOf(storage.AssetNotFoundError);
   });

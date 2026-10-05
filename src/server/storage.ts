@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import mime from "mime-types";
+import { applyConsoleTitle } from "./consoleTitle.js";
 import {
   anyAppExportSchema,
   appExportV2Schema,
@@ -308,6 +309,10 @@ export function computeAssetUsageIndex(): Map<string, AssetUsage[]> {
       });
     }
   }
+  const brandLogoAssetId = getSettings().brandLogoAssetId;
+  if (brandLogoAssetId) {
+    add(brandLogoAssetId, { kind: "branding" });
+  }
   return index;
 }
 
@@ -494,6 +499,7 @@ export function getSettings(): AppSettings {
 export function updateSettings(input: AppSettings): AppSettings {
   const next = settingsSchema.parse(input);
   writeJson(settingsPath, next);
+  applyConsoleTitle(next);
   return next;
 }
 
@@ -1568,6 +1574,10 @@ function clearAssetReferences(assetId: string): { clearedThemeIds: string[]; cle
       clearedTeamIds.push(team.id);
     }
   }
+  const settings = getSettings();
+  if (settings.brandLogoAssetId === assetId) {
+    updateSettings({ ...settings, brandLogoAssetId: null });
+  }
   return { clearedThemeIds, clearedTeamIds };
 }
 
@@ -2075,6 +2085,7 @@ export async function importAppPackage(raw: unknown): Promise<{ settings: AppSet
     restoreFaultInjector?.("files-committed");
 
     writeJson(settingsPath, restoredSettings);
+  applyConsoleTitle(restoredSettings);
     writeJson(themesPath, restoredThemes);
     restoreFaultInjector?.("documents-partial");
     writeJson(assetsPath, restoredAssets);

@@ -42,11 +42,13 @@ export function filterAndSortAssets(assets: AssetLibraryEntry[], search: string,
 }
 
 export function usageOwnerName(usage: AssetUsage): string {
+  if (usage.kind === "branding") return "Branding";
   return usage.kind === "theme" ? usage.themeName : usage.teamName;
 }
 
 /** Where inside its theme or team the asset sits, in the words the editor uses. */
 export function usagePlace(usage: AssetUsage): string {
+  if (usage.kind === "branding") return "App logo";
   if (usage.kind === "team") {
     return usage.slot === "primary" ? "Logo" : "Alternate logo";
   }
@@ -70,6 +72,7 @@ export function usagePlace(usage: AssetUsage): string {
 }
 
 export function usageHref(usage: AssetUsage): string {
+  if (usage.kind === "branding") return "/admin/settings#set-brand";
   return usage.kind === "theme" ? `/admin/themes/${usage.themeId}` : `/admin/teams/${usage.teamId}`;
 }
 
@@ -77,7 +80,7 @@ export function usageHref(usage: AssetUsage): string {
 export function groupUsages(usages: AssetUsage[]): Array<{ key: string; usage: AssetUsage; places: string[] }> {
   const groups = new Map<string, { key: string; usage: AssetUsage; places: string[] }>();
   for (const usage of usages) {
-    const key = usage.kind === "theme" ? `theme:${usage.themeId}` : `team:${usage.teamId}`;
+    const key = usage.kind === "theme" ? `theme:${usage.themeId}` : usage.kind === "team" ? `team:${usage.teamId}` : "branding";
     const group = groups.get(key);
     if (group) {
       group.places.push(usagePlace(usage));

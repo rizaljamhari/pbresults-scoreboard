@@ -51,6 +51,12 @@ type AppSettings = {
   updateCheckEnabled: boolean;
   updateCheckIntervalHours: number;
   updateAutoDownload: boolean;
+  /** White-label name for the admin sidebar, tab title and Windows console. "" means "PBResults Scoreboard". */
+  brandName: string;
+  /** Sidebar logo and tab icon. Counts as an asset usage of kind "branding". */
+  brandLogoAssetId: string | null;
+  /** Shows "Powered by PBResults Scoreboard" under a custom name. */
+  brandPoweredBy: boolean;
 }
 ```
 
@@ -168,7 +174,8 @@ type AssetUsage =
         | { type: "font"; family: string } // a custom font listed in the theme's fonts
         | { type: "version"; name: string }; // used only by a named version
     }
-  | { kind: "team"; teamId: string; teamName: string; slot: "primary" | "alternate" };
+  | { kind: "team"; teamId: string; teamName: string; slot: "primary" | "alternate" }
+  | { kind: "branding" }; // the app logo in Settings > Branding
 ```
 
 ### NormalizedLiveState

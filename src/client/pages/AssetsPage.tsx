@@ -401,7 +401,7 @@ export function AssetsPage() {
 
 function UsageList({ usages }: { usages: AssetUsage[] }) {
   if (!usages.length) {
-    return <p className="ad-hint">Not used by any theme or team.</p>;
+    return <p className="ad-hint">Not used by any theme, team or branding.</p>;
   }
   return (
     <ul className="ad-usage-list">
@@ -410,7 +410,7 @@ function UsageList({ usages }: { usages: AssetUsage[] }) {
           <Link to={usageHref(usage)} className="ad-usage-owner">
             {usageOwnerName(usage)}
           </Link>
-          <span className="ad-usage-kind">{usage.kind === "theme" ? "Theme" : "Team"}</span>
+          <span className="ad-usage-kind">{usage.kind === "theme" ? "Theme" : usage.kind === "team" ? "Team" : "Settings"}</span>
           {usage.kind === "theme" && usage.published ? <Chip tone="air">On air</Chip> : null}
           {usage.kind === "theme" && usage.builtin ? <Chip tone="quiet">Built-in</Chip> : null}
           <span className="ad-usage-places">{places.join(" · ")}</span>
