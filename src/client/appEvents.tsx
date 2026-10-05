@@ -28,6 +28,7 @@ import type { OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
 import type { ScoreboardState } from "../shared/scoreboard";
 import { eventStreamUrl } from "./overlayClient";
+import { markServerChange } from "./sharedRequests";
 
 export type AppEventConnectionState = "connecting" | "open" | "disconnected";
 
@@ -187,6 +188,7 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const notify = useCallback((invalidation: ResourceInvalidation) => {
+    markServerChange();
     for (const listener of [...(listenersRef.current.get(invalidation.domain) ?? [])]) {
       listener(invalidation);
     }

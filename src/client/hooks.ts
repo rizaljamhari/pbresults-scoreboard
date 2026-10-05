@@ -8,6 +8,7 @@ import type { AppResourceDomain } from "../shared/appEvents";
 import { assetVersion, type AssetVersionSource } from "../shared/assetVersion";
 import { useAppEventLiveState, useAppEventOperatorTextState, useAppEventOverlayState, useAppEventRehearsalStatus, useAppEventScoreboardState, useAppEvents } from "./appEvents";
 import { ResourceRefreshCoordinator } from "./resourceRefresh";
+import { sharedLoader } from "./sharedRequests";
 
 let resourceRefreshToken = 0;
 
@@ -29,12 +30,23 @@ export function versionAssetUrl(file: VersionedFile) {
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
+// One shared loader per list, so the sidebar and the open page do not each fetch it.
+const shared = {
+  settings: sharedLoader("settings", api.getSettings),
+  themes: sharedLoader("themes", api.getThemes),
+  assets: sharedLoader("assets", api.getAssets),
+  assetLibrary: sharedLoader("assetLibrary", api.getAssetLibrary),
+  backups: sharedLoader("backups", api.getBackups),
+  remoteAccess: sharedLoader("remoteAccess", api.getRemoteAccessStatus),
+  teams: sharedLoader("teams", api.getTeams)
+};
+
 export function useSettings() {
-  return useResource(api.getSettings, [], { domain: "settings", refreshOnEvents: true });
+  return useResource(shared.settings, [], { domain: "settings", refreshOnEvents: true });
 }
 
 export function useThemes() {
-  return useResource(api.getThemes, [], { domain: "themes", refreshOnEvents: true });
+  return useResource(shared.themes, [], { domain: "themes", refreshOnEvents: true });
 }
 
 export function useTheme(id: string | undefined, refreshOnEvents = false) {
@@ -46,7 +58,7 @@ export function useTheme(id: string | undefined, refreshOnEvents = false) {
 }
 
 export function useAssets() {
-  return useResource(api.getAssets, [], {
+  return useResource(shared.assets, [], {
     domain: "assets",
     refreshOnEvents: true,
     transform: (assets) => assets.map((asset) => ({ ...asset, url: versionAssetUrl(asset) }))
@@ -56,7 +68,7 @@ export function useAssets() {
 const assetLibraryExtraDomains: AppResourceDomain[] = ["themes", "teams", "settings"];
 
 export function useAssetLibrary() {
-  return useResource(api.getAssetLibrary, [], {
+  return useResource(shared.assetLibrary, [], {
     domain: "assets",
     refreshOnEvents: true,
     alsoRefreshOn: assetLibraryExtraDomains,
@@ -146,16 +158,16 @@ export function useUpdateStatus() {
 }
 
 export function useBackups() {
-  return useResource(api.getBackups, [], { domain: "backups", refreshOnEvents: true });
+  return useResource(shared.backups, [], { domain: "backups", refreshOnEvents: true });
 }
 
 /** Remote access status, refreshed whenever the server announces a change (start, stop, expiry, reconnect). */
 export function useRemoteAccessStatus() {
-  return useResource(api.getRemoteAccessStatus, [], { domain: "remoteAccess", refreshOnEvents: true });
+  return useResource(shared.remoteAccess, [], { domain: "remoteAccess", refreshOnEvents: true });
 }
 
 export function useTeams() {
-  return useResource(api.getTeams, [], { domain: "teams", refreshOnEvents: true });
+  return useResource(shared.teams, [], { domain: "teams", refreshOnEvents: true });
 }
 
 export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollIntervalMs) {
