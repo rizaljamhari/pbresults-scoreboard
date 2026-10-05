@@ -7,7 +7,8 @@ import { useAssets, useLiveState, useTeams } from "../hooks";
 import { showToast } from "../toast";
 import type { TeamRecord } from "../../shared/theme";
 import { Button, Chip, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus } from "../components/admin/kit";
-import { TeamPanel } from "./TeamPanel";
+import { TeamPanel, type TeamPanelActions } from "./TeamPanel";
+import { useLeaveGuard } from "../components/UnsavedChangesGuard";
 import { filterAndSortTeams, formatUpdatedAt, formatUpdatedAtFull, type TeamSort, type TeamStatusFilter } from "./teamAdminUtils";
 
 type MatchResult = Awaited<ReturnType<typeof api.matchTeam>>;
@@ -159,34 +160,34 @@ export function TeamsPage() {
     document.querySelector(`tr[data-team-id="${CSS.escape(openTeamId)}"]`)?.scrollIntoView({ block: "nearest" });
   }, [openTeamId, Boolean(teams.data)]);
 
-  useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!panelDirty) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [panelDirty]);
+  const panelActionsRef = useRef<TeamPanelActions | null>(null);
+  const leaveGuard = useLeaveGuard({
+    dirty: panelDirty,
+    saving: false,
+    onSave: () => panelActionsRef.current?.save() ?? Promise.resolve(false),
+    onDiscard: () => panelActionsRef.current?.discard()
+  });
 
   function openTeam(id: string | null) {
     if (id === (openTeamId ?? null)) return;
-    if (panelDirty && !window.confirm("You have unsaved changes to this team. Discard them?")) return;
-    navigate(id ? `/admin/teams/${id}` : "/admin/teams");
+    leaveGuard.confirmLeave(() => navigate(id ? `/admin/teams/${id}` : "/admin/teams"));
   }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !openTeamId) return;
-      if ((event.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper], input, textarea")) return;
+      if ((event.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper], input, textarea, dialog")) return;
       openTeam(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [openTeamId, panelDirty]);
 
-  async function handleCreate() {
-    if (panelDirty && !window.confirm("You have unsaved changes to this team. Discard them?")) return;
+  function handleCreate() {
+    leaveGuard.confirmLeave(() => void createTeam());
+  }
+
+  async function createTeam() {
     try {
       const created = await api.createTeam();
       teams.setData([...allTeams, created].sort((left, right) => left.canonicalName.localeCompare(right.canonicalName)));
@@ -342,7 +343,7 @@ export function TeamsPage() {
             event.currentTarget.value = "";
           }}
         />
-        <Button variant="primary" onClick={() => void handleCreate()}>
+        <Button variant="primary" onClick={handleCreate}>
           <Plus aria-hidden />
           New team
         </Button>
@@ -370,7 +371,7 @@ export function TeamsPage() {
                   Clear filters
                 </Button>
               ) : (
-                <Button variant="primary" onClick={() => void handleCreate()}>
+                <Button variant="primary" onClick={handleCreate}>
                   <Plus aria-hidden />
                   New team
                 </Button>
@@ -459,9 +460,11 @@ export function TeamsPage() {
             onAirSide={onAirSide}
             onClose={() => openTeam(null)}
             onDirtyChange={setPanelDirty}
+            actionsRef={panelActionsRef}
           />
         ) : null}
       </div>
+      {leaveGuard.prompt}
     </div>
   );
 }

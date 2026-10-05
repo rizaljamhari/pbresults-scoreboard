@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Ellipsis, Trash2, TriangleAlert, X } from "lucide-react";
 import { api } from "../api";
 import type { useAssets, useTeams } from "../hooks";
@@ -53,13 +53,16 @@ function NameTokens({
  * Edits one team beside the list. The draft is local until Save; changes made elsewhere while you edit are held
  * back and offered, never merged silently.
  */
+export type TeamPanelActions = { save: () => Promise<boolean>; discard: () => void };
+
 export function TeamPanel({
   teamId,
   teams,
   assets,
   onAirSide,
   onClose,
-  onDirtyChange
+  onDirtyChange,
+  actionsRef
 }: {
   teamId: string;
   teams: ReturnType<typeof useTeams>;
@@ -67,6 +70,8 @@ export function TeamPanel({
   onAirSide: "left" | "right" | null;
   onClose: () => void;
   onDirtyChange: (dirty: boolean) => void;
+  /** Lets the page save or discard this draft from its leave prompt. */
+  actionsRef?: MutableRefObject<TeamPanelActions | null>;
 }) {
   const selectedTeam = useMemo(() => teams.data?.find((team) => team.id === teamId) ?? null, [teamId, teams.data]);
   const [draft, setDraft] = useState<TeamRecord | null>(null);
@@ -120,9 +125,9 @@ export function TeamPanel({
     return extra.length ? { ...team, aliases: [...team.aliases, ...extra] } : team;
   }
 
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     if (!draft) {
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -133,8 +138,10 @@ export function TeamPanel({
       setPendingAlias("");
       setExternallyChanged(false);
       showToast({ kind: "success", message: `${saved.canonicalName} saved.` });
+      return true;
     } catch (error) {
       showToast({ kind: "error", message: error instanceof Error ? error.message : "Failed to save the team." });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -160,6 +167,9 @@ export function TeamPanel({
     setDraft(structuredClone(savedTeam));
     setPendingAlias("");
   }
+
+  // Set on every render rather than cleared on unmount: the next team's panel mounts before this one unmounts.
+  if (actionsRef) actionsRef.current = { save: handleSave, discard };
 
   async function handleDelete() {
     if (!selectedTeam || !window.confirm(`Delete ${selectedTeam.canonicalName}? This cannot be undone.`)) {

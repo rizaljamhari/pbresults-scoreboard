@@ -83,6 +83,7 @@ import { diffThemes } from "../../shared/themeDiff";
 import { useAppEvents } from "../appEvents";
 import { useAppearance } from "../appearance";
 import { ResourceRefreshCoordinator } from "../resourceRefresh";
+import { useLeaveGuard } from "../components/UnsavedChangesGuard";
 
 
 type EditorMode = "basic" | "advanced";
@@ -825,17 +826,8 @@ export function ThemeEditorPage() {
     });
   }, [reviewOpen, savedSnapshot, theme]);
 
-  useEffect(() => {
-    if (!hasUnsavedChanges) {
-      return;
-    }
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hasUnsavedChanges]);
+  // Leaving discards the draft with the editor itself, so there is nothing to discard by hand.
+  const leaveGuard = useLeaveGuard({ dirty: hasUnsavedChanges, saving, onSave: () => save(), onDiscard: () => {} });
   function sameTheme(left: ThemeDefinition, right: ThemeDefinition) {
     return JSON.stringify(left) === JSON.stringify(right);
   }
@@ -1733,10 +1725,7 @@ export function ThemeEditorPage() {
   }
 
   function leaveEditor() {
-    if (hasUnsavedChanges && !window.confirm("Leave without saving? Your unsaved changes will be lost.")) {
-      return;
-    }
-    navigate("/admin/themes");
+    leaveGuard.confirmLeave(() => navigate("/admin/themes"));
   }
 
   /** Uploads a font file to the asset library and adds it to the theme under a name taken from the file. */
@@ -1849,6 +1838,10 @@ export function ThemeEditorPage() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // A modal prompt (such as the leave prompt) owns the keyboard; nothing behind it should move or change.
+      if (document.querySelector("dialog[open]")) {
+        return;
+      }
       if (isTextEditingTarget(event.target)) {
         return;
       }
@@ -2639,6 +2632,7 @@ export function ThemeEditorPage() {
       </aside>
       </ThemeFontOptionsContext.Provider>
       </ThemeColorsContext.Provider>
+      {leaveGuard.prompt}
     </div>
     </Tooltip.Provider>
   );

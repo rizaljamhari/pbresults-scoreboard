@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "./admin/kit";
+
+type LeaveGuardOptions = {
+  dirty: boolean;
+  saving: boolean;
+  /** Saves the changes; resolves false when nothing was saved, so the page stays. */
+  onSave: () => Promise<boolean>;
+  onDiscard: () => void;
+};
 
 /** The in-app destination of a plain left click on a link, or null when the click is not an in-app page change. */
 function inAppDestination(event: MouseEvent): string | null {
@@ -14,13 +22,17 @@ function inAppDestination(event: MouseEvent): string | null {
 }
 
 /**
- * Holds in-app navigation while a form has unsaved changes and asks whether to save, discard or stay. Closing or
+ * Holds leaving while there are unsaved changes and asks whether to save, discard or stay. It catches in-app links
+ * by itself; a page routes its own ways out (closing a panel, a Back button) through `confirmLeave`. Closing or
  * reloading the tab gets the browser's own prompt. The router here cannot block Back, so Back still leaves.
  */
-export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirty: boolean; saving: boolean; onSave: () => Promise<boolean>; onDiscard: () => void }) {
+export function useLeaveGuard({ dirty, saving, onSave, onDiscard }: LeaveGuardOptions): {
+  confirmLeave: (leave: () => void) => void;
+  prompt: ReactElement;
+} {
   const navigate = useNavigate();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [destination, setDestination] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ leave: () => void } | null>(null);
 
   useEffect(() => {
     if (!dirty) return;
@@ -29,7 +41,7 @@ export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirt
       if (!next) return;
       event.preventDefault();
       event.stopPropagation();
-      setDestination(next);
+      setPending({ leave: () => navigate(next) });
     };
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -47,25 +59,30 @@ export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirt
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (destination && !dialog.open) dialog.showModal();
-    if (!destination && dialog.open) dialog.close();
-  }, [destination]);
+    if (pending && !dialog.open) dialog.showModal();
+    if (!pending && dialog.open) dialog.close();
+  }, [pending]);
 
-  function leave() {
-    const next = destination;
-    setDestination(null);
-    if (next) navigate(next);
+  function confirmLeave(leave: () => void) {
+    if (dirty) setPending({ leave });
+    else leave();
   }
 
-  return (
-    <dialog ref={dialogRef} className="ad-scope ad-dialog" aria-labelledby="unsaved-title" onClose={() => setDestination(null)}>
+  function proceed() {
+    const next = pending;
+    setPending(null);
+    next?.leave();
+  }
+
+  const prompt = (
+    <dialog ref={dialogRef} className="ad-scope ad-dialog" aria-labelledby="unsaved-title" onClose={() => setPending(null)}>
       <div className="ad-dialog-head">
         <TriangleAlert aria-hidden />
         <h2 id="unsaved-title">Save your changes before leaving?</h2>
       </div>
-      <p className="ad-hint">Your changes on this page are not saved yet. If you leave without saving, they are lost.</p>
+      <p className="ad-hint">Your changes here are not saved yet. If you leave without saving, they are lost.</p>
       <div className="ad-dialog-actions">
-        <Button variant="ghost" onClick={() => setDestination(null)}>
+        <Button variant="ghost" onClick={() => setPending(null)}>
           Stay here
         </Button>
         <Button
@@ -73,7 +90,7 @@ export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirt
           disabled={saving}
           onClick={() => {
             onDiscard();
-            leave();
+            proceed();
           }}
         >
           Discard and leave
@@ -83,7 +100,7 @@ export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirt
           disabled={saving}
           onClick={() => {
             void onSave().then((saved) => {
-              if (saved) leave();
+              if (saved) proceed();
             });
           }}
         >
@@ -92,4 +109,11 @@ export function UnsavedChangesGuard({ dirty, saving, onSave, onDiscard }: { dirt
       </div>
     </dialog>
   );
+
+  return { confirmLeave, prompt };
+}
+
+/** The leave guard for a page whose only ways out are links. */
+export function UnsavedChangesGuard(options: LeaveGuardOptions) {
+  return useLeaveGuard(options).prompt;
 }
