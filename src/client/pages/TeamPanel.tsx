@@ -8,6 +8,8 @@ import { generateTeamAliases, listExplicitTeamMatchNames } from "../../shared/te
 import { Button, Field, IconButton, Menu, SAVE_SHORTCUT, Switch } from "../components/admin/kit";
 import { AssetLibraryPicker } from "../components/AssetLibraryPicker";
 import { formatUpdatedAtFull, hasTeamUnsavedChanges } from "./teamAdminUtils";
+import { modalPromptOpen } from "../confirm";
+import { confirmAction } from "../confirm";
 
 export function splitNames(value: string) {
   return value
@@ -149,7 +151,7 @@ export function TeamPanel({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s" || modalPromptOpen()) {
         return;
       }
       if (!hasUnsavedChanges || saving) {
@@ -172,9 +174,14 @@ export function TeamPanel({
   if (actionsRef) actionsRef.current = { save: handleSave, discard };
 
   async function handleDelete() {
-    if (!selectedTeam || !window.confirm(`Delete ${selectedTeam.canonicalName}? This cannot be undone.`)) {
-      return;
-    }
+    if (!selectedTeam) return;
+    const confirmed = await confirmAction({
+      title: `Delete ${selectedTeam.canonicalName}?`,
+      message: "This cannot be undone.",
+      confirmLabel: "Delete team",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     try {
       await api.deleteTeam(selectedTeam.id);
       teams.setData((teams.data ?? []).filter((team) => team.id !== selectedTeam.id));
@@ -293,8 +300,17 @@ export function TeamPanel({
             <span style={{ flex: 1 }}>This team was changed somewhere else while you were editing.</span>
             <Button
               size="sm"
-              onClick={() => {
-                if (hasUnsavedChanges && !window.confirm("Discard your changes and load the other version?")) return;
+              onClick={async () => {
+                if (
+                  hasUnsavedChanges &&
+                  !(await confirmAction({
+                    title: "Load the other version?",
+                    message: "Your unsaved changes to this team are discarded.",
+                    confirmLabel: "Discard and load",
+                    tone: "danger"
+                  }))
+                )
+                  return;
                 setDraft(structuredClone(selectedTeam));
                 setSavedTeam(structuredClone(selectedTeam));
                 setPendingAlias("");

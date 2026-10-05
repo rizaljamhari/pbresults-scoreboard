@@ -16,6 +16,7 @@ import { IconButton } from "./EditorChrome";
 import { FillInput } from "./FillInput";
 import { ColorInput, Field, FieldRow, NumberInput, PanelSection, SelectInput, TextFitFields, useFontOptions } from "./fields";
 import { ShadowInput } from "./ShadowInput";
+import { confirmAction } from "../../confirm";
 
 const FONT_WEIGHTS = [
   { value: "400", label: "Regular" },
@@ -101,9 +102,17 @@ export function DesignSystemProperties({
   const usage = designUsage(theme);
   const fontOptions = useFontOptions();
   const colors = theme.tokens.colors;
-  const remove = (id: string, name: string) => {
+  const remove = async (id: string, name: string) => {
     const users = usage.entries(id).length + usage.styleCount(id);
-    if (users > 0 && !window.confirm(`Remove “${name}”? The ${users} ${users === 1 ? "thing" : "things"} using it keep their current look and stop following it.`)) {
+    if (
+      users > 0 &&
+      !(await confirmAction({
+        title: `Remove “${name}”?`,
+        message: `The ${users} ${users === 1 ? "thing" : "things"} using it keep their current look and stop following it.`,
+        confirmLabel: "Remove",
+        tone: "danger"
+      }))
+    ) {
       return;
     }
     patchTheme((draft) => Object.assign(draft, removeDesignItem(draft, id)));

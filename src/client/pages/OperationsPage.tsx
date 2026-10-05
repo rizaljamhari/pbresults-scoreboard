@@ -40,6 +40,7 @@ import { useEntranceCueToken } from "../appEvents";
 import { Button, Chip, Dot, Grow, Menu, Toolbar, type Tone } from "../components/admin/kit";
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
 import { sideNeedsPick, useTeamPickAlert } from "../teamPickAlert";
+import { confirmAction, modalPromptOpen } from "../confirm";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -1144,7 +1145,15 @@ export function OperationsPage() {
   }, [dirtyOperatorTextIds, operatorText.data]);
 
   async function handleSetPolling(enabled: boolean) {
-    if (!enabled && !window.confirm("Stop polling the live feed? The overlay freezes on the current data until you start polling again.")) {
+    if (
+      !enabled &&
+      !(await confirmAction({
+        title: "Stop polling the live feed?",
+        message: "The overlay freezes on the current data until you start polling again.",
+        confirmLabel: "Stop polling",
+        tone: "danger"
+      }))
+    ) {
       return;
     }
     setTogglingPoll(true);
@@ -1177,7 +1186,7 @@ export function OperationsPage() {
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "h" || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "h" || event.repeat || event.ctrlKey || event.metaKey || event.altKey || modalPromptOpen()) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       event.preventDefault();
@@ -1270,9 +1279,11 @@ export function OperationsPage() {
       });
     } catch (error) {
       if (error instanceof ApiError && remember && !forceReassign && error.status === 409 && error.payload?.conflictType === "reassignable") {
-        const confirmed = window.confirm(
-          `"${match.inputName}" is already remembered for ${error.payload.conflictTeamName ?? "another team"}. Reassign it to ${selectedTeamName}?`
-        );
+        const confirmed = await confirmAction({
+          title: `Reassign “${match.inputName}” to ${selectedTeamName}?`,
+          message: `It is already remembered for ${error.payload.conflictTeamName ?? "another team"}. From now on it matches ${selectedTeamName} instead.`,
+          confirmLabel: "Reassign"
+        });
         if (confirmed) {
           await handleApplyResolution(side, match, teamId, true, true);
           return;

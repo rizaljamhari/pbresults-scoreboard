@@ -8,6 +8,7 @@ import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../sh
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { Button, Chip, Dot, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus, type MenuItem } from "../components/admin/kit";
 import { fitContent, formatEdited, organizeThemes, themeContentBounds, type ThemeSort } from "./themeAdminUtils";
+import { confirmAction } from "../confirm";
 
 type ThemeView = "grid" | "list";
 
@@ -266,9 +267,13 @@ export function ThemesPage() {
     if (publishingId) {
       return;
     }
-    if (!window.confirm(`Put “${theme.name}” on air?\n\nThe live overlay switches to this theme immediately, replacing the one on air now.`)) {
-      return;
-    }
+    const confirmed = await confirmAction({
+      title: `Put “${theme.name}” on air?`,
+      message: "The live overlay switches to this theme immediately, replacing the one on air now.",
+      confirmLabel: "Put on air",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     setPublishingId(theme.id);
     try {
       await api.publishTheme(theme.id);
@@ -295,9 +300,13 @@ export function ThemesPage() {
   }
 
   async function handleDelete(theme: ThemeDefinition) {
-    if (!window.confirm(`Delete “${theme.name}”? This cannot be undone.`)) {
-      return;
-    }
+    const confirmed = await confirmAction({
+      title: `Delete “${theme.name}”?`,
+      message: "This cannot be undone.",
+      confirmLabel: "Delete theme",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     try {
       await api.deleteTheme(theme.id);
       await refresh();

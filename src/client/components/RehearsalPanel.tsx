@@ -5,6 +5,8 @@ import { rehearsalReport, type RehearsalStatus } from "../../shared/rehearsal";
 import { REHEARSAL_CASE_COUNT } from "../../shared/rehearsalCases";
 import { showToast } from "../toast";
 import { Button, Chip, Dot, Grow, Switch } from "./admin/kit";
+import { modalPromptOpen } from "../confirm";
+import { confirmAction } from "../confirm";
 
 const STOP_REASONS: Record<NonNullable<RehearsalStatus["stopReason"]>, string> = {
   operator: "Stopped.",
@@ -88,7 +90,13 @@ export function RehearsalPanel({
   }
 
   async function start(autoPlay: boolean) {
-    if (!window.confirm("Start rehearsal? vMix will show test data until you stop it.")) return;
+    const confirmed = await confirmAction({
+      title: "Start rehearsal?",
+      message: "vMix shows test data instead of the live feed until you stop the rehearsal.",
+      confirmLabel: "Start rehearsal",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     setReportText(null);
     await call("start", { autoPlay });
   }
@@ -128,7 +136,7 @@ export function RehearsalPanel({
   useEffect(() => {
     if (phase !== "running") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || busy) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || busy || modalPromptOpen()) return;
       const target = event.target;
       if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']")) return;
       const key = event.key.toLowerCase();

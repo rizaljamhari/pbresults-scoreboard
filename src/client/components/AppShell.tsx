@@ -21,6 +21,7 @@ import {
   Wrench
 } from "lucide-react";
 import { ToastViewport } from "./ToastViewport";
+import { ConfirmHost } from "../confirm";
 import { cn } from "../lib/utils";
 import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemoteAccessStatus, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
 import { formatRemaining, formatRemoteConnections, formatTime } from "./RemoteAccessRows";
@@ -190,6 +191,7 @@ export function AppShell() {
           <Outlet key={outletKey(location.pathname)} />
         </main>
         <ToastViewport />
+        <ConfirmHost />
       </div>
     </AppearanceContext.Provider>
   );

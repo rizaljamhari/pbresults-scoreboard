@@ -8,6 +8,7 @@ import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
 import * as Slider from "@radix-ui/react-slider";
 import { MoveableLayer, type OverlayTarget } from "./editor/MoveableLayer";
 import { Field, SwitchRow } from "./editor/fields";
+import { modalPromptOpen } from "../confirm";
 
 type ThemeCanvasEditorProps = {
   theme: ThemeDefinition;
@@ -460,7 +461,7 @@ export function ThemeCanvasEditor({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (isTextEditingTarget(event.target)) {
+      if (isTextEditingTarget(event.target) || modalPromptOpen()) {
         return;
       }
 

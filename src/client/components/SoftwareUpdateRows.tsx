@@ -4,6 +4,7 @@ import { api } from "../api";
 import type { useUpdateStatus } from "../hooks";
 import { showToast } from "../toast";
 import { Button, Chip, SettingRow } from "./admin/kit";
+import { confirmAction } from "../confirm";
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -101,10 +102,14 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
           <Button
             variant="ghost"
             disabled={locked}
-            onClick={() => {
-              if (window.confirm("Roll back to the previous healthy version and restart? Your current data is snapshotted first.")) {
-                void runAction("rollback", api.rollbackUpdate);
-              }
+            onClick={async () => {
+              const confirmed = await confirmAction({
+                title: "Roll back to the previous version?",
+                message: "The app restarts on the previous healthy version. The admin and the overlay disconnect briefly. Your current data is snapshotted first.",
+                confirmLabel: "Roll back and restart",
+                tone: "danger"
+              });
+              if (confirmed) void runAction("rollback", api.rollbackUpdate);
             }}
           >
             <RotateCcw aria-hidden />

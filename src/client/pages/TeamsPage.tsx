@@ -10,6 +10,7 @@ import { Button, Chip, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, 
 import { TeamPanel, type TeamPanelActions } from "./TeamPanel";
 import { useLeaveGuard } from "../components/UnsavedChangesGuard";
 import { filterAndSortTeams, formatUpdatedAt, formatUpdatedAtFull, type TeamSort, type TeamStatusFilter } from "./teamAdminUtils";
+import { confirmAction } from "../confirm";
 
 type MatchResult = Awaited<ReturnType<typeof api.matchTeam>>;
 
@@ -209,7 +210,12 @@ export function TeamsPage() {
   }
 
   async function handleImport(file: File) {
-    if (!window.confirm(`Import teams from “${file.name}”? New teams are added; teams with the same reference are replaced by the file.`)) return;
+    const confirmed = await confirmAction({
+      title: `Import teams from “${file.name}”?`,
+      message: "New teams are added. Teams with the same reference are replaced by the ones in the file.",
+      confirmLabel: "Import teams"
+    });
+    if (!confirmed) return;
     try {
       teams.setData(await api.importTeams(JSON.parse(await file.text())));
       showToast({ kind: "success", message: "Teams imported." });
@@ -252,7 +258,14 @@ export function TeamsPage() {
 
   async function bulkDelete() {
     const selected = allTeams.filter((team) => selectedIds.includes(team.id));
-    if (!selected.length || !window.confirm(`Delete ${selected.length} selected team${selected.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    if (!selected.length) return;
+    const confirmed = await confirmAction({
+      title: `Delete ${selected.length} selected team${selected.length === 1 ? "" : "s"}?`,
+      message: "This cannot be undone.",
+      confirmLabel: selected.length === 1 ? "Delete team" : `Delete ${selected.length} teams`,
+      tone: "danger"
+    });
+    if (!confirmed) return;
     setBulkBusy(true);
     try {
       await Promise.all(selected.map((team) => api.deleteTeam(team.id)));

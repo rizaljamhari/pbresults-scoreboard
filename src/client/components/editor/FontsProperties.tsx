@@ -3,6 +3,7 @@ import { fontUsageCount, isFontAsset, replaceFontFamily } from "../../../shared/
 import { fontFamilies, type StoredAsset, type ThemeDefinition } from "../../../shared/theme";
 import { IconButton } from "./EditorChrome";
 import { PanelSection, SelectInput } from "./fields";
+import { confirmAction } from "../../confirm";
 
 /** Where text using a removed font goes. */
 const FALLBACK_FONT = "Oswald";
@@ -77,8 +78,16 @@ export function FontsProperties({
             </div>
             <IconButton
               label={`Remove ${font.family}`}
-              onClick={() => {
-                if (uses > 0 && !window.confirm(`Remove “${font.family}”? The ${uses} text ${uses === 1 ? "setting" : "settings"} using it switch to ${FALLBACK_FONT}.`)) {
+              onClick={async () => {
+                if (
+                  uses > 0 &&
+                  !(await confirmAction({
+                    title: `Remove “${font.family}”?`,
+                    message: `The ${uses} text ${uses === 1 ? "setting" : "settings"} using it switch to ${FALLBACK_FONT}.`,
+                    confirmLabel: "Remove font",
+                    tone: "danger"
+                  }))
+                ) {
                   return;
                 }
                 patchTheme((draft) => {

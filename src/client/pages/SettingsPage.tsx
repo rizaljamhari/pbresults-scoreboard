@@ -18,6 +18,8 @@ import {
   pollIntervalError,
   type SettingsDraft
 } from "./settingsFormUtils";
+import { modalPromptOpen } from "../confirm";
+import { confirmAction } from "../confirm";
 
 const SECTIONS = [
   { id: "set-feed", label: "Live feed" },
@@ -81,7 +83,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s") return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "s" || modalPromptOpen()) return;
       event.preventDefault();
       if (canSave) void save();
     };
@@ -99,8 +101,15 @@ export function SettingsPage() {
     setExternallyChanged(false);
   }
 
-  function handleDiscardChanges() {
-    if (!hasUnsavedChanges || !window.confirm("Discard your unsaved settings changes?")) return;
+  async function handleDiscardChanges() {
+    if (!hasUnsavedChanges) return;
+    const confirmed = await confirmAction({
+      title: "Discard your changes?",
+      message: "Your unsaved settings changes are lost.",
+      confirmLabel: "Discard changes",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     discard();
     showToast({ kind: "info", message: "Changes discarded.", durationMs: 1800 });
   }

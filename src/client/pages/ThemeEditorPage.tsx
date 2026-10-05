@@ -84,6 +84,7 @@ import { useAppEvents } from "../appEvents";
 import { useAppearance } from "../appearance";
 import { ResourceRefreshCoordinator } from "../resourceRefresh";
 import { useLeaveGuard } from "../components/UnsavedChangesGuard";
+import { confirmAction, modalPromptOpen } from "../confirm";
 
 
 type EditorMode = "basic" | "advanced";
@@ -1123,7 +1124,14 @@ export function ThemeEditorPage() {
   }
 
   async function deleteVersion(version: ThemeDefinition["versions"][number]) {
-    if (!themeResource.data || !window.confirm(`Delete the version “${version.name}”? This can't be undone.`)) return;
+    if (!themeResource.data) return;
+    const confirmed = await confirmAction({
+      title: `Delete the version “${version.name}”?`,
+      message: "This can't be undone. Your draft and the saved theme stay as they are.",
+      confirmLabel: "Delete version",
+      tone: "danger"
+    });
+    if (!confirmed) return;
     try {
       const updated = await api.deleteThemeVersion(themeResource.data.id, version.id);
       adoptServerVersions(updated.versions);
@@ -1133,11 +1141,19 @@ export function ThemeEditorPage() {
   }
 
   /** Replaces the draft with a version's settings; the theme keeps its name, id and versions. Undo brings the draft back. */
-  function openVersionAsDraft(version: ThemeDefinition["versions"][number]) {
+  async function openVersionAsDraft(version: ThemeDefinition["versions"][number]) {
     const current = themeResource.data;
     const snapshot = current ? versionTheme(current, version) : null;
     if (!current || !snapshot) return;
-    if (hasUnsavedChanges && !window.confirm(`Replace your draft with “${version.name}”? Undo brings your draft back.`)) return;
+    if (
+      hasUnsavedChanges &&
+      !(await confirmAction({
+        title: `Replace your draft with “${version.name}”?`,
+        message: "Undo brings your draft back.",
+        confirmLabel: "Replace draft"
+      }))
+    )
+      return;
     updateTheme({ ...snapshot, id: current.id, name: current.name, builtin: current.builtin, archived: current.archived, updatedAt: current.updatedAt, versions: current.versions });
     showToast({ kind: "success", message: `Opened “${version.name}” as your draft. Nothing changes on air until you save.` });
   }
@@ -1484,11 +1500,17 @@ export function ThemeEditorPage() {
     selectComponent(id);
   }
 
-  function deleteSelectedFreeComponent() {
+  async function deleteSelectedFreeComponent() {
     if (!selectedEntry || selectedEntry.source !== "free") {
       return;
     }
-    if (!window.confirm(`Delete ${selectedEntry.label}?`)) {
+    const confirmed = await confirmAction({
+      title: `Delete ${selectedEntry.label}?`,
+      message: "You can undo this.",
+      confirmLabel: "Delete",
+      tone: "danger"
+    });
+    if (!confirmed) {
       return;
     }
     patchTheme((draft) => {
@@ -1554,17 +1576,23 @@ export function ThemeEditorPage() {
       return false;
     }
     if (themeResource.data.builtin && !options?.skipBuiltinConfirm) {
-      const confirmed = window.confirm(
-        "You are about to update a built-in theme. This will affect all users of this built-in. Continue?"
-      );
+      const confirmed = await confirmAction({
+        title: "Update a built-in theme?",
+        message: "This changes the built-in theme for everyone who uses it.",
+        confirmLabel: "Update built-in theme",
+        tone: "danger"
+      });
       if (!confirmed) {
         return false;
       }
     }
     if (isOnAir && !options?.skipOnAirConfirm && !liveSaveConfirmedRef.current) {
-      const confirmed = window.confirm(
-        `“${themeResource.data.name}” is on air. Saving updates the live broadcast immediately.\n\nYou won't be asked again while this editor stays open.`
-      );
+      const confirmed = await confirmAction({
+        title: `Save “${themeResource.data.name}” while it is on air?`,
+        message: "Saving updates the live broadcast immediately. You won't be asked again while this editor stays open.",
+        confirmLabel: "Save to air",
+        tone: "danger"
+      });
       if (!confirmed) {
         return false;
       }
@@ -1637,9 +1665,12 @@ export function ThemeEditorPage() {
       hasUnsavedChanges ? "Your unsaved changes are saved first." : null,
       current.builtin ? "This is a built-in theme; saving also updates it for every user of it." : null
     ].filter(Boolean);
-    const confirmed = window.confirm(
-      [`Put “${current.name}” on air?`, "The live overlay switches to this theme immediately, replacing the one on air now.", ...notes].join("\n\n")
-    );
+    const confirmed = await confirmAction({
+      title: `Put “${current.name}” on air?`,
+      message: ["The live overlay switches to this theme immediately, replacing the one on air now.", ...notes].join("\n\n"),
+      confirmLabel: "Put on air",
+      tone: "danger"
+    });
     if (!confirmed) {
       return;
     }
@@ -1714,11 +1745,19 @@ export function ThemeEditorPage() {
     });
   }
 
-  function reloadServerTheme() {
+  async function reloadServerTheme() {
     if (!externalTheme) {
       return;
     }
-    if (hasUnsavedChanges && !window.confirm("Discard your draft and load the server version?")) {
+    if (
+      hasUnsavedChanges &&
+      !(await confirmAction({
+        title: "Load the saved version?",
+        message: "Your draft is discarded and replaced by the version saved elsewhere.",
+        confirmLabel: "Discard and load",
+        tone: "danger"
+      }))
+    ) {
       return;
     }
     applyServerTheme(externalTheme);
@@ -1839,7 +1878,7 @@ export function ThemeEditorPage() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       // A modal prompt (such as the leave prompt) owns the keyboard; nothing behind it should move or change.
-      if (document.querySelector("dialog[open]")) {
+      if (modalPromptOpen()) {
         return;
       }
       if (isTextEditingTarget(event.target)) {

@@ -10,6 +10,7 @@ import {
   type RemoteAccessStatus
 } from "../../shared/remoteAccess";
 import { Button, Chip, SettingRow } from "./admin/kit";
+import { confirmAction } from "../confirm";
 
 const NGROK_AUTHTOKEN_URL = "https://dashboard.ngrok.com/get-started/your-authtoken";
 
@@ -261,8 +262,14 @@ function ConfiguredInactive({
             <Button
               variant="danger"
               disabled={busy}
-              onClick={() => {
-                if (window.confirm("Remove the ngrok authtoken from this computer? Remote access cannot start until a new one is saved.")) void onRemove();
+              onClick={async () => {
+                const confirmed = await confirmAction({
+                  title: "Remove the ngrok authtoken?",
+                  message: "It is deleted from this computer. Remote access cannot start until a new one is saved.",
+                  confirmLabel: "Remove authtoken",
+                  tone: "danger"
+                });
+                if (confirmed) void onRemove();
               }}
             >
               Remove
@@ -378,8 +385,14 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
         <Button
           variant="danger"
           disabled={busy}
-          onClick={() => {
-            if (window.confirm("Stop remote access now? Everyone off site is locked out at once.")) void onStop();
+          onClick={async () => {
+            const confirmed = await confirmAction({
+              title: "Stop remote access now?",
+              message: "Everyone off site is locked out at once.",
+              confirmLabel: "Stop remote access",
+              tone: "danger"
+            });
+            if (confirmed) void onStop();
           }}
         >
           {busy ? "Stopping…" : "Stop remote access"}

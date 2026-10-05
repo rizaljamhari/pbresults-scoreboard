@@ -1164,8 +1164,21 @@ label.ad-set-title {
   font-weight: 650;
 }
 
+.ad-dialog-head.is-danger svg.lucide {
+  color: var(--ad-crit);
+}
+
+.ad-dialog-head.is-question svg.lucide {
+  color: var(--ad-accent-ink);
+}
+
 .ad-dialog > .ad-hint {
   margin: 8px 0 16px;
+  white-space: pre-line;
+}
+
+.ad-dialog-head + .ad-dialog-actions {
+  margin-top: 16px;
 }
 
 .ad-dialog-actions {

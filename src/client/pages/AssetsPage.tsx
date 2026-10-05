@@ -38,6 +38,7 @@ import {
   type AssetFilter,
   type AssetSort
 } from "./assetAdminUtils";
+import { confirmAction, modalPromptOpen } from "../confirm";
 
 const ACCEPTED_IMAGES = "image/png,image/jpeg,image/webp,image/gif";
 /** The library also takes font files, for themes' custom fonts. */
@@ -127,7 +128,7 @@ export function AssetsPage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !panelOpen) return;
+      if (event.key !== "Escape" || !panelOpen || modalPromptOpen()) return;
       if ((event.target as HTMLElement | null)?.closest("[data-radix-popper-content-wrapper], input, textarea")) return;
       openPanel(null);
     };
@@ -504,7 +505,16 @@ function AssetInspector({
       setBlockedBy(current.usages);
       return;
     }
-    if (!force && !window.confirm(`Delete “${assetName(current)}”? This cannot be undone.`)) return;
+    if (
+      !force &&
+      !(await confirmAction({
+        title: `Delete “${assetName(current)}”?`,
+        message: "This cannot be undone.",
+        confirmLabel: "Delete image",
+        tone: "danger"
+      }))
+    )
+      return;
     setBusy("Delete");
     try {
       const result = await api.deleteAsset(current.id, force);
@@ -789,7 +799,13 @@ function CleanupPanel({ onClose, onDone }: { onClose: () => void; onDone: () => 
 
   async function runCleanup() {
     if (!selection || !selectedCount) return;
-    if (!window.confirm(`Permanently delete ${plural(selectedCount, "item")} (${formatBytes(selectedBytes)})? This cannot be undone.`)) return;
+    const confirmed = await confirmAction({
+      title: `Permanently delete ${plural(selectedCount, "item")}?`,
+      message: `This frees ${formatBytes(selectedBytes)} and cannot be undone.`,
+      confirmLabel: `Delete ${plural(selectedCount, "item")}`,
+      tone: "danger"
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       const result = await api.runAssetCleanup({
