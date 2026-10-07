@@ -1315,6 +1315,27 @@ label.ad-set-title {
   padding-bottom: 8px;
 }
 
+/* A set of themes sharing an acronym, headed by that acronym. */
+.ad-theme-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 20px 0;
+  color: var(--ad-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ad-theme-section .ad-theme-group .ad-gallery,
+.ad-theme-section .ad-theme-group .ad-theme-list {
+  padding-top: 8px;
+}
+
+.ad-theme-archive .ad-theme-group-title {
+  padding-left: 8px;
+}
+
 .ad-theme-section-empty {
   margin: 24px auto 40px;
 }

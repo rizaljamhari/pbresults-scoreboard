@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
 import type { ThemeDefinition } from "../../shared/theme";
-import { fitContent, formatEdited, organizeThemes, reconcileServerTheme, themeContentBounds } from "./themeAdminUtils";
+import { fitContent, formatEdited, groupByAcronym, organizeThemes, reconcileServerTheme, themeContentBounds } from "./themeAdminUtils";
 
 function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
   return {
@@ -13,6 +13,31 @@ function makeTheme(overrides: Partial<ThemeDefinition>): ThemeDefinition {
     ...overrides
   };
 }
+
+describe("groupByAcronym", () => {
+  const themes = [
+    makeTheme({ id: "sl-b", acronym: "SL" }),
+    makeTheme({ id: "none", acronym: "" }),
+    makeTheme({ id: "mp-a", acronym: "MP" }),
+    makeTheme({ id: "sl-a", acronym: "sl" })
+  ];
+  const shape = (sortBy: "recent" | "nameAsc" | "nameDesc") =>
+    groupByAcronym(themes, sortBy).map((group) => [group.acronym, group.themes.map((theme) => theme.id)]);
+
+  it("keeps the list order for recent, ungrouped last", () => {
+    expect(shape("recent")).toEqual([["SL", ["sl-b", "sl-a"]], ["MP", ["mp-a"]], ["", ["none"]]]);
+  });
+
+  it("orders groups by acronym for the name sorts", () => {
+    expect(shape("nameAsc").map(([acronym]) => acronym)).toEqual(["MP", "SL", ""]);
+    expect(shape("nameDesc").map(([acronym]) => acronym)).toEqual(["SL", "MP", ""]);
+  });
+
+  it("puts the on-air theme's set first", () => {
+    expect(groupByAcronym(themes, "nameAsc", "sl").map((group) => group.acronym)).toEqual(["SL", "MP", ""]);
+    expect(groupByAcronym(themes, "recent", "MP").map((group) => group.acronym)).toEqual(["MP", "SL", ""]);
+  });
+});
 
 describe("organizeThemes", () => {
   const themes: ThemeDefinition[] = [

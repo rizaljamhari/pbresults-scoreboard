@@ -7,7 +7,7 @@ import { showToast } from "../toast";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../shared/theme";
 import { OverlayRenderer } from "../components/OverlayRenderer";
 import { Button, Chip, Dot, Grow, IconButton, Menu, SearchField, Segmented, Toolbar, downloadJson, useSlashFocus, type MenuItem } from "../components/admin/kit";
-import { fitContent, formatEdited, organizeThemes, themeContentBounds, type ThemeSort } from "./themeAdminUtils";
+import { fitContent, formatEdited, groupByAcronym, organizeThemes, themeContentBounds, type ThemeSort } from "./themeAdminUtils";
 import { confirmAction } from "../confirm";
 
 type ThemeView = "grid" | "list";
@@ -356,7 +356,7 @@ export function ThemesPage() {
     { label: "Import a theme file…", icon: <Upload />, onSelect: () => importRef.current?.click() }
   ];
 
-  const renderItems = (list: ThemeDefinition[]) => (
+  const renderList = (list: ThemeDefinition[]) => (
     <div className={view === "grid" ? "ad-gallery" : "ad-theme-list"}>
       {list.map((theme) => (
         <ThemeItem
@@ -371,6 +371,24 @@ export function ThemesPage() {
       ))}
     </div>
   );
+
+  // Themes sharing an acronym sit together under it, the on-air theme's set first; a list with no acronyms stays flat.
+  const onAirAcronym = allThemes.find((theme) => theme.id === onAirId)?.acronym ?? "";
+  const renderItems = (list: ThemeDefinition[]) => {
+    const groups = groupByAcronym(list, sortBy, onAirAcronym);
+    if (groups.length <= 1 && !groups[0]?.acronym) {
+      return renderList(list);
+    }
+    return groups.map((group) => (
+      <div key={group.acronym || "none"} className="ad-theme-group">
+        <h3 className="ad-theme-group-title">
+          {group.acronym ? <span className="ad-theme-acronym">{group.acronym}</span> : "No acronym"}
+          <span className="ad-theme-section-count">{group.themes.length}</span>
+        </h3>
+        {renderList(group.themes)}
+      </div>
+    ));
+  };
 
   return (
     <div className="ad-page ad-scope">
@@ -433,7 +451,7 @@ export function ThemesPage() {
                 <h2 id="themes-on-air" className="ad-theme-section-title">
                   On air
                 </h2>
-                {renderItems([sections.onAir])}
+                {renderList([sections.onAir])}
               </section>
             ) : null}
 

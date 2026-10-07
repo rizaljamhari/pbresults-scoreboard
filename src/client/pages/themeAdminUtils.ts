@@ -41,6 +41,38 @@ export function organizeThemes(themes: ThemeDefinition[], search: string, sortBy
   };
 }
 
+export type AcronymGroup = { acronym: string; themes: ThemeDefinition[] };
+
+/**
+ * Groups an already sorted list by acronym so a set of themes for one event sits together. Each group keeps the
+ * list's order inside it. Groups follow the sort: by acronym for the name sorts, and by their most recently edited
+ * theme for "recent". A `lead` acronym (the on-air theme's) moves its group to the front, so the rest of that set
+ * sits right under the theme on air. Themes without an acronym form one group (acronym "") at the end.
+ */
+export function groupByAcronym(themes: ThemeDefinition[], sortBy: ThemeSort, lead = ""): AcronymGroup[] {
+  const groups = new Map<string, ThemeDefinition[]>();
+  for (const theme of themes) {
+    const key = theme.acronym.trim().toUpperCase();
+    const group = groups.get(key);
+    if (group) {
+      group.push(theme);
+    } else {
+      groups.set(key, [theme]);
+    }
+  }
+  const named = [...groups.entries()].filter(([acronym]) => acronym !== "").map(([acronym, list]) => ({ acronym, themes: list }));
+  if (sortBy !== "recent") {
+    named.sort((left, right) => (sortBy === "nameAsc" ? 1 : -1) * left.acronym.localeCompare(right.acronym));
+  }
+  const leadKey = lead.trim().toUpperCase();
+  const leadIndex = leadKey ? named.findIndex((group) => group.acronym === leadKey) : -1;
+  if (leadIndex > 0) {
+    named.unshift(...named.splice(leadIndex, 1));
+  }
+  const ungrouped = groups.get("");
+  return ungrouped ? [...named, { acronym: "", themes: ungrouped }] : named;
+}
+
 /** "Edited 3 days ago", short and in the product's words; null when the time is unknown. */
 export function formatEdited(updatedAt: string | null, now = Date.now()): string | null {
   if (!updatedAt) {
