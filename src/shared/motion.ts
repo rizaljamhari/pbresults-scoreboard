@@ -87,18 +87,6 @@ export function motionLoop(motion: MotionSettings): string | undefined {
 }
 
 /**
- * What sits under a looping event card (the team name it covers): the loop turned inside out, so it steps away while
- * the card shows and comes back in the card's gaps. A card that does not move stays up, so the name just stays away.
- */
-export function motionUnderLoop(motion: MotionSettings): string {
-  if (motion.preset === "none") {
-    return "motion-under-loop-away 1ms linear forwards";
-  }
-  const delay = motion.delayMs > 0 ? ` ${motion.delayMs}ms` : "";
-  return `motion-under-loop ${motion.durationMs}ms ${easingCss[motion.easing]}${delay} infinite alternate`;
-}
-
-/**
  * Old content leaving and new content arriving at the same time (team switch). The outgoing half runs the preset
  * backwards with `ease-out`: a reversed animation also reverses its easing, so it accelerates away.
  */

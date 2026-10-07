@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
-import { motionChange, motionUnderLoop } from "../../shared/motion";
+import { motionChange } from "../../shared/motion";
 import { normalizeLiveState } from "../../shared/normalize";
 import { themeSchema, type ThemeDefinition } from "../../shared/theme";
-import { changedValues, eventCardAnimation, OverlayRenderer } from "./OverlayRenderer";
+import { cardSwapAnimations, cardSwapPhaseMs, changedValues, eventCardAnimation, OverlayRenderer } from "./OverlayRenderer";
 
 function liveAt(gameClock: number) {
   return normalizeLiveState(
@@ -92,17 +92,36 @@ describe("team name under an event card", () => {
     theme.teamEventOverlay.winner.enabled = true;
   };
 
-  it("does the card's loop inside out, so it steps away while the card shows", () => {
-    expect(motionUnderLoop({ preset: "drop-in", durationMs: 2000, easing: "ease-in-out", delayMs: 0 })).toBe(
-      "motion-under-loop 2000ms ease-in-out infinite alternate"
-    );
-    expect(motionUnderLoop({ preset: "none", durationMs: 2000, easing: "ease", delayMs: 0 })).toBe("motion-under-loop-away 1ms linear forwards");
+  const dropIn = { preset: "drop-in" as const, durationMs: 2000, easing: "ease-in-out" as const, delayMs: 0 };
+
+  it("takes turns: whichever is showing leaves before the other arrives", () => {
+    expect(cardSwapAnimations(dropIn, "card", false)).toEqual({
+      name: "motion-fade 300ms ease reverse forwards",
+      card: "motion-drop-in 300ms ease-in-out 300ms both"
+    });
+    expect(cardSwapAnimations(dropIn, "name", false)).toEqual({
+      card: "motion-drop-in 300ms ease-in-out reverse forwards",
+      name: "motion-fade 300ms ease 300ms both"
+    });
+  });
+
+  it("holds the card for the theme's loop time and the name for a short look", () => {
+    expect(cardSwapPhaseMs(dropIn, "card")).toBe(2000);
+    expect(cardSwapPhaseMs(dropIn, "name")).toBe(1600);
+    expect(cardSwapPhaseMs({ ...dropIn, durationMs: 300 }, "card")).toBe(1000);
+  });
+
+  it("keeps a card that does not move up, with the name away", () => {
+    expect(cardSwapAnimations({ ...dropIn, preset: "none" }, "card", false)).toEqual({
+      card: undefined,
+      name: "motion-under-away 1ms ease forwards"
+    });
   });
 
   it("only moves the name the winner card covers", () => {
     const markup = render(coverName, finished);
-    expect(markup.match(/motion-under-loop /g)).toHaveLength(1);
-    const winnerName = markup.indexOf("motion-under-loop ");
+    expect(markup.match(/motion-fade 300ms ease reverse forwards/g)).toHaveLength(1);
+    const winnerName = markup.indexOf("motion-fade 300ms ease reverse forwards");
     expect(markup.slice(winnerName, winnerName + 400)).toContain(">Left<");
   });
 
@@ -111,11 +130,12 @@ describe("team name under an event card", () => {
       coverName(theme);
       theme.teamEventOverlay.general.followTarget = "logo";
     }, finished);
-    expect(markup).not.toContain("motion-under-loop");
+    expect(markup).not.toContain("motion-fade 300ms ease reverse forwards");
+    expect(markup).toContain("-loop 2000ms");
   });
 
   it("fades the name away once while motion is reduced", () => {
-    expect(render(coverName, finished, true)).toContain("motion-under-loop-away 200ms ease forwards");
+    expect(render(coverName, finished, true)).toContain("motion-under-away 200ms ease forwards");
   });
 });
 

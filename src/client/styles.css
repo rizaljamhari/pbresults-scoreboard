@@ -656,19 +656,8 @@ details[open]:not(.editor-section-card) > summary::after {
   }
 }
 
-/* What a looping event card covers: every *-loop turned inside out, away while the card shows. */
-@keyframes motion-under-loop {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  16%,
-  84% {
-    opacity: 0;
-  }
-}
-
-@keyframes motion-under-loop-away {
+/* The team name an event card covers, stepping away for good (motion reduced, or a card that does not move). */
+@keyframes motion-under-away {
   to {
     opacity: 0;
   }

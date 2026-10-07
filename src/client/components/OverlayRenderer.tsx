@@ -10,7 +10,6 @@ import {
   motionLoop,
   motionSwap,
   motionTotalMs,
-  motionUnderLoop,
   type ChangeMotionSettings,
   type MotionSettings
 } from "../../shared/motion";
@@ -66,11 +65,35 @@ export function eventCardAnimation(motion: MotionSettings, reduceMotion: boolean
   return reduceMotion ? motionEnter(CALM_CARD_MOTION) : motionLoop(motion);
 }
 
-/** The team name under an event card does the opposite of the card, so it never shows through a see-through card. */
-export function coveredNameAnimation(motion: MotionSettings, reduceMotion: boolean) {
-  return reduceMotion
-    ? `motion-under-loop-away ${CALM_CARD_MOTION.durationMs}ms ${motionEasingCss(CALM_CARD_MOTION.easing)} forwards`
-    : motionUnderLoop(motion);
+/** How long the card or the name takes to leave, or to arrive, when they swap; and how long the name holds. */
+const SWAP_CROSS_MS = 300;
+const SWAP_NAME_HOLD_MS = 1000;
+const SWAP_FADE: MotionSettings = { preset: "fade", durationMs: SWAP_CROSS_MS, easing: "ease", delayMs: 0 };
+
+export type CardSwapPhase = "card" | "name";
+
+/**
+ * A card that covers a team name takes turns with it: whichever is showing leaves completely before the other
+ * arrives, so the two words never share the slot. The card keeps the theme's motion; the name fades. With motion
+ * reduced, or a card that does not move, the card simply stays up and the name stays away.
+ */
+export function cardSwapAnimations(motion: MotionSettings, phase: CardSwapPhase, reduceMotion: boolean): { card?: string; name: string } {
+  if (reduceMotion || motion.preset === "none") {
+    const awayMs = reduceMotion ? CALM_CARD_MOTION.durationMs : 1;
+    return {
+      card: reduceMotion ? motionEnter(CALM_CARD_MOTION) : undefined,
+      name: `motion-under-away ${awayMs}ms ${motionEasingCss(CALM_CARD_MOTION.easing)} forwards`
+    };
+  }
+  const cross = { ...motion, durationMs: SWAP_CROSS_MS, delayMs: 0 };
+  return phase === "card"
+    ? { name: `${motionLeave(SWAP_FADE)} forwards`, card: motionEnter({ ...cross, delayMs: SWAP_CROSS_MS }) }
+    : { card: `${motionLeave(cross)} forwards`, name: motionEnter({ ...SWAP_FADE, delayMs: SWAP_CROSS_MS }) ?? "" };
+}
+
+/** How long each turn lasts: the card holds for the theme's loop time, the name for a short look. */
+export function cardSwapPhaseMs(motion: MotionSettings, phase: CardSwapPhase) {
+  return phase === "card" ? Math.max(motion.durationMs, SWAP_CROSS_MS * 2 + 400) : SWAP_CROSS_MS * 2 + SWAP_NAME_HOLD_MS;
 }
 
 function withoutMotion<T extends { preset: string }>(motion: T): T {
@@ -1179,7 +1202,26 @@ export function OverlayRenderer({
   const cardCoversName =
     overlayGeneral.followTarget === "name" || (overlayGeneral.followTarget !== "logo" && overlayGeneral.placementMode === "full-panel");
   const coveredNameId = activeOverlaySide && cardCoversName ? (activeOverlaySide === "left" ? "homeName" : "awayName") : null;
-  const coveredNameMotion = coveredNameId ? coveredNameAnimation(overlayGeneral.motion, reduceMotion) : undefined;
+  const [cardSwapPhase, setCardSwapPhase] = useState<CardSwapPhase>("card");
+  const cardSwapToken = coveredNameId ? activeOverlayLabel?.token ?? null : null;
+  const cardSwapCycles = Boolean(cardSwapToken) && !reduceMotion && overlayGeneral.motion.preset !== "none";
+  const cardLoopMs = overlayGeneral.motion.durationMs;
+  useEffect(() => {
+    setCardSwapPhase("card");
+    if (!cardSwapCycles) {
+      return;
+    }
+    const loopMotion = { ...overlayGeneral.motion, durationMs: cardLoopMs };
+    let phase: CardSwapPhase = "card";
+    let timer = window.setTimeout(function turn() {
+      phase = phase === "card" ? "name" : "card";
+      setCardSwapPhase(phase);
+      timer = window.setTimeout(turn, cardSwapPhaseMs(loopMotion, phase));
+    }, cardSwapPhaseMs(loopMotion, phase));
+    return () => window.clearTimeout(timer);
+    // The motion object is rebuilt on every theme edit; only its length changes the turns.
+  }, [cardSwapToken, cardSwapCycles, cardLoopMs]);
+  const cardSwap = coveredNameId ? cardSwapAnimations(overlayGeneral.motion, cardSwapPhase, reduceMotion) : null;
 
   const timeoutCard = theme.momentOverlays.timeout;
   const gameFinishedCard = theme.momentOverlays.gameFinished;
@@ -1439,10 +1481,11 @@ export function OverlayRenderer({
         };
 
         const motion = slotMotion(componentId, component);
+        const covered = componentId === coveredNameId && cardSwap !== null;
         const textAnimation =
-          [contentAnimation ?? valueChange?.motion.in, componentId === coveredNameId ? coveredNameMotion : undefined]
-            .filter(Boolean)
-            .join(", ") || undefined;
+          [contentAnimation ?? valueChange?.motion.in, covered ? cardSwap.name : undefined].filter(Boolean).join(", ") || undefined;
+        // Each turn of a card swap restarts the name's animation.
+        const textKey = covered ? `under:${cardSwapPhase}` : contentKey ?? valueChange?.key;
 
         return (
           <Fragment key={componentId}>
@@ -1526,7 +1569,7 @@ export function OverlayRenderer({
                     </span>
                   ) : null}
                   <span
-                    key={contentKey ?? valueChange?.key}
+                    key={textKey}
                     className="component-content text-content"
                     style={{ ...mainTextStyle, animation: textAnimation }}
                   >
@@ -1731,9 +1774,10 @@ export function OverlayRenderer({
           }}
         >
           <div
+            key={cardSwap ? cardSwapPhase : undefined}
             className="concede-label-motion"
             style={{
-              animation: eventCardAnimation(overlayGeneral.motion, reduceMotion)
+              animation: cardSwap ? cardSwap.card : eventCardAnimation(overlayGeneral.motion, reduceMotion)
             }}
           >
             {winnerLabel ? <SurfaceLayers surface={winnerSurface} /> : activeConcedeSurface ? <SurfaceLayers surface={activeConcedeSurface} /> : null}
