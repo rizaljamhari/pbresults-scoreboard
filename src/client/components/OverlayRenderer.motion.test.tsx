@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { builtinThemes } from "../../shared/builtinThemes";
-import { motionChange } from "../../shared/motion";
+import { motionChange, motionUnderLoop } from "../../shared/motion";
 import { normalizeLiveState } from "../../shared/normalize";
 import { themeSchema, type ThemeDefinition } from "../../shared/theme";
 import { changedValues, eventCardAnimation, OverlayRenderer } from "./OverlayRenderer";
@@ -73,6 +73,49 @@ describe("clock warning", () => {
     const markup = render((theme) => Object.assign(theme.components.gameTime.clockWarning, { belowSeconds: 10, color: "#ff3b30" }), liveAt(8), true);
     expect(markup).not.toContain("clock-pulse");
     expect(markup).toContain("color:#ff3b30");
+  });
+});
+
+describe("team name under an event card", () => {
+  const finished = normalizeLiveState(
+    {
+      state: "END",
+      period: "BREAK",
+      round: 1,
+      gameTimer: { value: 0, state: 0 },
+      mainGame: [{ name: "Left", score: 3 }, { name: "Right", score: 2 }]
+    },
+    { sourceStatus: "ok", fetchedAt: "2026-10-02T05:00:00.000Z", errorMessage: null }
+  );
+  const coverName = (theme: ThemeDefinition) => {
+    Object.assign(theme.teamEventOverlay.general, { enabled: true, followTarget: "name", placementMode: "full-panel" });
+    theme.teamEventOverlay.winner.enabled = true;
+  };
+
+  it("does the card's loop inside out, so it steps away while the card shows", () => {
+    expect(motionUnderLoop({ preset: "drop-in", durationMs: 2000, easing: "ease-in-out", delayMs: 0 })).toBe(
+      "motion-under-loop 2000ms ease-in-out infinite alternate"
+    );
+    expect(motionUnderLoop({ preset: "none", durationMs: 2000, easing: "ease", delayMs: 0 })).toBe("motion-under-loop-away 1ms linear forwards");
+  });
+
+  it("only moves the name the winner card covers", () => {
+    const markup = render(coverName, finished);
+    expect(markup.match(/motion-under-loop /g)).toHaveLength(1);
+    const winnerName = markup.indexOf("motion-under-loop ");
+    expect(markup.slice(winnerName, winnerName + 400)).toContain(">Left<");
+  });
+
+  it("leaves the name alone when the card sits on the logo", () => {
+    const markup = render((theme) => {
+      coverName(theme);
+      theme.teamEventOverlay.general.followTarget = "logo";
+    }, finished);
+    expect(markup).not.toContain("motion-under-loop");
+  });
+
+  it("fades the name away once while motion is reduced", () => {
+    expect(render(coverName, finished, true)).toContain("motion-under-loop-away 200ms ease forwards");
   });
 });
 

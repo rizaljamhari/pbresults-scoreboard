@@ -3,12 +3,14 @@ import {
   CLOCK_PULSE_ANIMATION,
   enterSequence,
   motionChange,
+  motionEasingCss,
   motionEnter,
   motionExit,
   motionLeave,
   motionLoop,
   motionSwap,
   motionTotalMs,
+  motionUnderLoop,
   type ChangeMotionSettings,
   type MotionSettings
 } from "../../shared/motion";
@@ -62,6 +64,13 @@ const CALM_CARD_MOTION: MotionSettings = { preset: "fade", durationMs: 200, easi
 /** The event card loops its motion while on screen, or fades in once while motion is reduced. */
 export function eventCardAnimation(motion: MotionSettings, reduceMotion: boolean) {
   return reduceMotion ? motionEnter(CALM_CARD_MOTION) : motionLoop(motion);
+}
+
+/** The team name under an event card does the opposite of the card, so it never shows through a see-through card. */
+export function coveredNameAnimation(motion: MotionSettings, reduceMotion: boolean) {
+  return reduceMotion
+    ? `motion-under-loop-away ${CALM_CARD_MOTION.durationMs}ms ${motionEasingCss(CALM_CARD_MOTION.easing)} forwards`
+    : motionUnderLoop(motion);
 }
 
 function withoutMotion<T extends { preset: string }>(motion: T): T {
@@ -1165,6 +1174,12 @@ export function OverlayRenderer({
   const winnerText = winnerTheme.text?.trim() || "WINNER";
   const defaultEventLabel = concedeLabel && live && currentTeamEvent !== "none" ? concedeLabel : null;
   const activeOverlayLabel = winnerLabel ?? defaultEventLabel;
+  // The team name the showing card sits on, when the card covers it: on the name, or across name and logo.
+  const activeOverlaySide = winnerLabel ? winnerReveal?.side : defaultEventLabel ? activeConcede?.side : undefined;
+  const cardCoversName =
+    overlayGeneral.followTarget === "name" || (overlayGeneral.followTarget !== "logo" && overlayGeneral.placementMode === "full-panel");
+  const coveredNameId = activeOverlaySide && cardCoversName ? (activeOverlaySide === "left" ? "homeName" : "awayName") : null;
+  const coveredNameMotion = coveredNameId ? coveredNameAnimation(overlayGeneral.motion, reduceMotion) : undefined;
 
   const timeoutCard = theme.momentOverlays.timeout;
   const gameFinishedCard = theme.momentOverlays.gameFinished;
@@ -1424,6 +1439,10 @@ export function OverlayRenderer({
         };
 
         const motion = slotMotion(componentId, component);
+        const textAnimation =
+          [contentAnimation ?? valueChange?.motion.in, componentId === coveredNameId ? coveredNameMotion : undefined]
+            .filter(Boolean)
+            .join(", ") || undefined;
 
         return (
           <Fragment key={componentId}>
@@ -1509,7 +1528,7 @@ export function OverlayRenderer({
                   <span
                     key={contentKey ?? valueChange?.key}
                     className="component-content text-content"
-                    style={{ ...mainTextStyle, animation: contentAnimation ?? valueChange?.motion.in }}
+                    style={{ ...mainTextStyle, animation: textAnimation }}
                   >
                     {pulsing(<FitText settings={component}>{content}</FitText>, warningActive && warning.pulse && !reduceMotion)}
                   </span>

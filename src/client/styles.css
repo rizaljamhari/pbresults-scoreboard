@@ -656,6 +656,24 @@ details[open]:not(.editor-section-card) > summary::after {
   }
 }
 
+/* What a looping event card covers: every *-loop turned inside out, away while the card shows. */
+@keyframes motion-under-loop {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  16%,
+  84% {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-under-loop-away {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes motion-slide-up {
   from {
     opacity: 0;
