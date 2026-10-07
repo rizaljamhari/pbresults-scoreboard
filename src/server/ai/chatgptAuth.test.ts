@@ -194,6 +194,23 @@ describe("ChatGPT plan requests", () => {
     expect(bodies[0]).toMatchObject({ model: "gpt-test", store: false, stream: true, instructions: "sys" });
   });
 
+  it("lists the plan's models by slug, leaving out hidden ones", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json({
+          models: [
+            { slug: "gpt-6.1-sol", display_name: "GPT-6.1 Sol", visibility: "list" },
+            { slug: "internal-tool", display_name: "Internal", visibility: "hide" },
+            { slug: "gpt-6.1-terra", display_name: "GPT-6.1 Terra", visibility: "list" }
+          ]
+        })
+      )
+    );
+    const models = await aiProviders.chatgpt.listModels({ accessToken: async () => "token" }, new AbortController().signal);
+    expect(models).toEqual(["gpt-6.1-sol", "gpt-6.1-terra"]);
+  });
+
   it("explains a plan limit reached mid-stream", async () => {
     const { run } = input(() => stream([{ type: "response.failed", response: { error: { code: "subscription_sharing_usage_limit_exceeded" } } }]));
     await expect(run()).rejects.toMatchObject({ kind: "plan-limit" });

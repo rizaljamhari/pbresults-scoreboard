@@ -452,8 +452,10 @@ const chatgpt: AiProvider = {
       if (failure.kind === "signed-out") config.onSignedOut?.();
       throw failure;
     }
-    const answer = (await response.json()) as { data?: { id?: string; slug?: string }[] };
-    return (answer.data ?? []).map((model) => model.slug ?? model.id ?? "").filter(Boolean);
+    // A ChatGPT plan's catalog comes back as `models` with slugs; only "list" entries are meant to be offered.
+    const answer = (await response.json()) as { models?: { slug?: string; visibility?: string }[]; data?: { id?: string }[] };
+    if (answer.models) return answer.models.filter((model) => model.visibility === undefined || model.visibility === "list").flatMap((model) => (model.slug ? [model.slug] : []));
+    return (answer.data ?? []).flatMap((model) => (model.id ? [model.id] : []));
   }
 };
 
