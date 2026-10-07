@@ -2697,6 +2697,11 @@ details[open]:not(.editor-section-card) > summary::after {
   gap: 4px;
 }
 
+/* On the blue proposal box, the summary takes the foreground colour: grey on blue reads washed out. */
+.te-ai-review .te-ai-summary {
+  color: var(--te-text);
+}
+
 .te-ai-review .te-callout {
   margin: 0;
 }

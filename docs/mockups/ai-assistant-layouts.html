@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Assistant Layouts</title>
+<style>
+  :root {
+    --accent: #2f66d6; --accent-soft: #e7eefc; --accent-ink: #1d4fb3; --on-accent: #fff;
+    --ok: #1f7a45; --ok-soft: #e3f4ea; --tally: #c0281e;
+    --ground: #f5f5f2; --dot: #d6d6cf; --island: #fff; --line: #e4e4de; --field: #f7f7f4; --hover: #efefea;
+    --text: #1d1d1b; --muted: #5f5f59; --faint: #66665f; --checker: #e9e9e4;
+    --shadow: 0 1px 2px rgb(20 20 16 / .06), 0 6px 20px -6px rgb(20 20 16 / .14);
+    --chrome: #e9e9e4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --accent: #6f9bff; --accent-soft: #1d2945; --accent-ink: #a9c3ff; --on-accent: #0b1d36;
+      --ok: #7fd6a2; --ok-soft: #173325; --tally: #ff5c50;
+      --ground: #131315; --dot: #2b2b30; --island: #1e1e22; --line: #2f2f35; --field: #17171a; --hover: #28282d;
+      --text: #ececea; --muted: #b1b1b8; --faint: #8f8f97; --checker: #1a1a1d;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -8px rgb(0 0 0 / .6);
+      --chrome: #0c0c0e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --accent: #6f9bff; --accent-soft: #1d2945; --accent-ink: #a9c3ff; --on-accent: #0b1d36;
+    --ok: #7fd6a2; --ok-soft: #173325; --tally: #ff5c50;
+    --ground: #131315; --dot: #2b2b30; --island: #1e1e22; --line: #2f2f35; --field: #17171a; --hover: #28282d;
+    --text: #ececea; --muted: #b1b1b8; --faint: #8f8f97; --checker: #1a1a1d;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -8px rgb(0 0 0 / .6);
+    --chrome: #0c0c0e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--chrome); color: var(--text);
+    font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums;
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Mockup controls (not part of the design) */
+  .mock-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--island); }
+  .mock-bar h1 { margin: 0; font-size: 14px; font-weight: 650; }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--hover); }
+  .seg button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 600; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--island); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .mock-note { flex: 1 1 360px; margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  .viewport { position: relative; overflow: hidden; }
+  .screen { position: absolute; top: 0; left: 0; width: 1440px; height: 900px; transform-origin: top left; overflow: hidden;
+    background-color: var(--ground); background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 22px 22px; }
+
+  .island { position: absolute; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--island); box-shadow: var(--shadow); }
+  .ibtn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 7px; background: transparent; color: var(--text); }
+  .ibtn svg { width: 17px; height: 17px; }
+  .ibtn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .sep { width: 1px; height: 20px; margin: 0 3px; background: var(--line); }
+  .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--hover); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .chip--draft { background: #fff3cf; color: #7a4b00; }
+  :root[data-theme="dark"] .chip--draft { background: #3d3216; color: #f0cf7a; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--island); color: var(--text); font-weight: 600; white-space: nowrap; }
+  .btn svg { width: 15px; height: 15px; }
+  .btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+  .btn--sm { height: 32px; padding: 0 11px; }
+  .btn--quiet { border-color: transparent; background: transparent; color: var(--muted); }
+  .kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; color: var(--faint); font-size: 11px; font-weight: 600; }
+
+  .ident { top: 14px; left: 14px; padding-right: 10px; gap: 8px; }
+  .ident b { font-weight: 650; }
+  .tools { top: 14px; left: 50%; transform: translateX(-50%); }
+  .actions { top: 14px; right: 14px; display: flex; gap: 8px; position: absolute; }
+  .actions .btn { box-shadow: var(--shadow); }
+  .zoom { bottom: 14px; left: 14px; }
+  .previewbar { bottom: 14px; left: 50%; transform: translateX(-50%); padding: 4px 8px; gap: 8px; color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  .previewbar .on { padding: 4px 9px; border-radius: 7px; background: var(--accent-soft); color: var(--accent-ink); }
+  .corner { bottom: 14px; right: 14px; }
+
+  /* Side panels */
+  .panel { position: absolute; top: 76px; display: block; padding: 12px; overflow: hidden; }
+  .props { left: 14px; width: 300px; bottom: 64px; }
+  .layers { right: 14px; width: 248px; bottom: 64px; }
+  .panel h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .panel h3 { margin: 12px 0 4px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px; border-radius: 7px; font-size: 12.5px; }
+  .row small { margin-left: auto; color: var(--faint); font-size: 11.5px; }
+  .row.sel { background: var(--accent-soft); color: var(--accent-ink); }
+  .field-line { height: 30px; margin: 6px 0; border-radius: 7px; background: var(--field); }
+  .ghost-lines span { display: block; height: 9px; margin: 9px 0; border-radius: 4px; background: var(--hover); }
+
+  /* Canvas frame */
+  .frame { position: absolute; transition: all .35s cubic-bezier(.16, 1, .3, 1); }
+  .frame-label { position: absolute; top: -20px; left: 0; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .frame-art { position: absolute; inset: 0; background: #4caf50; container-type: inline-size; }
+  .sb { position: absolute; top: 4.2%; left: 5.6%; right: 5.6%; height: 7.6%; display: grid; grid-template-columns: 33fr 7fr 13fr 7fr 33fr; gap: .9%; }
+  .sb > div { display: grid; place-items: center; background: #2b2d28; color: #fff; font: 700 2.3cqw/1 "Bebas Neue", Oswald, Impact, sans-serif; letter-spacing: .02em; }
+  .sb .score { background: #f6f1e8; color: #111; font-size: 3.2cqw; }
+  .sb .clock { display: grid; grid-template-rows: 1fr auto; background: transparent; gap: 3px; }
+  .sb .clock span:first-child { display: grid; place-items: center; background: #101411; font-size: 1.7cqw; }
+  .sb .clock span:last-child { padding: 2px 4px; background: #0f1d12; color: #6fe38a; font-size: .8cqw; }
+  .preview .sb .home { font-size: 2.9cqw; }
+  .preview .sb .score.left { background: #c8102e; color: #fff; }
+
+  /* Preview banner over the canvas */
+  .ai-banner { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; z-index: 3; }
+  .ai-banner svg { width: 15px; height: 15px; }
+  .proposal .ai-banner { display: flex; }
+  .tbtn { height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--accent-ink); font-weight: 600; }
+  .mbtn { height: 28px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  /* Shared AI content pieces */
+  .ai-title { display: flex; align-items: center; gap: 8px; }
+  .ai-title svg { width: 16px; height: 16px; color: var(--accent); }
+  .meta { color: var(--faint); font-size: 11.5px; }
+  .label { color: var(--muted); font-size: 12px; font-weight: 550; }
+  .req { margin: 0; font-weight: 600; line-height: 1.4; }
+  .sum { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .box { border-radius: 7px; background: var(--field); border: 1px solid var(--line); padding: 7px 9px; color: var(--faint); font-size: 13px; line-height: 1.4; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
+  .check i { flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 4px; background: var(--accent); position: relative; }
+  .check i::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .check small { display: block; color: var(--faint); font-size: 11.5px; }
+  .review { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+  /* On the blue proposal box, secondary text takes the foreground, not grey. */
+  .review .sum, .review .changes span { color: var(--text); }
+  .pv { display: flex; align-items: center; gap: 7px; color: var(--accent-ink); font-size: 12px; font-weight: 600; }
+  .pv i { width: 7px; height: 7px; border-radius: 99px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .changes { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--island); list-style: none; display: grid; gap: 8px; }
+  .changes b { display: block; color: var(--accent-ink); font-size: 12.5px; }
+  .changes span { color: var(--muted); font-size: 12px; }
+  .acts { display: flex; justify-content: flex-end; gap: 6px; }
+  .turns { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .turns li { display: flex; align-items: center; gap: 8px; min-height: 34px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .turns li span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+  .tag { flex: none; padding: 1px 7px; border-radius: 99px; font-size: 11.5px; font-weight: 550; background: var(--hover); color: var(--muted); }
+  .tag--ok { background: var(--ok-soft); color: var(--ok); }
+
+  /* A: inside Properties (today) */
+  .ai-a { display: none; left: 14px; width: 300px; top: 76px; bottom: 64px; padding: 12px; flex-direction: column; align-items: stretch; gap: 12px; overflow: hidden; }
+  [data-layout="a"] .props { display: none; }
+  [data-layout="a"] .ai-a { display: flex; }
+
+  /* B: full-width dock under the canvas */
+  .ai-b { display: none; left: 14px; right: 14px; bottom: 64px; height: 300px; padding: 0; flex-direction: column; align-items: stretch; gap: 0; overflow: hidden; }
+  [data-layout="b"] .ai-b { display: flex; }
+  [data-layout="b"][data-open="false"] .ai-b { height: 46px; }
+  [data-layout="b"] .props, [data-layout="b"] .layers { bottom: 376px; }
+  [data-layout="b"][data-open="false"] .props, [data-layout="b"][data-open="false"] .layers { bottom: 122px; }
+  .dock-head { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); flex: none; }
+  .dock-head b { font-weight: 650; }
+  .dock-head .meta { margin-left: 4px; }
+  .dock-head .spacer { flex: 1; }
+  [data-open="false"] .dock-head { border-bottom-color: transparent; }
+  .dock-body { flex: 1; display: grid; grid-template-columns: 320px 1fr 300px; min-height: 0; }
+  .dock-body > section { display: flex; flex-direction: column; gap: 10px; padding: 14px; min-height: 0; overflow: hidden; }
+  .dock-body > section + section { border-left: 1px solid var(--line); }
+  .dock-body .review { flex: 1; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr auto; align-content: start; }
+  .dock-body .review .head { grid-column: 1; grid-row: 1 / span 2; display: grid; gap: 6px; align-content: start; }
+  .dock-body .review .changes-wrap { grid-column: 2; grid-row: 1 / span 2; display: grid; gap: 8px; align-content: start; }
+  .dock-body .review .acts { grid-column: 1 / -1; }
+  .dock-body .composer-hidden { display: grid; place-items: center; flex: 1; border: 1px dashed var(--line); border-radius: 8px; color: var(--faint); font-size: 12px; text-align: center; padding: 10px; }
+
+  /* C: wide drawer on the right, in place of Layers */
+  .ai-c { display: none; right: 14px; top: 76px; bottom: 64px; width: 440px; padding: 0; flex-direction: column; align-items: stretch; gap: 0; transition: transform .35s cubic-bezier(.16, 1, .3, 1), opacity .2s; }
+  [data-layout="c"] .ai-c { display: flex; }
+  [data-layout="c"] .layers { display: none; }
+  [data-layout="c"][data-open="false"] .ai-c { transform: translateX(470px); opacity: 0; }
+  [data-layout="c"][data-open="false"] .layers { display: block; }
+  .drawer-body { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 14px; overflow: hidden; }
+  .drawer-foot { border-top: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 10px; }
+
+  /* Frame placement per layout */
+  .screen .frame { left: 330px; right: 276px; top: 150px; aspect-ratio: 16 / 9; width: auto; }
+  [data-layout="b"][data-open="true"] .frame { top: 160px; left: 500px; right: 450px; }
+  [data-layout="c"][data-open="true"] .frame { left: 340px; right: 490px; }
+</style>
+</head>
+<body>
+  <div class="mock-bar">
+    <h1>AI assistant: where should it live?</h1>
+    <div class="seg" role="group" aria-label="Layout">
+      <button type="button" data-set-layout="a">A · In Properties (today)</button>
+      <button type="button" data-set-layout="b" aria-pressed="true">B · Full-width dock</button>
+      <button type="button" data-set-layout="c">C · Wide drawer</button>
+    </div>
+    <div class="seg" role="group" aria-label="State">
+      <button type="button" data-set-state="idle">Idle</button>
+      <button type="button" data-set-state="proposal" aria-pressed="true">Proposal</button>
+    </div>
+    <div class="seg" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="light">Light</button>
+      <button type="button" data-set-theme="dark">Dark</button>
+    </div>
+    <p class="mock-note" id="note"></p>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="screen proposal preview" id="screen" data-layout="b" data-open="true">
+      <div class="island ident">
+        <button class="ibtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+        <b>Broadcast Clean</b><span class="chip">Built-in</span><span class="chip" id="savedChip">Saved</span>
+      </div>
+      <div class="island tools">
+        <button class="ibtn" aria-pressed="true" aria-label="Select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 17 2.5-7.5L21 11z"/></svg></button>
+        <button class="ibtn" aria-label="Hand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 16 0v-3a2 2 0 0 0-4 0"/></svg></button>
+        <span class="sep"></span>
+        <button class="ibtn" aria-label="Text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+        <button class="ibtn" aria-label="Image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></button>
+        <button class="ibtn" aria-label="Shape"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+        <span class="sep"></span>
+        <button class="ibtn" id="aiToggle" aria-pressed="true" aria-label="AI assistant (A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
+      </div>
+      <div class="actions"><span class="btn">Open preview</span><span class="btn">Save as a copy</span><span class="btn btn--primary">Put on air</span></div>
+
+      <div class="island ai-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+        Previewing the AI's change · 2 changes
+        <button class="tbtn">Discard</button><button class="mbtn">Apply</button>
+      </div>
+
+      <div class="frame" id="frame">
+        <span class="frame-label">Broadcast frame · 1920 × 1080</span>
+        <div class="frame-art">
+          <div class="sb">
+            <div class="home">HOME</div><div class="score left">0</div>
+            <div class="clock"><span>00:00</span><span>MAJOR LEAGUE PAINTBALL</span></div>
+            <div class="score">0</div><div>AWAY</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="island panel props">
+        <h2>Left team name</h2>
+        <div class="label">Font</div><div class="field-line"></div>
+        <div class="label">Size</div><div class="field-line"></div>
+        <div class="ghost-lines"><span></span><span style="width:70%"></span><span></span><span style="width:55%"></span></div>
+      </aside>
+
+      <aside class="island panel layers">
+        <h2>Layers</h2>
+        <h3>LEFT TEAM</h3>
+        <div class="row">Logo<small>live</small></div><div class="row sel">Name<small>live</small></div><div class="row">Score<small>live</small></div>
+        <h3>CENTER</h3>
+        <div class="row">Game clock<small>live</small></div><div class="row">Centre line<small>live</small></div><div class="row">Event logo</div>
+        <h3>RIGHT TEAM</h3>
+        <div class="row">Score<small>live</small></div><div class="row">Name<small>live</small></div><div class="row">Logo<small>live</small></div>
+      </aside>
+
+      <!-- A: today, inside Properties (300px) -->
+      <aside class="island ai-a">
+        <div class="ai-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg><b>AI assistant</b></div>
+        <div data-show="proposal">
+          <div class="review">
+            <p class="req">Make the left team name bigger and the left score red so it stands out on the stream</p>
+            <p class="sum">Made the left team name bigger and gave the left score a red background.</p>
+            <div class="pv"><i></i>Previewing 2 changes on the canvas</div>
+            <ul class="changes"><li><b>Left team name</b><span>Font size: 54 → 72</span></li><li><b>Left score</b><span>Fill: #f6f1e8 → #C8102E</span></li></ul>
+            <div class="acts"><span class="btn btn--sm">Discard</span><span class="btn btn--sm btn--primary">Apply</span></div>
+          </div>
+        </div>
+        <div data-show="idle" style="display:grid;gap:10px">
+          <ul class="turns"><li><span>Use Oswald for every name and score</span><span class="tag tag--ok">Applied</span></li><li><span>Darker panels behind the names</span><span class="tag">Discarded</span></li></ul>
+          <div class="label">What next?</div>
+          <div class="box" style="min-height:52px">Enter to ask · Shift+Enter for a new line</div>
+          <label class="check"><i></i><span>Let the AI see the canvas<small>Sends a picture of the frame with your request.</small></span></label>
+          <div class="acts"><span class="btn btn--sm btn--quiet">Image</span><span class="btn btn--sm btn--primary">Ask</span></div>
+        </div>
+        <div class="meta" style="margin-top:auto">Using ChatGPT plan · gpt-5.6-sol</div>
+      </aside>
+
+      <!-- B: full-width dock with show/hide -->
+      <section class="island ai-b" aria-label="AI assistant">
+        <header class="dock-head">
+          <span class="ai-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg><b>AI assistant</b></span>
+          <span class="meta">Using ChatGPT plan · gpt-5.6-sol</span>
+          <span class="spacer"></span>
+          <span class="pv" data-show="proposal"><i></i>Previewing 2 changes</span>
+          <span class="kbd">A</span>
+          <button class="btn btn--sm btn--quiet" data-toggle-open type="button"><span data-open-label>Hide</span></button>
+        </header>
+        <div class="dock-body">
+          <section>
+            <div class="label">Earlier requests</div>
+            <ul class="turns">
+              <li><span>Use Oswald for every name and score</span><span class="tag tag--ok">Applied</span></li>
+              <li><span>Darker panels behind the names</span><span class="tag">Discarded</span></li>
+              <li><span>Move the clock under the scores</span><span class="tag">Undone</span></li>
+            </ul>
+          </section>
+          <section>
+            <div class="review" data-show="proposal">
+              <div class="head">
+                <p class="req">Make the left team name bigger and the left score red so it stands out on the stream</p>
+                <p class="sum">Made the left team name bigger and gave the left score a red background.</p>
+              </div>
+              <div class="changes-wrap">
+                <ul class="changes"><li><b>Left team name</b><span>Font size: 54 → 72</span></li><li><b>Left score</b><span>Fill: #f6f1e8 → #C8102E</span></li></ul>
+              </div>
+              <div class="acts"><span class="btn btn--sm">Discard</span><span class="btn btn--sm btn--primary">Apply</span></div>
+            </div>
+            <div data-show="idle" style="display:grid;gap:10px;align-content:start">
+              <div class="label">What should change?</div>
+              <div class="box" style="min-height:96px">Enter to ask · Shift+Enter for a new line</div>
+              <div class="acts" style="justify-content:space-between">
+                <label class="check"><i></i><span>Let the AI see the canvas<small>Sends a picture of the frame with your request.</small></span></label>
+                <span style="display:flex;gap:6px"><span class="btn btn--sm btn--quiet">Image</span><span class="btn btn--sm btn--primary">Ask</span></span>
+              </div>
+            </div>
+          </section>
+          <section>
+            <div class="label">Reference</div>
+            <div class="composer-hidden">Drop a poster or another broadcast's scorebug here, or <u>choose an image</u></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- C: wide drawer in place of Layers -->
+      <aside class="island ai-c" aria-label="AI assistant">
+        <header class="dock-head">
+          <span class="ai-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg><b>AI assistant</b></span>
+          <span class="spacer"></span><span class="kbd">A</span>
+          <button class="btn btn--sm btn--quiet" data-toggle-open type="button"><span data-open-label>Hide</span></button>
+        </header>
+        <div class="drawer-body">
+          <ul class="turns">
+            <li><span>Use Oswald for every name and score</span><span class="tag tag--ok">Applied</span></li>
+            <li><span>Darker panels behind the names</span><span class="tag">Discarded</span></li>
+          </ul>
+          <div class="review" data-show="proposal">
+            <p class="req">Make the left team name bigger and the left score red so it stands out on the stream</p>
+            <p class="sum">Made the left team name bigger and gave the left score a red background.</p>
+            <div class="pv"><i></i>Previewing 2 changes on the canvas</div>
+            <ul class="changes"><li><b>Left team name</b><span>Font size: 54 → 72</span></li><li><b>Left score</b><span>Fill: #f6f1e8 → #C8102E</span></li></ul>
+            <div class="acts"><span class="btn btn--sm">Discard</span><span class="btn btn--sm btn--primary">Apply</span></div>
+          </div>
+        </div>
+        <div class="drawer-foot" data-show="idle">
+          <div class="box" style="min-height:76px">Enter to ask · Shift+Enter for a new line</div>
+          <div class="acts" style="justify-content:space-between">
+            <label class="check"><i></i><span>Let the AI see the canvas</span></label>
+            <span style="display:flex;gap:6px"><span class="btn btn--sm btn--quiet">Image</span><span class="btn btn--sm btn--primary">Ask</span></span>
+          </div>
+          <div class="meta">Using ChatGPT plan · gpt-5.6-sol</div>
+        </div>
+      </aside>
+
+      <div class="island zoom"><span class="ibtn">−</span><b style="min-width:48px;text-align:center">46%</b><span class="ibtn">+</span></div>
+      <div class="island previewbar">Preview as <span class="on">● Live feed</span> Game · Break · Timeout · Finished · Towel · Base · Winner</div>
+      <div class="island corner"><span class="ibtn">?</span></div>
+    </div>
+  </div>
+
+<script>
+  const screen = document.getElementById("screen");
+  const viewport = document.getElementById("viewport");
+  const note = document.getElementById("note");
+  const notes = {
+    a: "Today: the assistant replaces Properties (300px). Compact, but the proposal, history and request box compete for one narrow column, and you lose Properties while it's open.",
+    b: "Full-width dock under the canvas, A or Hide to collapse it to a one-line bar. Wide enough to show history, the proposal and a reference side by side; the frame shrinks to fit above it. Properties and Layers stay.",
+    c: "Wide drawer (440px) that slides over Layers from the right, A or Hide to close. Room for a readable proposal and history in one column; Properties stays, Layers comes back when it closes."
+  };
+  function fit() {
+    const scale = Math.min(viewport.clientWidth / 1440, viewport.clientHeight / 900);
+    screen.style.transform = `scale(${scale})`;
+    screen.style.left = `${(viewport.clientWidth - 1440 * scale) / 2}px`;
+  }
+  function setPressed(attr, value) {
+    document.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute("aria-pressed", String(b.getAttribute(attr) === value)));
+  }
+  function render() {
+    const state = screen.classList.contains("proposal") ? "proposal" : "idle";
+    document.querySelectorAll("[data-show]").forEach((el) => { el.style.display = el.dataset.show === state ? "" : "none"; });
+    document.getElementById("savedChip").textContent = "Saved";
+    const open = screen.dataset.open === "true";
+    document.querySelectorAll("[data-open-label]").forEach((el) => (el.textContent = open ? "Hide" : "Show"));
+    document.getElementById("aiToggle").setAttribute("aria-pressed", String(open || screen.dataset.layout === "a"));
+    note.textContent = notes[screen.dataset.layout];
+  }
+  document.querySelectorAll("[data-set-layout]").forEach((b) => b.addEventListener("click", () => {
+    screen.dataset.layout = b.dataset.setLayout; screen.dataset.open = "true"; setPressed("data-set-layout", b.dataset.setLayout); render();
+  }));
+  document.querySelectorAll("[data-set-state]").forEach((b) => b.addEventListener("click", () => {
+    const proposal = b.dataset.setState === "proposal";
+    screen.classList.toggle("proposal", proposal); screen.classList.toggle("preview", proposal); setPressed("data-set-state", b.dataset.setState); render();
+  }));
+  document.querySelectorAll("[data-set-theme]").forEach((b) => b.addEventListener("click", () => {
+    document.documentElement.dataset.theme = b.dataset.setTheme; setPressed("data-set-theme", b.dataset.setTheme);
+  }));
+  const toggleOpen = () => { screen.dataset.open = screen.dataset.open === "true" ? "false" : "true"; render(); };
+  document.querySelectorAll("[data-toggle-open]").forEach((b) => b.addEventListener("click", toggleOpen));
+  document.getElementById("aiToggle").addEventListener("click", toggleOpen);
+  document.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "a" && !e.metaKey && !e.ctrlKey) toggleOpen(); });
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  setPressed("data-set-theme", dark ? "dark" : "light");
+  addEventListener("resize", fit); fit(); render();
+</script>
+</body>
+</html>
