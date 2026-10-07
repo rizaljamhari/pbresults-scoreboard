@@ -2,15 +2,22 @@
 import { z } from "zod";
 import { themeOpSchema } from "./themeOps.js";
 
-export const aiProviderIds = ["anthropic", "openai", "gemini", "openrouter", "ollama"] as const;
+export const aiProviderIds = ["chatgpt", "anthropic", "openai", "gemini", "openrouter", "ollama"] as const;
 export type AiProviderId = (typeof aiProviderIds)[number];
 
 /** One provider as Settings sees it: whether it's set up, never the key itself. */
 export type AiProviderView = {
   id: AiProviderId;
   label: string;
-  needs: "apiKey" | "baseUrl";
+  /** What setting it up takes: a pasted key, a local address, or signing in with ChatGPT. */
+  needs: "apiKey" | "baseUrl" | "signIn";
   configured: boolean;
+  /** A short cost note for the collapsed row, such as "Free tier" or "Uses your plan". */
+  tag: string | null;
+  /** The signed-in account, for ChatGPT. */
+  account: string | null;
+  /** Signed in before, but the sign-in expired or was revoked: show "Continue with ChatGPT" again. */
+  needsSignInAgain: boolean;
   /** The last four characters of the key, so the designer can tell which key is saved. */
   keyHint: string | null;
   baseUrl: string | null;

@@ -189,6 +189,9 @@ export const api = {
     fetch("/api/ai/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider, ...options }) }).then(
       handle<{ models: string[] }>
     ),
+  /** Starts "Continue with ChatGPT"; open the returned URL in a new tab. */
+  startChatgptSignIn: () => fetch("/api/ai/chatgpt/sign-in", { method: "POST" }).then(handle<{ url: string }>),
+  signOutChatgpt: () => fetch("/api/ai/chatgpt/sign-out", { method: "POST" }).then(handle<AiSettingsView>),
   requestThemeEdit: (request: ThemeEditRequest, signal?: AbortSignal) =>
     fetch("/api/ai/theme-edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal }).then(handle<ThemeEditResponse>),
   saveRemoteAccessToken: (authtoken: string) =>

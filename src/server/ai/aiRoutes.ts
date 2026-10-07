@@ -3,6 +3,7 @@ import { z } from "zod";
 import { aiProviderIds, aiSettingsUpdateSchema, themeEditRequestSchema, type ThemeEditFailure } from "../../shared/aiAssistant.js";
 import { ThemeOpError } from "../../shared/themeOps.js";
 import type { AiSettingsStore } from "./aiSettings.js";
+import { ChatgptAuthError, type ChatgptAuth } from "./chatgptAuth.js";
 import { AiProviderError, aiProviders } from "./providers.js";
 import { runThemeEdit } from "./themeAssistant.js";
 
@@ -18,8 +19,22 @@ const statusForKind: Record<string, number> = {
   unreachable: 502,
   refused: 422,
   "provider-error": 502,
-  timeout: 504
+  timeout: 504,
+  "signed-out": 409,
+  "plan-limit": 429,
+  "not-eligible": 403
 };
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+}
+
+/** The small page ChatGPT's sign-in returns to. It lives on the server's own port, so it stays plain HTML. */
+function callbackPage(title: string, message: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#16181d;color:#e8e9ec;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}main{max-width:420px;padding:24px}h1{font-size:18px;margin:0 0 8px}p{margin:0;color:#a9adb7}</style>
+</head><body><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p></main></body></html>`;
+}
 
 function sendFailure(reply: FastifyReply, kind: string, message: string) {
   const body: ThemeEditFailure = { kind, message };
@@ -48,7 +63,10 @@ function requestSignal(reply: FastifyReply): { signal: AbortSignal; timedOut: ()
   };
 }
 
-export function registerAiRoutes(app: FastifyInstance, deps: { settings: AiSettingsStore; isManagementRequest: (request: FastifyRequest) => boolean }) {
+export function registerAiRoutes(
+  app: FastifyInstance,
+  deps: { settings: AiSettingsStore; chatgptAuth: ChatgptAuth; port: number; isManagementRequest: (request: FastifyRequest) => boolean }
+) {
   const { settings } = deps;
   let inFlight = 0;
   let recent: number[] = [];
@@ -85,6 +103,47 @@ export function registerAiRoutes(app: FastifyInstance, deps: { settings: AiSetti
       throw error;
     } finally {
       done();
+    }
+  });
+
+  /** Starts "Continue with ChatGPT". The browser opens the returned URL; ChatGPT sends it back to /auth/callback. */
+  app.post("/api/ai/chatgpt/sign-in", async (request, reply) => {
+    if (!requireManagement(request, reply)) return reply;
+    const registration = deps.settings.chatgptRegistration();
+    return { url: deps.chatgptAuth.start({ port: deps.port, hostId: deps.settings.hostId(), ...registration }) };
+  });
+
+  app.post("/api/ai/chatgpt/sign-out", async (request, reply) => {
+    if (!requireManagement(request, reply)) return reply;
+    const previous = settings.signOutChatgpt();
+    if (previous) void deps.chatgptAuth.revoke(previous);
+    return settings.view(true);
+  });
+
+  // OpenAI requires exactly http://127.0.0.1:<port>/auth/callback, so this sits outside /api.
+  app.get("/auth/callback", async (request, reply) => {
+    reply.type("text/html; charset=utf-8");
+    if (!deps.isManagementRequest(request)) return reply.code(403).send(callbackPage("Sign-in refused", "ChatGPT can be connected only on the scoreboard computer."));
+    try {
+      const credentials = await deps.chatgptAuth.finish(request.query as Record<string, string | undefined>);
+      settings.saveChatgpt(credentials);
+      if (!credentials.scopes.includes("chatgpt.tokens.use.direct")) {
+        return callbackPage(
+          "Signed in, but plan usage is off",
+          `Signed in as ${credentials.account}, but ChatGPT plan usage wasn't allowed. Sign in again and allow it, or use another provider.`
+        );
+      }
+      // Pick a model straight away so the assistant works without another step.
+      if (!settings.view(true).providers.find((provider) => provider.id === "chatgpt")?.model) {
+        const controller = new AbortController();
+        const models = await aiProviders.chatgpt.listModels(settings.config("chatgpt"), controller.signal).catch(() => []);
+        if (models[0]) settings.update({ providers: { chatgpt: { model: models[0] } } });
+      }
+      return callbackPage("Connected to ChatGPT", `Signed in as ${credentials.account}. The theme assistant now uses your ChatGPT plan. You can close this tab.`);
+    } catch (error) {
+      const message = error instanceof ChatgptAuthError ? error.message : "ChatGPT sign-in failed. Try again from Maintenance → AI assistant.";
+      if (!(error instanceof ChatgptAuthError)) request.log.error({ err: error }, "ChatGPT sign-in failed");
+      return reply.code(400).send(callbackPage("ChatGPT sign-in didn't finish", message));
     }
   });
 

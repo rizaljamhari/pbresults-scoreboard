@@ -276,7 +276,11 @@ export function AiAssistantPanel({
       </div>
 
       <p className="te-field-hint">
-        {busy ? "Waiting for the AI… this can take up to a minute." : active ? `Using ${active.label}${active.model ? ` · ${active.model}` : ""}.` : ""}
+        {busy
+          ? "Waiting for the AI… this can take up to a minute."
+          : active
+            ? `${active.id === "chatgpt" ? "Using ChatGPT plan" : `Using ${active.label}`}${active.model ? ` · ${active.model}` : ""}.`
+            : ""}
         {!busy && lastUsage ? ` ${lastUsage}.` : ""}
       </p>
     </div>

@@ -11,7 +11,15 @@ export type AiMessage = { role: "user" | "assistant"; text: string; images?: AiI
 export type AiUsage = { inputTokens: number; outputTokens: number };
 export type AiCompletion = { text: string; usage: AiUsage | null };
 
-export type ProviderConfig = { apiKey?: string; model?: string; baseUrl?: string };
+export type ProviderConfig = {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  /** ChatGPT sign-in: a current access token, refreshed by the settings store when needed. */
+  accessToken?: () => Promise<string>;
+  /** ChatGPT sign-in: OpenAI rejected the token, so the person has to sign in again. */
+  onSignedOut?: () => void;
+};
 
 export type CompleteInput = {
   config: ProviderConfig;
@@ -22,7 +30,17 @@ export type CompleteInput = {
 };
 
 /** Why a provider call failed, in terms the panel can explain without technical detail. */
-export type AiFailureKind = "not-configured" | "bad-key" | "rate-limited" | "model-not-found" | "unreachable" | "refused" | "provider-error";
+export type AiFailureKind =
+  | "not-configured"
+  | "bad-key"
+  | "rate-limited"
+  | "model-not-found"
+  | "unreachable"
+  | "refused"
+  | "provider-error"
+  | "signed-out"
+  | "plan-limit"
+  | "not-eligible";
 
 export class AiProviderError extends Error {
   constructor(
@@ -37,8 +55,8 @@ export interface AiProvider {
   id: AiProviderId;
   label: string;
   defaultModel: string;
-  /** Ollama runs locally and needs an address instead of a key. */
-  needs: "apiKey" | "baseUrl";
+  /** Ollama runs locally and needs an address instead of a key; ChatGPT needs a sign-in. */
+  needs: "apiKey" | "baseUrl" | "signIn";
   complete(input: CompleteInput): Promise<AiCompletion>;
   listModels(config: ProviderConfig, signal: AbortSignal): Promise<string[]>;
 }
@@ -100,7 +118,7 @@ function isCurrentClaude(model: string) {
 
 const anthropic: AiProvider = {
   id: "anthropic",
-  label: "Claude (Anthropic)",
+  label: "Claude",
   defaultModel: "claude-opus-5-5",
   needs: "apiKey",
   async complete({ config, system, messages, maxOutputTokens, signal }) {
@@ -198,7 +216,7 @@ const openai = chatCompletionsProvider({ id: "openai", label: "OpenAI", name: "O
 
 const openrouter = chatCompletionsProvider({
   id: "openrouter",
-  label: "OpenRouter (free models available)",
+  label: "OpenRouter",
   name: "OpenRouter",
   baseUrl: "https://openrouter.ai/api/v1",
   // Free models come and go, so the designer picks one from the live list instead of us guessing.
@@ -217,7 +235,7 @@ type GeminiResponse = {
 
 const gemini: AiProvider = {
   id: "gemini",
-  label: "Google Gemini (free tier available)",
+  label: "Google Gemini",
   defaultModel: "gemini-3-flash",
   needs: "apiKey",
   async complete({ config, system, messages, maxOutputTokens, signal }) {
@@ -260,7 +278,7 @@ const ollamaDefaultUrl = "http://localhost:11434";
 
 const ollama: AiProvider = {
   id: "ollama",
-  label: "Ollama (local, free, offline)",
+  label: "Ollama",
   defaultModel: "qwen2.5vl",
   needs: "baseUrl",
   async complete({ config, system, messages, maxOutputTokens, signal }) {
@@ -283,7 +301,163 @@ const ollama: AiProvider = {
   }
 };
 
-export const aiProviders: Record<AiProviderId, AiProvider> = { anthropic, openai, gemini, openrouter, ollama };
+// --- ChatGPT plan (Sign in with ChatGPT) ---
+// https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference
+
+const CHATGPT_SETTINGS_HINT = "Check your ChatGPT settings → Usage.";
+
+type ResponsesEvent = {
+  type?: string;
+  delta?: string;
+  code?: string;
+  message?: string;
+  response?: { usage?: { input_tokens?: number; output_tokens?: number }; error?: { code?: string; message?: string } | null; output?: { content?: { type?: string; text?: string }[] }[] };
+};
+
+/** Turns an OpenAI error code from a plan-usage request into something the panel can act on. */
+function chatgptFailure(code: string | undefined, status: number, detail: string): AiProviderError {
+  if (code === "subscription_sharing_usage_limit_exceeded") {
+    return new AiProviderError("plan-limit", `Your ChatGPT plan's limit for this app is reached. ${CHATGPT_SETTINGS_HINT}`);
+  }
+  if (code === "subscription_sharing_user_not_eligible") {
+    return new AiProviderError("not-eligible", "This ChatGPT account can't share its plan with apps. It needs ChatGPT Plus or Pro, and plan sharing turned on.");
+  }
+  if (status === 401 || code === "insufficient_scope" || code === "invalid_grant" || code === "token_expired") {
+    return new AiProviderError("signed-out", "ChatGPT needs you to sign in again. Continue with ChatGPT in Maintenance → AI assistant.");
+  }
+  return failureForStatus("ChatGPT", status || 500, detail);
+}
+
+async function readErrorCode(response: Response): Promise<{ code?: string; detail: string }> {
+  const text = await response.text().catch(() => "");
+  try {
+    const body = JSON.parse(text) as { error?: { code?: string; message?: string } };
+    return { code: body.error?.code, detail: body.error?.message ?? text };
+  } catch {
+    return { detail: text };
+  }
+}
+
+/** Reads a Responses API event stream and returns the text once `response.completed` arrives. */
+async function readResponsesStream(body: ReadableStream<Uint8Array>): Promise<AiCompletion> {
+  const decoder = new TextDecoder();
+  const reader = body.getReader();
+  let buffer = "";
+  let text = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+    let boundary: number;
+    while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+      const chunk = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = chunk
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      if (!data || data === "[DONE]") continue;
+      let event: ResponsesEvent;
+      try {
+        event = JSON.parse(data) as ResponsesEvent;
+      } catch {
+        continue;
+      }
+      if (event.type === "response.output_text.delta" && event.delta) text += event.delta;
+      if (event.type === "response.failed" || event.type === "error") {
+        const error = event.response?.error ?? { code: event.code, message: event.message };
+        throw chatgptFailure(error?.code, 0, error?.message ?? "");
+      }
+      if (event.type === "response.completed") {
+        // Only a completed response counts; fall back to the final output if no deltas arrived.
+        const finalText = (event.response?.output ?? []).flatMap((item) => item.content ?? []).filter((part) => part.type === "output_text").map((part) => part.text ?? "").join("");
+        const usage = event.response?.usage;
+        return { text: text || finalText, usage: usage ? { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0 } : null };
+      }
+    }
+  }
+  throw new AiProviderError("provider-error", "ChatGPT stopped before finishing its answer. Try again.");
+}
+
+async function chatgptToken(config: ProviderConfig): Promise<string> {
+  if (!config.accessToken) throw new AiProviderError("signed-out", "ChatGPT isn't signed in. Continue with ChatGPT in Maintenance → AI assistant.");
+  return config.accessToken();
+}
+
+const chatgpt: AiProvider = {
+  id: "chatgpt",
+  label: "ChatGPT",
+  defaultModel: "",
+  needs: "signIn",
+  async complete({ config, system, messages, maxOutputTokens, signal }) {
+    const model = requireModel("ChatGPT", config, "");
+    const send = async (withImages: boolean) => {
+      const token = await chatgptToken(config);
+      const body = {
+        model,
+        instructions: system,
+        input: messages.map((message) =>
+          message.role === "assistant"
+            ? { role: "assistant", content: [{ type: "output_text", text: message.text }] }
+            : {
+                role: "user",
+                content: [
+                  ...(withImages ? (message.images ?? []) : []).map((image) => ({ type: "input_image", image_url: `data:${image.mediaType};base64,${image.data}` })),
+                  { type: "input_text", text: message.text }
+                ]
+              }
+        ),
+        max_output_tokens: maxOutputTokens,
+        // Plan usage requires both: nothing is stored on OpenAI's side, and the answer streams.
+        store: false,
+        stream: true
+      };
+      try {
+        return await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}`, accept: "text/event-stream" },
+          body: JSON.stringify(body),
+          signal
+        });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        throw unreachable("ChatGPT");
+      }
+    };
+    const hasImages = messages.some((message) => message.images?.length);
+    let response = await send(true);
+    // The docs don't say whether plan usage accepts images; if it refuses them, answer from the text alone.
+    if (response.status === 400 && hasImages) response = await send(false);
+    if (!response.ok || !response.body) {
+      const { code, detail } = await readErrorCode(response);
+      const failure = chatgptFailure(code, response.status, detail);
+      if (failure.kind === "signed-out") config.onSignedOut?.();
+      throw failure;
+    }
+    return readResponsesStream(response.body);
+  },
+  async listModels(config, signal) {
+    const token = await chatgptToken(config);
+    let response: Response;
+    try {
+      response = await fetch("https://api.openai.com/v1/models", { headers: { authorization: `Bearer ${token}` }, signal });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw unreachable("ChatGPT");
+    }
+    if (!response.ok) {
+      const { code, detail } = await readErrorCode(response);
+      const failure = chatgptFailure(code, response.status, detail);
+      if (failure.kind === "signed-out") config.onSignedOut?.();
+      throw failure;
+    }
+    const answer = (await response.json()) as { data?: { id?: string; slug?: string }[] };
+    return (answer.data ?? []).map((model) => model.slug ?? model.id ?? "").filter(Boolean);
+  }
+};
+
+export const aiProviders: Record<AiProviderId, AiProvider> = { chatgpt, anthropic, openai, gemini, openrouter, ollama };
 
 // Every id in the shared list has an adapter.
 void (aiProviderIds satisfies readonly (keyof typeof aiProviders)[]);

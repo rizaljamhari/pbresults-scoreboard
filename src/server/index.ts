@@ -13,6 +13,7 @@ import { operatorTextRuntime } from "./operatorTextRuntime.js";
 import { aiAssistantSecretPath, clientDistDir, logsDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
 import { registerAiRoutes } from "./ai/aiRoutes.js";
 import { createAiSettingsStore } from "./ai/aiSettings.js";
+import { createChatgptAuth } from "./ai/chatgptAuth.js";
 import {
   backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
@@ -889,8 +890,11 @@ registerAssetRoutes(app, {
   onTeamsChanged: () => livePoller.reconfigure()
 });
 
+const chatgptAuth = createChatgptAuth();
 registerAiRoutes(app, {
-  settings: createAiSettingsStore({ filePath: aiAssistantSecretPath }),
+  settings: createAiSettingsStore({ filePath: aiAssistantSecretPath, chatgptAuth }),
+  chatgptAuth,
+  port,
   isManagementRequest: isOnsiteRequest
 });
 
