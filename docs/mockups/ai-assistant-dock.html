@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Assistant Dock</title>
+<style>
+  :root {
+    --accent: #2f66d6; --accent-soft: #e7eefc; --accent-ink: #1d4fb3; --on-accent: #fff;
+    --ok: #1f7a45; --ok-soft: #e3f4ea;
+    --ground: #f5f5f2; --dot: #d6d6cf; --island: #fff; --line: #e4e4de; --field: #f7f7f4; --hover: #efefea;
+    --text: #1d1d1b; --muted: #5f5f59; --faint: #66665f;
+    --shadow: 0 1px 2px rgb(20 20 16 / .06), 0 6px 20px -6px rgb(20 20 16 / .14);
+    --chrome: #e9e9e4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --accent: #6f9bff; --accent-soft: #1d2945; --accent-ink: #a9c3ff; --on-accent: #0b1d36;
+      --ok: #7fd6a2; --ok-soft: #173325;
+      --ground: #131315; --dot: #2b2b30; --island: #1e1e22; --line: #2f2f35; --field: #17171a; --hover: #28282d;
+      --text: #ececea; --muted: #b1b1b8; --faint: #8f8f97;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -8px rgb(0 0 0 / .6);
+      --chrome: #0c0c0e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --accent: #6f9bff; --accent-soft: #1d2945; --accent-ink: #a9c3ff; --on-accent: #0b1d36;
+    --ok: #7fd6a2; --ok-soft: #173325;
+    --ground: #131315; --dot: #2b2b30; --island: #1e1e22; --line: #2f2f35; --field: #17171a; --hover: #28282d;
+    --text: #ececea; --muted: #b1b1b8; --faint: #8f8f97;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -8px rgb(0 0 0 / .6);
+    --chrome: #0c0c0e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+    background: var(--chrome); color: var(--text);
+    font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums;
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Mockup controls (not part of the design) */
+  .mock-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--island); }
+  .mock-bar h1 { margin: 0; font-size: 14px; font-weight: 650; }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--hover); }
+  .seg button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 600; }
+  .seg button[aria-pressed="true"] { background: var(--island); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .mock-note { flex: 1 1 380px; margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  .viewport { position: relative; overflow: hidden; }
+  .screen { position: absolute; top: 0; left: 0; width: 1440px; height: 900px; overflow: hidden; transform-origin: top left;
+    background-color: var(--ground); background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 22px 22px; }
+
+  /* Editor chrome */
+  .island { position: absolute; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--island); box-shadow: var(--shadow); }
+  .ibtn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 7px; background: transparent; color: var(--text); }
+  .ibtn svg { width: 17px; height: 17px; }
+  .ibtn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .sep { width: 1px; height: 20px; margin: 0 3px; background: var(--line); }
+  .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--hover); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--island); color: var(--text); font-weight: 600; white-space: nowrap; }
+  .btn svg { width: 15px; height: 15px; }
+  .btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+  .btn--sm { height: 30px; padding: 0 11px; }
+  .btn--quiet { border-color: transparent; background: transparent; color: var(--muted); }
+  .kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; color: var(--faint); font-size: 11px; font-weight: 600; }
+
+  .ident { top: 14px; left: 14px; gap: 8px; padding-right: 10px; }
+  .ident b { font-weight: 650; }
+  .tools { top: 14px; left: 50%; transform: translateX(-50%); }
+  .actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; }
+  .actions .btn { box-shadow: var(--shadow); }
+  .zoom { bottom: 14px; left: 14px; }
+  .previewbar { bottom: 14px; left: 50%; transform: translateX(-50%); gap: 8px; padding: 4px 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .previewbar .on { padding: 4px 9px; border-radius: 7px; background: var(--accent-soft); color: var(--accent-ink); }
+  .corner { right: 14px; bottom: 14px; }
+
+  .ease { transition: all .4s cubic-bezier(.16, 1, .3, 1); }
+
+  .panel { position: absolute; top: 76px; bottom: 64px; display: block; padding: 12px; overflow: hidden; }
+  .props { left: 14px; width: 300px; }
+  .layers { right: 14px; width: 248px; }
+  .panel h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+  .panel h3 { margin: 12px 0 4px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px; border-radius: 7px; font-size: 12.5px; }
+  .row small { margin-left: auto; color: var(--faint); font-size: 11.5px; }
+  .row.sel { background: var(--accent-soft); color: var(--accent-ink); }
+  .row.sel small { color: var(--accent-ink); }
+  .label { color: var(--muted); font-size: 12px; font-weight: 550; }
+  .field-line { height: 30px; margin: 6px 0 10px; border-radius: 7px; background: var(--field); }
+  .ghost span { display: block; height: 9px; margin: 9px 0; border-radius: 4px; background: var(--hover); }
+
+  /* The broadcast frame: sized by script to the space the dock leaves */
+  .frame { position: absolute; }
+  .frame-label { position: absolute; top: -20px; left: 0; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .frame-art { position: absolute; inset: 0; background: #4caf50; container-type: inline-size; }
+  .sb { position: absolute; top: 4.2%; left: 5.6%; right: 5.6%; height: 7.6%; display: grid; grid-template-columns: 33fr 7fr 13fr 7fr 33fr; gap: .9%; }
+  .sb > div { display: grid; place-items: center; background: #2b2d28; color: #fff; font: 700 2.3cqw/1 "Bebas Neue", Oswald, Impact, sans-serif; letter-spacing: .02em; transition: all .3s; }
+  .sb .score { background: #f6f1e8; color: #111; font-size: 3.2cqw; }
+  .sb .clock { display: grid; grid-template-rows: 1fr auto; gap: 3px; background: transparent; }
+  .sb .clock span:first-child { display: grid; place-items: center; background: #101411; font-size: 1.7cqw; }
+  .sb .clock span:last-child { padding: 2px 4px; background: #0f1d12; color: #6fe38a; font-size: .8cqw; }
+  .previewing .sb .home { font-size: 2.9cqw; }
+  .previewing .sb .score.left { background: #c8102e; color: #fff; }
+
+  /* AI pieces: everything below exists only while the AI button is on */
+  [data-ai="off"] .ai-only { display: none !important; }
+
+  .banner { top: 88px; left: 50%; transform: translateX(-50%); gap: 10px; padding: 6px 6px 6px 14px; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; z-index: 3; }
+  .banner svg { width: 15px; height: 15px; }
+  .tbtn { height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--accent-ink); font-weight: 600; }
+  .mbtn { height: 28px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  .dock { left: 14px; right: 14px; bottom: 64px; height: 264px; padding: 0; flex-direction: column; align-items: stretch; gap: 0; overflow: hidden; }
+  [data-dock="collapsed"] .dock { height: 46px; }
+  .dock-head { display: flex; flex: none; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); }
+  [data-dock="collapsed"] .dock-head { border-bottom-color: transparent; }
+  .dock-head .title { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+  .dock-head .title svg { width: 16px; height: 16px; color: var(--accent); }
+  .meta { color: var(--faint); font-size: 11.5px; }
+  .spacer { flex: 1; }
+  .pv { display: flex; align-items: center; gap: 7px; color: var(--accent-ink); font-size: 12px; font-weight: 600; }
+  .pv i { width: 7px; height: 7px; border-radius: 99px; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .head-acts { display: none; gap: 6px; }
+  [data-dock="collapsed"].proposal .head-acts { display: flex; }
+
+  .dock-body { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+  .dock-body > section { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 14px; overflow: hidden; }
+  .dock-body > section + section { border-left: 1px solid var(--line); }
+
+  .turns { margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none; overflow: hidden; }
+  .turns li { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 2px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .turns li span:first-child { flex: 1; min-width: 0; overflow: hidden; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { flex: none; padding: 1px 7px; border-radius: 99px; background: var(--hover); color: var(--muted); font-size: 11.5px; font-weight: 550; }
+  .tag--ok { background: var(--ok-soft); color: var(--ok); }
+  .empty-history { margin: 0; color: var(--faint); font-size: 12.5px; line-height: 1.45; }
+
+  /* Main column: the request box, or the proposal when one is waiting */
+  .composer { display: grid; grid-template-columns: 1fr 236px; gap: 14px; flex: 1; min-height: 0; }
+  .composer .ask { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-height: 0; }
+  .box { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: var(--faint); font-size: 13px; line-height: 1.4; }
+  .ask-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; }
+  .check i { position: relative; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 4px; background: var(--accent); }
+  .check i::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .check small { display: block; color: var(--faint); font-size: 11.5px; }
+  .drop { display: grid; place-content: center; gap: 4px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--faint); font-size: 12px; text-align: center; }
+  .drop b { color: var(--text); font-size: 12.5px; font-weight: 600; }
+
+  .review { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 10px 16px; flex: 1; min-height: 0; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+  .review .head { display: grid; align-content: start; gap: 6px; }
+  .req { margin: 0; font-weight: 600; line-height: 1.4; }
+  .sum { margin: 0; color: var(--text); font-size: 12.5px; line-height: 1.45; }
+  .changes { display: grid; align-content: start; gap: 8px; margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--island); list-style: none; overflow: hidden; }
+  .changes b { display: block; color: var(--accent-ink); font-size: 12.5px; }
+  .changes span { color: var(--text); font-size: 12px; }
+  .acts { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; }
+
+  .idle-only, .proposal-only { display: contents; }
+  .proposal .idle-only, .screen:not(.proposal) .proposal-only { display: none; }
+</style>
+</head>
+<body>
+  <div class="mock-bar">
+    <h1>AI assistant dock</h1>
+    <div class="seg" role="group" aria-label="Request state">
+      <button type="button" data-set-state="idle">Idle</button>
+      <button type="button" data-set-state="proposal" aria-pressed="true">Proposal waiting</button>
+    </div>
+    <div class="seg" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="light">Light</button>
+      <button type="button" data-set-theme="dark">Dark</button>
+    </div>
+    <p class="mock-note" id="note"></p>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="screen proposal" id="screen" data-ai="on" data-dock="open">
+      <div class="island ident"><button class="ibtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button><b>Broadcast Clean</b><span class="chip">Built-in</span><span class="chip">Saved</span></div>
+
+      <div class="island tools" role="toolbar" aria-label="Tools">
+        <button class="ibtn" aria-pressed="true" aria-label="Select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 17 2.5-7.5L21 11z"/></svg></button>
+        <button class="ibtn" aria-label="Hand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 16 0v-3a2 2 0 0 0-4 0"/></svg></button>
+        <span class="sep"></span>
+        <button class="ibtn" aria-label="Add text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+        <button class="ibtn" aria-label="Add image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></button>
+        <button class="ibtn" aria-label="Add shape"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+        <span class="sep"></span>
+        <button class="ibtn" id="aiButton" aria-pressed="true" aria-label="AI assistant (A)" title="AI assistant (A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></button>
+      </div>
+
+      <div class="actions"><span class="btn">Open preview</span><span class="btn">Save as a copy</span><span class="btn btn--primary">Put on air</span></div>
+
+      <div class="island banner ai-only proposal-only-flex" id="banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+        Previewing the AI's change · 2 changes
+        <button class="tbtn" type="button" data-discard>Discard</button><button class="mbtn" type="button" data-apply>Apply</button>
+      </div>
+
+      <div class="frame ease" id="frame">
+        <span class="frame-label">Broadcast frame · 1920 × 1080</span>
+        <div class="frame-art"><div class="sb"><div class="home">HOME</div><div class="score left">0</div><div class="clock"><span>00:00</span><span>MAJOR LEAGUE PAINTBALL</span></div><div class="score">0</div><div>AWAY</div></div></div>
+      </div>
+
+      <aside class="island panel props ease" id="props">
+        <h2>Left team name</h2>
+        <div class="label">Font</div><div class="field-line"></div>
+        <div class="label">Size</div><div class="field-line"></div>
+        <div class="ghost"><span></span><span style="width:70%"></span><span></span><span style="width:55%"></span></div>
+      </aside>
+
+      <aside class="island panel layers ease" id="layers">
+        <h2>Layers</h2>
+        <h3>LEFT TEAM</h3><div class="row">Logo<small>live</small></div><div class="row sel">Name<small>live</small></div><div class="row">Score<small>live</small></div>
+        <h3>CENTER</h3><div class="row">Game clock<small>live</small></div><div class="row">Centre line<small>live</small></div><div class="row">Event logo</div>
+        <h3>RIGHT TEAM</h3><div class="row">Score<small>live</small></div><div class="row">Name<small>live</small></div><div class="row">Logo<small>live</small></div>
+      </aside>
+
+      <section class="island dock ai-only ease" aria-label="AI assistant">
+        <header class="dock-head">
+          <span class="title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>AI assistant</span>
+          <span class="meta">Using ChatGPT plan · gpt-5.6-sol</span>
+          <span class="spacer"></span>
+          <span class="proposal-only"><span class="pv"><i></i>Previewing 2 changes</span></span>
+          <span class="head-acts"><button class="btn btn--sm" type="button" data-discard>Discard</button><button class="btn btn--sm btn--primary" type="button" data-apply>Apply</button></span>
+          <button class="btn btn--sm btn--quiet" type="button" id="collapse" aria-expanded="true">Collapse</button>
+        </header>
+        <div class="dock-body">
+          <section aria-label="Earlier requests">
+            <div class="label">Earlier requests</div>
+            <ul class="turns">
+              <li><span>Use Oswald for every name and score</span><span class="tag tag--ok">Applied</span></li>
+              <li><span>Darker panels behind the names</span><span class="tag">Discarded</span></li>
+              <li><span>Move the clock under the scores</span><span class="tag">Undone</span></li>
+            </ul>
+          </section>
+          <section>
+            <div class="idle-only">
+              <div class="composer">
+                <div class="ask">
+                  <div class="label">What should change?</div>
+                  <div class="box">Enter to ask · Shift+Enter for a new line</div>
+                  <div class="ask-row">
+                    <label class="check"><i></i><span>Let the AI see the canvas<small>Sends a picture of the frame with your request.</small></span></label>
+                    <button class="btn btn--sm btn--primary" type="button">Ask</button>
+                  </div>
+                </div>
+                <div class="drop"><b>Reference image</b>Drop a poster or another broadcast's scorebug, or choose a file</div>
+              </div>
+            </div>
+            <div class="proposal-only">
+              <div class="review">
+                <div class="head">
+                  <p class="req">Make the left team name bigger and the left score red so it stands out on the stream</p>
+                  <p class="sum">Made the left team name bigger and gave the left score a red background.</p>
+                </div>
+                <ul class="changes"><li><b>Left team name</b><span>Font size: 54 → 72</span></li><li><b>Left score</b><span>Fill: #f6f1e8 → #C8102E</span></li></ul>
+                <div class="acts"><button class="btn btn--sm" type="button" data-discard>Discard</button><button class="btn btn--sm btn--primary" type="button" data-apply>Apply</button></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div class="island zoom"><span class="ibtn">−</span><b style="min-width:48px;text-align:center">46%</b><span class="ibtn">+</span></div>
+      <div class="island previewbar">Preview as <span class="on">● Live feed</span> Game · Break · Timeout · Finished · Towel · Base · Winner</div>
+      <div class="island corner"><span class="ibtn">?</span></div>
+    </div>
+  </div>
+
+<script>
+  const screen = document.getElementById("screen");
+  const viewport = document.getElementById("viewport");
+  const frame = document.getElementById("frame");
+  const note = document.getElementById("note");
+  const DOCK = { open: 264, collapsed: 46 };
+  const BOTTOM_CHROME = 64;
+  const GAP = 16;
+
+  /** The frame takes the largest 16:9 box that fits between the side panels, under the banner, above the dock. */
+  function placeFrame() {
+    const ai = screen.dataset.ai === "on";
+    const dockHeight = ai ? DOCK[screen.dataset.dock] : 0;
+    const panelsBottom = BOTTOM_CHROME + (ai ? dockHeight + GAP : 0);
+    document.getElementById("props").style.bottom = `${panelsBottom}px`;
+    document.getElementById("layers").style.bottom = `${panelsBottom}px`;
+    const left = 14 + 300 + 30, right = 14 + 248 + 30;
+    const top = ai && screen.classList.contains("proposal") ? 150 : 110;
+    const bottom = 900 - panelsBottom - GAP;
+    const width = Math.min(1440 - left - right, (bottom - top) * 16 / 9);
+    const height = width * 9 / 16;
+    frame.style.width = `${width}px`;
+    frame.style.height = `${height}px`;
+    frame.style.left = `${left + (1440 - left - right - width) / 2}px`;
+    frame.style.top = `${top + Math.max(0, (bottom - top - height) / 2)}px`;
+  }
+
+  function render() {
+    const ai = screen.dataset.ai === "on";
+    const proposal = screen.classList.contains("proposal");
+    // With the AI off, the canvas shows the draft: the proposal waits, unpreviewed, until AI is turned back on.
+    screen.classList.toggle("previewing", ai && proposal);
+    document.getElementById("banner").style.display = ai && proposal ? "flex" : "none";
+    document.getElementById("aiButton").setAttribute("aria-pressed", String(ai));
+    const collapse = document.getElementById("collapse");
+    const open = screen.dataset.dock === "open";
+    collapse.textContent = open ? "Collapse" : "Expand";
+    collapse.setAttribute("aria-expanded", String(open));
+    note.textContent = !ai
+      ? "AI off: the toolbar's AI button is unpressed and nothing AI-related shows. The frame and panels use the full height. A proposal that was waiting stays saved, unpreviewed, until you turn AI back on."
+      : open
+        ? "AI on, dock open. The frame resizes to the space above the dock; Properties and Layers stay. Press A (or the toolbar button) to turn AI off; Collapse keeps AI on but shrinks the dock to one line."
+        : "AI on, dock collapsed to one line. With a proposal waiting, Discard and Apply stay on the bar, so you can judge it on a nearly full-size canvas.";
+    placeFrame();
+  }
+
+  function fit() {
+    const scale = Math.min(viewport.clientWidth / 1440, viewport.clientHeight / 900);
+    screen.style.transform = `scale(${scale})`;
+    screen.style.left = `${(viewport.clientWidth - 1440 * scale) / 2}px`;
+  }
+
+  const toggleAi = () => { screen.dataset.ai = screen.dataset.ai === "on" ? "off" : "on"; if (screen.dataset.ai === "on") screen.dataset.dock = "open"; render(); };
+  document.getElementById("aiButton").addEventListener("click", toggleAi);
+  document.getElementById("collapse").addEventListener("click", () => { screen.dataset.dock = screen.dataset.dock === "open" ? "collapsed" : "open"; render(); });
+  document.querySelectorAll("[data-apply],[data-discard]").forEach((b) => b.addEventListener("click", () => {
+    screen.classList.remove("proposal"); setPressed("data-set-state", "idle"); render();
+  }));
+  document.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "a" && !e.metaKey && !e.ctrlKey && !e.altKey) toggleAi(); });
+
+  function setPressed(attr, value) { document.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute("aria-pressed", String(b.getAttribute(attr) === value))); }
+  document.querySelectorAll("[data-set-state]").forEach((b) => b.addEventListener("click", () => {
+    screen.classList.toggle("proposal", b.dataset.setState === "proposal"); setPressed("data-set-state", b.dataset.setState); render();
+  }));
+  document.querySelectorAll("[data-set-theme]").forEach((b) => b.addEventListener("click", () => {
+    document.documentElement.dataset.theme = b.dataset.setTheme; setPressed("data-set-theme", b.dataset.setTheme);
+  }));
+  setPressed("data-set-theme", matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  addEventListener("resize", fit); fit(); render();
+</script>
+</body>
+</html>
