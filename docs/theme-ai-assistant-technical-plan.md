@@ -1,6 +1,14 @@
 # Theme AI Assistant: Describe a Change, Review It, Apply It
 
-Status: proposed · 2026-10-08
+Status: phases 1–3 implemented, untested against real providers · 2026-10-08
+
+What was built differs from the plan below in a few places:
+
+- All five providers shipped together, not across phases 1 and 3: the OpenAI-format adapter made the extra three cheap.
+- Settings live in **Maintenance → AI assistant**, beside the ngrok token, not in Settings: that page already holds keys and acts at once.
+- Each provider lists its models live (the "Load model list" button, which also tests the key), so defaults going stale matters less. Claude defaults to `claude-opus-5-5` with server-side refusal fallback; OpenRouter has no default and the designer picks a `:free` model.
+- Every provider is asked for plain JSON and our code validates it. Provider schema features (OpenAI `json_schema`, Gemini `responseSchema`) weren't used: they can't express "any value" for an edit.
+- The "check your work" second pass and the token-count-based cost display beyond "last request: N tokens" are not built yet.
 
 Building a theme today means many small edits across pieces, layers and settings. Plenty of them are easy to describe but slow to click through: "use Oswald everywhere", "match this poster's colours", "make the timer bigger and move it under the scores".
 
@@ -165,6 +173,7 @@ Each phase ships on its own. After phase 1 the assistant is already usable for t
 
 ## 9. Open questions
 
+0. **Answered:** the editor already shows "This theme was changed somewhere else" when a saved theme changes under an open draft, so the assistant (which never saves) needs nothing extra.
 1. **Default provider for new installs.** Recommendation: none selected. Settings explains the choice, with Gemini's free tier as the easiest start and Claude as the best results.
 2. **Ollama quality.** It needs a real trial on a mid-range Windows laptop with a current vision model before we promise anything beyond "experimental".
 3. **Capture fidelity.** Check `html-to-image` against a theme that uses blend modes and backdrop blur. If it's poor, fall back to sending only the reference image.

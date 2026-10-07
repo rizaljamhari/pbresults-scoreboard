@@ -10,7 +10,9 @@ import { z } from "zod";
 import { applyConsoleTitle } from "./consoleTitle.js";
 import { livePoller } from "./livePoller.js";
 import { operatorTextRuntime } from "./operatorTextRuntime.js";
-import { clientDistDir, logsDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
+import { aiAssistantSecretPath, clientDistDir, logsDir, remoteAccessSecretPath, uploadsDir } from "./runtimePaths.js";
+import { registerAiRoutes } from "./ai/aiRoutes.js";
+import { createAiSettingsStore } from "./ai/aiSettings.js";
 import {
   backfillVisibleContentMetadata,
   clearAllOperatorTextOverrides,
@@ -885,6 +887,11 @@ app.post("/api/themes/import", async (request, reply) => {
 registerAssetRoutes(app, {
   hub: appEventHub,
   onTeamsChanged: () => livePoller.reconfigure()
+});
+
+registerAiRoutes(app, {
+  settings: createAiSettingsStore({ filePath: aiAssistantSecretPath }),
+  isManagementRequest: isOnsiteRequest
 });
 
 const clientRoot = clientDistDir;

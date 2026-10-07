@@ -2538,6 +2538,118 @@ details[open]:not(.editor-section-card) > summary::after {
   font-weight: 650;
 }
 
+/* AI assistant sub-view: the thread, the proposed change and the request box. */
+.te-ai {
+  display: grid;
+  gap: 10px;
+}
+
+.te-ai-thread {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.te-ai-turn {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--te-line);
+  border-radius: 8px;
+}
+
+.te-ai-turn--discarded {
+  opacity: 0.7;
+}
+
+.te-ai-turn .te-chip {
+  justify-self: start;
+}
+
+.te-ai-request {
+  margin: 0;
+  color: var(--te-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.te-ai-summary {
+  margin: 0;
+  color: var(--te-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.te-ai-review {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 10px;
+  border: 1px solid var(--te-accent);
+  border-radius: 8px;
+  background: var(--te-accent-soft);
+}
+
+.te-ai-review > .te-note,
+.te-ai-review > .te-callout,
+.te-ai-review > .te-ai-actions {
+  margin: 0 10px;
+}
+
+.te-ai-review .te-review-body {
+  max-height: 260px;
+  padding: 0 10px;
+}
+
+.te-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.te-ai-actions .te-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.te-ai-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--te-text);
+  font-size: 12.5px;
+}
+
+.te-ai-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--te-line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.te-ai-attachment img {
+  width: 48px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.te-ai-attachment span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--te-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Sub-view bodies (Preview data) stack their groups like Properties does. */
 .te-subview-body,
 .te-fieldset {

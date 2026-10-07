@@ -40,6 +40,7 @@ import {
   MousePointer2,
   Play,
   SlidersHorizontal,
+  Sparkles,
   PanelRightOpen,
   Plus,
   Redo2,
@@ -78,6 +79,8 @@ import { PreviewDataProperties, type PreviewEventMode, type PreviewLogoMode, typ
 import { showToast } from "../toast";
 import { pieceName } from "../components/editor/pieceNames";
 import { ChangeReview } from "../components/editor/ChangeReview";
+import { AiAssistantPanel, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
+import { toJpeg } from "html-to-image";
 import { versionTheme } from "../components/editor/VersionsProperties";
 import { diffThemes } from "../../shared/themeDiff";
 import { useAppEvents } from "../appEvents";
@@ -88,6 +91,35 @@ import { confirmAction, modalPromptOpen } from "../confirm";
 
 
 type EditorMode = "basic" | "advanced";
+/** Names pieces in the AI assistant's change list the way the editor does. */
+function aiPieceName(theme: ThemeDefinition) {
+  const entries = listThemeComponentEntries(theme);
+  return (id: string, label: string) => {
+    const entry = entries.find((candidate) => candidate.id === id);
+    return entry ? pieceName(entry) : label;
+  };
+}
+
+/** A capture of the canvas for the AI to judge its own work: the overlay only, without selection handles. */
+async function captureCanvasForAi(theme: ThemeDefinition): Promise<AiImage | null> {
+  // The stage's first child carries the editor's zoom and pan; capturing it with those removed gives the canvas at 1:1.
+  const stage = document.querySelector<HTMLElement>(".te-canvas-host .canvas-stage > div");
+  if (!stage) return null;
+  const width = theme.canvas.width;
+  const height = theme.canvas.height;
+  const dataUrl = await toJpeg(stage, {
+    width,
+    height,
+    pixelRatio: Math.min(1, 960 / width),
+    quality: 0.8,
+    backgroundColor: "#202020",
+    style: { transform: "none", left: "0", top: "0" },
+    filter: (node) =>
+      !(node instanceof HTMLElement && node.matches(".moveable-control-box, .canvas-marquee, .te-frame-label, .editor-hitbox-outline"))
+  });
+  return { mediaType: "image/jpeg", data: dataUrl.slice(dataUrl.indexOf(",") + 1) };
+}
+
 type InspectorView = "theme" | "component" | "concede" | "preview";
 type SlotId = "left" | "center" | "right";
 type PreviewPresetId = "live" | "game" | "break" | "towelHome" | "towelAway" | "baseHome" | "baseAway";
@@ -445,12 +477,15 @@ export function ThemeEditorPage() {
   const appearance = useAppearance();
   const [arrangeReference, setArrangeReference] = useState<ArrangeReference>("selection");
   // Properties shows the selection (or the theme); the two older settings views are reached from the theme panel.
-  const [propsView, setPropsView] = useState<"auto" | "preview">("auto");
+  const [propsView, setPropsView] = useState<"auto" | "preview" | "ai">("auto");
+  // The AI assistant's thread lasts for this editor session, even while its panel is closed.
+  const [aiThread, setAiThread] = useState<AiTurn[]>([]);
   const [layersCollapsed, setLayersCollapsed] = useState(false);
   const selectionKey = selectedIds.join("|") + (selected ?? "");
   useEffect(() => {
     if (selectionKey) {
-      setPropsView("auto");
+      // The AI assistant stays open: picking a piece from its change list shouldn't close it.
+      setPropsView((view) => (view === "ai" ? view : "auto"));
     }
   }, [selectionKey]);
   const [lockedIds, setLockedIds] = useState<Set<string>>(() => readLocks(id));
@@ -2242,6 +2277,10 @@ export function ThemeEditorPage() {
                   </Popover.Content>
                 </Popover.Portal>
               </Popover.Root>
+              <span className="te-sep" aria-hidden />
+              <IconButton label="AI assistant" pressed={propsView === "ai"} onClick={() => setPropsView((view) => (view === "ai" ? "auto" : "ai"))}>
+                <Sparkles />
+              </IconButton>
             </Island>
             <p className="te-hint">
               {tool === "hand"
@@ -2518,7 +2557,27 @@ export function ThemeEditorPage() {
       <ThemeColorsContext.Provider value={theme.tokens.colors}>
       <ThemeFontOptionsContext.Provider value={fontOptions(theme)}>
       <aside className="te-island te-props" aria-label="Properties">
-        {propsView !== "auto" ? (
+        {propsView === "ai" ? (
+          <div className="te-subview">
+            <header className="te-subview-head">
+              <IconButton label="Back to properties" onClick={() => setPropsView("auto")}>
+                <ArrowLeft />
+              </IconButton>
+              <h2>AI assistant</h2>
+            </header>
+            <AiAssistantPanel
+              theme={theme}
+              focusPieceId={selectAllMode ? null : selected}
+              focusPieceName={selectAllMode || !selected ? null : aiPieceName(theme)(selected, selected)}
+              thread={aiThread}
+              setThread={setAiThread}
+              pieceNameFor={aiPieceName}
+              capturePreview={() => captureCanvasForAi(theme)}
+              onApply={(next) => updateTheme(next)}
+              onSelectPiece={(pieceId) => selectComponent(pieceId)}
+            />
+          </div>
+        ) : propsView !== "auto" ? (
           <div className="te-subview">
             <header className="te-subview-head">
               <IconButton label="Back to properties" onClick={() => setPropsView("auto")}>

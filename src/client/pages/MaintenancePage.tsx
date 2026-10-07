@@ -6,6 +6,7 @@ import { useSettings, useUpdateStatus } from "../hooks";
 import { showToast } from "../toast";
 import type { AppSettings } from "../../shared/theme";
 import { Chip, SettingRow, Switch, Toolbar } from "../components/admin/kit";
+import { AiAssistantRows } from "../components/AiAssistantRows";
 import { BackupRows } from "../components/BackupRows";
 import { RemoteAccessRows } from "../components/RemoteAccessRows";
 import { SoftwareUpdateRows } from "../components/SoftwareUpdateRows";
@@ -14,13 +15,14 @@ import { SectionToc, useSectionNav } from "../components/SectionNav";
 const SECTIONS = [
   { id: "set-backup", label: "Backup and restore" },
   { id: "set-updates", label: "Software updates" },
-  { id: "set-remote", label: "Remote access" }
+  { id: "set-remote", label: "Remote access" },
+  { id: "set-ai", label: "AI assistant" }
 ] as const;
 
 const CHECK_HOURS_MIN = 1;
 const CHECK_HOURS_MAX = 168;
 
-/** Backups, updates and remote access. Every control here acts at once; there is nothing to save. */
+/** Backups, updates, remote access and the theme AI assistant. Every control here acts at once; there is nothing to save. */
 export function MaintenancePage() {
   const settings = useSettings();
   const update = useUpdateStatus();
@@ -65,6 +67,13 @@ export function MaintenancePage() {
               <h2>Remote access</h2>
               <div className="ad-surface" style={{ overflow: "hidden" }}>
                 <RemoteAccessRows />
+              </div>
+            </section>
+
+            <section className="ad-set-group" id="set-ai">
+              <h2>AI assistant</h2>
+              <div className="ad-surface" style={{ overflow: "hidden" }}>
+                <AiAssistantRows />
               </div>
             </section>
           </div>

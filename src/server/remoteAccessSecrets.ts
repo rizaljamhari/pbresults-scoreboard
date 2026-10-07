@@ -49,7 +49,7 @@ function assertNoEnvironmentOverride(env: NodeJS.ProcessEnv) {
 }
 
 /** Write through a unique temporary file in the same directory, so a crash never leaves a half-written token behind. */
-function writeSecretFile(target: string, contents: string) {
+export function writeSecretFile(target: string, contents: string) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const temporary = `${target}.${randomUUID()}.tmp`;
   try {

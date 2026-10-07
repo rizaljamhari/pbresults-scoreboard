@@ -23,6 +23,7 @@ import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/b
 import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
 import type { ScoreboardState } from "../shared/scoreboard";
+import type { AiProviderId, AiSettingsUpdate, AiSettingsView, ThemeEditRequest, ThemeEditResponse } from "../shared/aiAssistant";
 import { REMOTE_ACCESS_CONFIRMATIONS, type LocalRemoteAccessStatus, type RemoteAccessStatus } from "../shared/remoteAccess";
 
 type UploadProcessingInfo = {
@@ -180,6 +181,16 @@ export const api = {
     }).then(handle<BackupStatus>),
   // Local-only fields (configuration source, credentials) are present only on the scoreboard computer.
   getRemoteAccessStatus: () => fetch("/api/remote-access/status", { cache: "no-store" }).then(handle<RemoteAccessStatus | LocalRemoteAccessStatus>),
+  getAiSettings: () => fetch("/api/ai/settings").then(handle<AiSettingsView>),
+  updateAiSettings: (change: AiSettingsUpdate) =>
+    fetch("/api/ai/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(change) }).then(handle<AiSettingsView>),
+  /** Lists a provider's models; with an unsaved key, this is how Settings tests the key before saving it. */
+  listAiModels: (provider: AiProviderId, options: { apiKey?: string; baseUrl?: string } = {}) =>
+    fetch("/api/ai/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider, ...options }) }).then(
+      handle<{ models: string[] }>
+    ),
+  requestThemeEdit: (request: ThemeEditRequest, signal?: AbortSignal) =>
+    fetch("/api/ai/theme-edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal }).then(handle<ThemeEditResponse>),
   saveRemoteAccessToken: (authtoken: string) =>
     fetch("/api/remote-access/configuration", {
       method: "PUT",
