@@ -103,6 +103,8 @@ export async function runThemeEdit(
   for (const turn of input.history) {
     messages.push({ role: "user", text: `Request: ${turn.request}` });
     messages.push({ role: "assistant", text: JSON.stringify({ summary: turn.summary, ops: turn.ops }) });
+    // Discarded and undone proposals stay in the thread for context, but aren't in the theme sent below.
+    if (turn.kept === false && turn.ops.length) messages.push({ role: "user", text: "(I didn't keep that change. It isn't in the current theme.)" });
   }
   messages.push({
     role: "user",

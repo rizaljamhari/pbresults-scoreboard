@@ -64,6 +64,14 @@ describe("runThemeEdit", () => {
     await expect(runThemeEdit(activeSettings(), { draft: draft(), request: "Bigger", history: [] }, signal, providers)).rejects.toThrow("nothing was changed");
   });
 
+  it("tells the AI which earlier changes weren't kept", async () => {
+    const { providers, calls } = fakeProviders([goodAnswer]);
+    const earlier = { request: "Red scores", summary: "Made scores red.", ops: [{ op: "replace" as const, path: "/components/homeScore/backgroundColor", value: "#f00" }] };
+    await runThemeEdit(activeSettings(), { draft: draft(), request: "Bigger", history: [{ ...earlier, kept: false }, { ...earlier, kept: true }] }, signal, providers);
+    const notes = calls[0].messages.filter((message) => message.text.includes("didn't keep that change"));
+    expect(notes).toHaveLength(1);
+  });
+
   it("refuses when no provider is set up", async () => {
     await expect(runThemeEdit(createAiSettingsStore({ memory: true }), { draft: draft(), request: "x", history: [] }, signal)).rejects.toBeInstanceOf(AiProviderError);
   });

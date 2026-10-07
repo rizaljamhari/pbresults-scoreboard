@@ -2555,34 +2555,22 @@ details[open]:not(.editor-section-card) > summary::after {
   font-weight: 650;
 }
 
-/* AI assistant sub-view: the thread, the proposed change and the request box. */
+/* AI assistant sub-view: earlier requests, the proposal under review and the request box. */
 .te-ai {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
-.te-ai-thread {
-  display: grid;
-  gap: 8px;
-  margin: 0;
+/* Announcements for screen readers; nothing visible. */
+.te-ai-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
   padding: 0;
-  list-style: none;
-}
-
-.te-ai-turn {
-  display: grid;
-  gap: 4px;
-  padding: 8px 10px;
-  border: 1px solid var(--te-line);
-  border-radius: 8px;
-}
-
-.te-ai-turn--discarded {
-  opacity: 0.7;
-}
-
-.te-ai-turn .te-chip {
-  justify-self: start;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .te-ai-request {
@@ -2599,26 +2587,143 @@ details[open]:not(.editor-section-card) > summary::after {
   color: var(--te-muted);
   font-size: 12.5px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
+/* Earlier requests fold to one line; the newest stays open so its answer is read. */
+.te-ai-thread {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--te-line);
+  list-style: none;
+}
+
+.te-ai-turn {
+  border-bottom: 1px solid var(--te-line);
+}
+
+.te-ai-turn > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 2px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.te-ai-turn > summary::-webkit-details-marker {
+  display: none;
+}
+
+.te-ai-turn > summary .te-ai-request {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.te-ai-turn[open] > summary .te-ai-request {
+  white-space: normal;
+}
+
+.te-ai-turn > summary:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--te-accent);
+  outline-offset: -2px;
+}
+
+.te-ai-turn > .te-ai-summary,
+.te-ai-turn > .te-ai-aftercare {
+  padding: 0 2px 10px;
+}
+
+.te-ai-turn--discarded .te-ai-request,
+.te-ai-turn--undone .te-ai-request {
+  color: var(--te-muted);
+}
+
+.te-ai-aftercare {
+  margin: 0;
+  color: var(--ad-ok);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.te-ai-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.te-ai-tag--ok {
+  background: var(--ad-ok-soft);
+  color: var(--ad-ok);
+}
+
+.te-ai-tag--quiet {
+  background: var(--te-hover);
+  color: var(--te-muted);
+}
+
+/* The proposal: what was asked, what the AI says it did, what will change, then Discard or Apply. */
 .te-ai-review {
   display: grid;
-  gap: 8px;
-  padding: 8px 0 10px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--te-accent);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--te-accent-soft);
 }
 
-.te-ai-review > .te-note,
-.te-ai-review > .te-callout,
-.te-ai-review > .te-ai-actions {
-  margin: 0 10px;
+.te-ai-review:focus-visible {
+  outline: 2px solid var(--te-accent);
+  outline-offset: 2px;
+}
+
+.te-ai-review:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.te-ai-review-head {
+  display: grid;
+  gap: 4px;
+}
+
+.te-ai-review .te-callout {
+  margin: 0;
 }
 
 .te-ai-review .te-review-body {
-  max-height: 260px;
-  padding: 0 10px;
+  max-height: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--te-island);
+}
+
+.te-ai-preview-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--te-accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.te-ai-preview-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--te-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--te-accent) 22%, transparent);
 }
 
 .te-ai-actions {
@@ -2628,17 +2733,75 @@ details[open]:not(.editor-section-card) > summary::after {
   gap: 6px;
 }
 
-.te-ai-actions .te-btn svg {
-  width: 15px;
-  height: 15px;
+.te-ai-actions--start {
+  justify-content: flex-start;
+}
+
+/* Inside a panel, buttons sit on the surface: no floating shadow, and a size that fits the 260px column. */
+.te-ai .te-btn {
+  height: 32px;
+  padding: 0 11px;
+  box-shadow: none;
+}
+
+.te-ai .te-btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--te-muted);
+}
+
+.te-ai .te-btn--quiet:hover:not(:disabled) {
+  background: var(--te-hover);
+  color: var(--te-text);
+}
+
+.te-ai-composer {
+  display: grid;
+  gap: 10px;
+}
+
+.te-ai-input {
+  min-height: 52px;
+  overflow-y: auto;
+  resize: none;
+}
+
+.te-ai-input::placeholder {
+  color: var(--te-faint);
+  opacity: 1;
+}
+
+.te-ai-input:read-only {
+  color: var(--te-muted);
 }
 
 .te-ai-option {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   color: var(--te-text);
   font-size: 12.5px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.te-ai-option input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  accent-color: var(--te-accent);
+}
+
+.te-ai-option input:focus-visible {
+  outline: 2px solid var(--te-accent);
+  outline-offset: 2px;
+}
+
+.te-ai-option small {
+  display: block;
+  color: var(--te-faint);
+  font-size: 11.5px;
 }
 
 .te-ai-attachment {
@@ -2665,6 +2828,81 @@ details[open]:not(.editor-section-card) > summary::after {
   color: var(--te-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.te-ai-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--te-line);
+  border-top-color: var(--te-accent);
+  border-radius: 999px;
+  animation: te-ai-spin 0.8s linear infinite;
+}
+
+@keyframes te-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .te-ai-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.te-ai-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.te-ai-meta p {
+  margin: 0;
+  color: var(--te-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+/* Errors are critical red, not the amber used for drafts and warnings. */
+.te-callout--crit {
+  display: grid;
+  gap: 8px;
+  background: var(--ad-crit-soft);
+  color: var(--ad-crit);
+}
+
+.te-callout p {
+  margin: 0;
+}
+
+.te-shell .te-callout.te-callout--crit {
+  background: var(--ad-crit-soft);
+  color: var(--ad-crit);
+}
+
+/* "Previewing the AI's change" over the canvas: selection blue, because it's about what you're acting on. */
+.te-banner.te-banner--ai {
+  align-items: center;
+  border-color: var(--te-accent);
+  background: var(--te-accent-soft);
+  color: var(--te-accent-ink);
+  font-weight: 600;
+}
+
+.te-banner--ai > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.te-mini-btn--primary {
+  border-color: var(--te-accent);
+  background: var(--te-accent);
+  color: var(--ad-on-accent);
+}
+
+.te-mini-btn--primary:hover {
+  background: var(--te-accent-ink);
 }
 
 /* Sub-view bodies (Preview data) stack their groups like Properties does. */
@@ -3370,6 +3608,20 @@ details[open]:not(.editor-section-card) > summary::after {
 :root[data-admin-theme="dark"] .te-shell .te-banner {
   border-color: #6e2d28;
   background: #2e1816;
+}
+
+:root[data-admin-theme="dark"] .te-shell .te-banner.te-banner--ai {
+  border-color: var(--te-accent);
+  background: var(--te-accent-soft);
+}
+
+:root[data-admin-theme="dark"] .te-shell .te-callout.te-callout--crit {
+  background: var(--ad-crit-soft);
+  color: var(--ad-crit);
+}
+
+:root[data-admin-theme="dark"] .te-shell .te-mini-btn--primary {
+  color: var(--ad-on-accent);
 }
 
 :root[data-admin-theme="dark"] .te-shell .te-callout {

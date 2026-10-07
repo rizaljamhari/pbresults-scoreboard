@@ -63,7 +63,15 @@ export const themeEditRequestSchema = z.object({
   request: z.string().trim().min(1).max(4000),
   /** Earlier turns of this editor session's thread, oldest first. */
   history: z
-    .array(z.object({ request: z.string().max(4000), summary: z.string().max(2000), ops: z.array(themeOpSchema).max(200) }))
+    .array(
+      z.object({
+        request: z.string().max(4000),
+        summary: z.string().max(2000),
+        ops: z.array(themeOpSchema).max(200),
+        /** False when the designer discarded or undid this change, so the AI doesn't assume it's in the theme. */
+        kept: z.boolean().default(true)
+      })
+    )
     .max(20)
     .default([]),
   reference: imageSchema.optional(),

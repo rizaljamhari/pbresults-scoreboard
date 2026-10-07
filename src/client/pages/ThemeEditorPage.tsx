@@ -82,7 +82,7 @@ import { showToast } from "../toast";
 import { setPageTitle } from "../documentTitle";
 import { pieceName } from "../components/editor/pieceNames";
 import { ChangeReview } from "../components/editor/ChangeReview";
-import { AiAssistantPanel, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
+import { AiAssistantPanel, useAiReview, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
 import { toJpeg } from "html-to-image";
 import { versionTheme } from "../components/editor/VersionsProperties";
 import { diffThemes } from "../../shared/themeDiff";
@@ -539,6 +539,9 @@ export function ThemeEditorPage() {
   const [overlayKey, setOverlayKey] = useState(0);
   const [overlaySelected, setOverlaySelected] = useState(false);
   const theme = themeResource.data;
+  // A proposal from the AI assistant is drawn on the canvas until it's applied or discarded; the draft stays as it is.
+  const aiReview = useAiReview(theme ?? null, aiThread, aiPieceName);
+  const aiPreview = aiReview && "next" in aiReview ? aiReview.next : null;
   const themeRef = useRef(theme);
   const savedSnapshotRef = useRef(savedSnapshot);
   themeRef.current = theme;
@@ -1137,10 +1140,28 @@ export function ThemeEditorPage() {
     });
   }
 
+  /** Applies the AI assistant's proposal as one undo step, remembering which step so undo can mark it undone. */
+  function applyAiProposal() {
+    if (!aiReview || !("next" in aiReview)) return;
+    const appliedAt = history.length === 0 ? 2 : history.length + 1;
+    updateTheme(aiReview.next);
+    settleAiProposal({ status: "applied", appliedAt });
+  }
+
+  function settleAiProposal(update: Partial<AiTurn>) {
+    setAiThread((current) => current.map((turn, index) => (index === current.length - 1 && turn.status === "pending" ? { ...turn, ...update } : turn)));
+  }
+
+  /** Keeps the assistant's "Applied" label honest as undo and redo move past its step. */
+  function markAiTurnsAt(length: number, from: AiTurn["status"], to: AiTurn["status"]) {
+    setAiThread((current) => (current.some((turn) => turn.status === from && turn.appliedAt === length) ? current.map((turn) => (turn.status === from && turn.appliedAt === length ? { ...turn, status: to } : turn)) : current));
+  }
+
   function undo() {
     if (history.length <= 1 || !themeResource.data) {
       return;
     }
+    markAiTurnsAt(history.length, "applied", "undone");
     const currentTheme = themeResource.data;
     const previous = history[history.length - 2];
     setFuture((current) => [structuredClone(currentTheme), ...current]);
@@ -1154,6 +1175,7 @@ export function ThemeEditorPage() {
       return;
     }
     const [next, ...rest] = future;
+    markAiTurnsAt(history.length + 1, "undone", "applied");
     setHistory((current) => [...current, structuredClone(next)]);
     setFuture(rest);
     themeResource.setData({ ...structuredClone(next), versions: themeResource.data?.versions ?? next.versions });
@@ -2033,6 +2055,11 @@ export function ThemeEditorPage() {
           addFreeShapeComponent();
           return;
         }
+        if (key === "a") {
+          event.preventDefault();
+          setPropsView((view) => (view === "ai" ? "auto" : "ai"));
+          return;
+        }
       }
 
       if (event.key === "Tab") {
@@ -2229,7 +2256,7 @@ export function ThemeEditorPage() {
         lockedIds={lockedIds}
         fitInsets={layersHidden || layersCollapsed ? EDITOR_FIT_INSETS_NO_LAYERS : EDITOR_FIT_INSETS}
         panMode={tool === "hand"}
-        theme={theme}
+        theme={aiPreview ?? theme}
         live={previewLive}
         assets={assets.data ?? []}
         selectedId={overlaySelected ? null : selected}
@@ -2256,7 +2283,8 @@ export function ThemeEditorPage() {
         }}
         onMarqueeSelect={selectComponents}
         onSelectAll={selectAllComponents}
-        onUpdate={updateTheme}
+        // While the AI's proposal is previewed, the canvas shows it read-only: Apply or Discard first.
+        onUpdate={aiPreview ? () => showToast({ kind: "info", message: "Apply or discard the AI's change before editing on the canvas." }) : updateTheme}
         renderChrome={(canvas) => (
           <>
             <Island className="te-ident">
@@ -2366,7 +2394,7 @@ export function ThemeEditorPage() {
                 </Popover.Portal>
               </Popover.Root>
               <span className="te-sep" aria-hidden />
-              <IconButton label="AI assistant" pressed={propsView === "ai"} onClick={() => setPropsView((view) => (view === "ai" ? "auto" : "ai"))}>
+              <IconButton label="AI assistant" shortcut="A" pressed={propsView === "ai"} onClick={() => setPropsView((view) => (view === "ai" ? "auto" : "ai"))}>
                 <Sparkles />
               </IconButton>
             </Island>
@@ -2384,6 +2412,19 @@ export function ThemeEditorPage() {
                 </button>
                 <button type="button" className="te-text-btn" onClick={() => setExternalTheme(null)}>
                   Keep editing
+                </button>
+              </Island>
+            ) : aiPreview && aiReview && "changes" in aiReview ? (
+              <Island className="te-banner te-banner--ai" role="status">
+                <Sparkles aria-hidden />
+                <span>
+                  Previewing the AI's change · {aiReview.changes.length} {aiReview.changes.length === 1 ? "change" : "changes"}
+                </span>
+                <button type="button" className="te-text-btn" onClick={() => settleAiProposal({ status: "discarded" })}>
+                  Discard
+                </button>
+                <button type="button" className="te-mini-btn te-mini-btn--primary" onClick={applyAiProposal}>
+                  Apply
                 </button>
               </Island>
             ) : null}
@@ -2673,9 +2714,11 @@ export function ThemeEditorPage() {
               focusPieceName={selectAllMode || !selected ? null : aiPieceName(theme)(selected, selected)}
               thread={aiThread}
               setThread={setAiThread}
-              pieceNameFor={aiPieceName}
+              review={aiReview}
               capturePreview={() => captureCanvasForAi(theme)}
-              onApply={(next) => updateTheme(next)}
+              onApply={applyAiProposal}
+              onDiscard={() => settleAiProposal({ status: "discarded" })}
+              onClose={() => setPropsView("auto")}
               onSelectPiece={(pieceId) => selectComponent(pieceId)}
             />
           </div>

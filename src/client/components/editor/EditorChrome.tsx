@@ -61,6 +61,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["T", "Add text"],
   ["I", "Add image"],
   ["R", "Add shape"],
+  ["A", "AI assistant"],
   ["⌘/Ctrl Alt C, then V", "Copy a piece's style, then paste it onto the selection"],
   ["S", "Snap on or off"],
   ["Drag empty canvas", "Select everything in the box (Shift adds)"],

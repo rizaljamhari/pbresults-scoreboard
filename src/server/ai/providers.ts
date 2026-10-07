@@ -63,7 +63,7 @@ export interface AiProvider {
 
 function unreachable(provider: string): AiProviderError {
   return provider === "Ollama"
-    ? new AiProviderError("unreachable", "Couldn't reach Ollama. Check that it's running and the address in Settings is right.")
+    ? new AiProviderError("unreachable", "Couldn't reach Ollama. Check that it's running and that its address in Maintenance → AI assistant is right.")
     : new AiProviderError("unreachable", `Couldn't reach ${provider}. Check the internet connection.`);
 }
 
