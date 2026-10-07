@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAssets, useLiveState, useSettings, useTeams, useTheme } from "../hooks";
@@ -45,6 +45,7 @@ import {
   Plus,
   Redo2,
   RefreshCw,
+  Save,
   Square,
   SquareDashedMousePointer,
   Sun,
@@ -60,6 +61,7 @@ import { IconButton, Island, ShortcutsHelp } from "../components/editor/EditorCh
 import { ArrangeMenuItems, ArrangePanel, type ArrangeActions } from "../components/editor/ArrangeControls";
 import { LayersPanel } from "../components/editor/LayersPanel";
 import { PieceProperties, themeSwatches } from "../components/editor/PieceProperties";
+import { useTeamNameClips } from "../components/editor/nameFit";
 import { ThemeProperties } from "../components/editor/ThemeProperties";
 import { EventOverlayProperties, type EventKind } from "../components/editor/EventOverlayProperties";
 import { EVENT_CARD_ID, momentCardId, type OverlayTarget } from "../components/editor/MoveableLayer";
@@ -77,6 +79,7 @@ import {
 import { CentreLineProperties } from "../components/editor/CentreLineProperties";
 import { PreviewDataProperties, type PreviewEventMode, type PreviewLogoMode, type PreviewNameMode, type PreviewPeriodMode, type PreviewSwitchMode } from "../components/editor/PreviewDataProperties";
 import { showToast } from "../toast";
+import { setPageTitle } from "../documentTitle";
 import { pieceName } from "../components/editor/pieceNames";
 import { ChangeReview } from "../components/editor/ChangeReview";
 import { AiAssistantPanel, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
@@ -259,11 +262,8 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-// Tab cycles canvas pieces only while focus is on the canvas (or nowhere); elsewhere it keeps moving focus.
+// Tab cycles canvas pieces only while focus is on the canvas; everywhere else it moves focus as usual.
 function isCanvasFocusTarget(target: EventTarget | null) {
-  if (target === document.body || target === document.documentElement) {
-    return true;
-  }
   return target instanceof HTMLElement && Boolean(target.closest(".canvas-pan-layer"));
 }
 
@@ -480,6 +480,7 @@ export function ThemeEditorPage() {
   const [propsView, setPropsView] = useState<"auto" | "preview" | "ai">("auto");
   // The AI assistant's thread lasts for this editor session, even while its panel is closed.
   const [aiThread, setAiThread] = useState<AiTurn[]>([]);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [layersCollapsed, setLayersCollapsed] = useState(false);
   const selectionKey = selectedIds.join("|") + (selected ?? "");
   useEffect(() => {
@@ -531,6 +532,8 @@ export function ThemeEditorPage() {
   /** With an on-air placement: edit the design as built, or look at it where it lands on air. */
   const [placementView, setPlacementView] = useState<"design" | "onAir">("design");
   const previewTimeoutTimerRef = useRef<number | null>(null);
+  // The preview to go back to after a moment card opened from Layers; null once the operator picks a preview themselves.
+  const momentPreviewReturnRef = useRef<"live" | "game" | "break" | "towel" | "base" | "winner" | null>(null);
   const [previewSide, setPreviewSide] = useState<"left" | "right">("left");
   const [previewFinished, setPreviewFinished] = useState(false);
   const [overlayKey, setOverlayKey] = useState(0);
@@ -744,6 +747,22 @@ export function ThemeEditorPage() {
     setOverlaySelected(true);
   }
 
+  /** Opens a moment card from Layers or the centre line; leaving it for another piece restores the earlier preview. */
+  function openMomentPreview(kind: "timeout" | "gameFinished") {
+    if (previewMode !== "timeout" && previewMode !== "finished") {
+      momentPreviewReturnRef.current = previewMode;
+    }
+    applyPreviewMode(kind === "timeout" ? "timeout" : "finished");
+  }
+
+  function leaveMomentPreview() {
+    const previous = momentPreviewReturnRef.current;
+    momentPreviewReturnRef.current = null;
+    if (previous !== null && (previewMode === "timeout" || previewMode === "finished")) {
+      applyPreviewMode(previous);
+    }
+  }
+
   function applyPreviewMode(mode: typeof previewMode, side: "left" | "right" = previewSide) {
     setPreviewMode(mode);
     setPreviewSide(side);
@@ -852,6 +871,8 @@ export function ThemeEditorPage() {
   const selectedMirroredPair = selected && isFixedComponentId(selected) ? mirroredPairForComponent(selected) : null;
   const hasUnsavedChanges = savedSnapshot && theme ? !sameTheme(savedSnapshot, theme) : false;
   const isOnAir = Boolean(theme && settings.data?.publishedThemeId === theme.id);
+  // Built-in themes save to a copy by default; updating the built-in itself moves to the theme menu.
+  const copyFirst = Boolean(theme?.builtin) && !isOnAir;
   // What Save to air would change on the live overlay; only worked out while the review is open.
   const airChanges = useMemo(() => {
     if (!reviewOpen || !savedSnapshot || !theme) return [];
@@ -1037,6 +1058,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponent(id: string, options?: { additive?: boolean }) {
+    leaveMomentPreview();
     setOverlaySelected(false);
     setSelectAllMode(false);
     const additive = options?.additive === true;
@@ -1065,6 +1087,7 @@ export function ThemeEditorPage() {
   }
 
   function selectComponents(ids: string[], options?: { additive?: boolean }) {
+    leaveMomentPreview();
     setOverlaySelected(false);
     setSelectAllMode(false);
 
@@ -1574,26 +1597,20 @@ export function ThemeEditorPage() {
     });
   }
 
+  /** Selects the next or previous piece; false when there is none in that direction, so Tab can leave the canvas. */
   function cycleSelectedPiece(direction: 1 | -1) {
-    const ids = selectedSlotConfig.ids;
+    // Layers order: left team, centre, right team, then custom pieces.
+    const ids: string[] = [...editorRailGroups.flatMap((group) => group.ids), ...(themeResource.data?.freeComponents ?? []).map((component) => component.id)];
     if (ids.length === 0) {
-      return;
+      return false;
     }
-
-    setSelectAllMode(false);
-    setInspectorView("component");
-
-    if (!selected || !isFixedComponentId(selected) || !ids.includes(selected)) {
-      const next = direction > 0 ? ids[0] : ids[ids.length - 1];
-      setSelected(next);
-      setSelectedIds([next]);
-      return;
+    const current = selected ? ids.indexOf(selected) : -1;
+    const nextIndex = current === -1 ? (direction > 0 ? 0 : ids.length - 1) : current + direction;
+    if (nextIndex < 0 || nextIndex >= ids.length) {
+      return false;
     }
-
-    const index = ids.indexOf(selected);
-    const nextIndex = (index + direction + ids.length) % ids.length;
-    setSelected(ids[nextIndex]);
-    setSelectedIds([ids[nextIndex]]);
+    selectComponent(ids[nextIndex]);
+    return true;
   }
 
   function adjustCanvasZoom(direction: 1 | -1) {
@@ -1724,7 +1741,7 @@ export function ThemeEditorPage() {
     } catch (error) {
       showToast({
         kind: "error",
-        message: `Publish failed: ${error instanceof Error ? error.message : "unknown error"}. The previous theme is still on air.`
+        message: `Couldn't put it on air: ${error instanceof Error ? error.message : "unknown error"}. The previous theme is still on air.`
       });
     } finally {
       setPublishing(false);
@@ -1916,7 +1933,29 @@ export function ThemeEditorPage() {
       if (modalPromptOpen()) {
         return;
       }
+      // Save works from anywhere, including while typing in a field, and never opens the browser's own save dialog.
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveShortcutRef.current();
+        return;
+      }
+
       if (isTextEditingTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      if ((event.key === "Delete" || event.key === "Backspace") && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        // Only custom pieces can be deleted; the scoreboard's own pieces are hidden instead.
+        if (selectedIds.length <= 1 && !selectAllMode) {
+          event.preventDefault();
+          void deleteSelectedFreeComponent();
+        }
         return;
       }
 
@@ -1997,11 +2036,11 @@ export function ThemeEditorPage() {
       }
 
       if (event.key === "Tab") {
-        if (!isCanvasFocusTarget(event.target)) {
+        // Past the last piece (or before the first), Tab leaves the canvas like any other control.
+        if (!isCanvasFocusTarget(event.target) || !cycleSelectedPiece(event.shiftKey ? -1 : 1)) {
           return;
         }
         event.preventDefault();
-        cycleSelectedPiece(event.shiftKey ? -1 : 1);
         return;
       }
 
@@ -2040,6 +2079,36 @@ export function ThemeEditorPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [future, history, lockedIds, selectAllMode, selected, selectedIds, selectedSlotConfig.ids, themeResource.data]);
+
+  // Ctrl/Cmd+S does what the Save button does right now (save, save a copy, or review before saving to air).
+  const saveShortcutRef = useRef<() => void>(() => {});
+  saveShortcutRef.current = () => {
+    if (saving || publishing) return;
+    if (isOnAir) setReviewOpen(true);
+    else if (copyFirst) void saveAsCopy();
+    else void save();
+  };
+
+  // The browser tab names the theme, so several open editors can be told apart.
+  const themeName = theme?.name ?? "";
+  useEffect(() => {
+    setPageTitle(themeName);
+    return () => setPageTitle("");
+  }, [themeName]);
+
+  // Properties starts at the top for each new subject, so its name and actions stay in view.
+  const propsRef = useRef<HTMLElement>(null);
+  const propsSubject = `${selectionKey}|${propsView}|${selectAllMode}|${overlaySelected ? previewMode : ""}`;
+  useEffect(() => {
+    propsRef.current?.scrollTo({ top: 0 });
+  }, [propsSubject]);
+
+  // Team name pieces that would cut off the longest name in Teams on air.
+  const nameClips = useTeamNameClips(theme, teams.data);
+  const nameClipWarnings = (["homeName", "awayName"] as const).flatMap((slot) => {
+    const clip = nameClips[slot];
+    return clip ? [{ pieceId: slot, message: `${slot === "homeName" ? "Left" : "Right"} team name cuts off “${clip.name}”, the longest name in Teams.` }] : [];
+  });
 
   if (!theme) {
     return (
@@ -2142,6 +2211,16 @@ export function ThemeEditorPage() {
   return (
     <Tooltip.Provider delayDuration={350} skipDelayDuration={150}>
     <div className="te-shell">
+      {/* Tells screen readers what is selected, since Tab and arrow keys change it without moving focus. */}
+      <p className="te-sr-only" aria-live="polite">
+        {selectAllMode
+          ? "All pieces selected"
+          : selectedIds.length > 1
+            ? `${selectedIds.length} pieces selected`
+            : selectedEntry
+              ? `${pieceName(selectedEntry)} selected`
+              : ""}
+      </p>
       <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
       <div className="te-canvas-host">
@@ -2181,6 +2260,9 @@ export function ThemeEditorPage() {
         renderChrome={(canvas) => (
           <>
             <Island className="te-ident">
+              <IconButton label="Back to themes" onClick={leaveEditor}>
+                <ArrowLeft />
+              </IconButton>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button type="button" className="te-icon-btn" aria-label="Theme menu">
@@ -2203,9 +2285,15 @@ export function ThemeEditorPage() {
                       <AlignHorizontalJustifyCenter /> Center everything in the frame
                     </DropdownMenu.Item>
                     <DropdownMenu.Separator className="te-menu-sep" />
-                    <DropdownMenu.Item className="te-menu-item" disabled={saving} onSelect={() => void saveAsCopy()}>
-                      <Copy /> Save as a copy
-                    </DropdownMenu.Item>
+                    {copyFirst ? (
+                      <DropdownMenu.Item className="te-menu-item" disabled={saving} onSelect={() => void save()}>
+                        <Save /> Update the built-in theme…
+                      </DropdownMenu.Item>
+                    ) : (
+                      <DropdownMenu.Item className="te-menu-item" disabled={saving} onSelect={() => void saveAsCopy()}>
+                        <Copy /> Save as a copy
+                      </DropdownMenu.Item>
+                    )}
                     {externalTheme ? (
                       <DropdownMenu.Item className="te-menu-item" onSelect={reloadServerTheme}>
                         <RefreshCw /> Reload server version
@@ -2301,20 +2389,26 @@ export function ThemeEditorPage() {
             ) : null}
 
             <div className="te-actions" onContextMenu={(event) => event.stopPropagation()}>
-              <a className="te-btn" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer">
-                <ExternalLink /> Preview
+              <a className="te-btn" href={`/overlay/preview/${theme.id}`} target="_blank" rel="noreferrer" title="Opens the overlay preview in a new tab">
+                <ExternalLink /> Open preview
               </a>
               <Popover.Root open={reviewOpen} onOpenChange={setReviewOpen}>
                 <Popover.Anchor asChild>
                   <button
                     type="button"
                     className={isOnAir ? "te-btn te-btn--primary" : "te-btn"}
-                    onClick={() => (isOnAir ? setReviewOpen(true) : void save())}
+                    onClick={() => (isOnAir ? setReviewOpen(true) : copyFirst ? void saveAsCopy() : void save())}
                     disabled={saving || publishing}
-                    title={isOnAir ? "This theme is on air. Review what changes, then save to the live broadcast." : undefined}
+                    title={
+                      isOnAir
+                        ? "This theme is on air. Review what changes, then save to the live broadcast."
+                        : copyFirst
+                          ? "Saves your changes as a new theme. The built-in theme stays as it is."
+                          : undefined
+                    }
                   >
                     {isOnAir ? <span className="te-tally te-tally--on-primary" aria-hidden /> : null}
-                    {saving && !publishing ? "Saving…" : isOnAir ? "Save to air" : "Save"}
+                    {saving && !publishing ? "Saving…" : isOnAir ? "Save to air" : copyFirst ? "Save as a copy" : "Save"}
                   </button>
                 </Popover.Anchor>
                 <Popover.Portal>
@@ -2322,6 +2416,7 @@ export function ThemeEditorPage() {
                     {reviewOpen ? (
                       <ChangeReview
                         changes={airChanges}
+                        warnings={nameClipWarnings}
                         busy={saving}
                         onSelectPiece={(pieceId) => {
                           setReviewOpen(false);
@@ -2340,7 +2435,7 @@ export function ThemeEditorPage() {
               </Popover.Root>
               {isOnAir ? null : (
                 <button type="button" className="te-btn te-btn--primary" onClick={() => void publish()} disabled={saving || publishing}>
-                  {publishing ? "Publishing…" : "Publish"}
+                  {publishing ? "Putting on air…" : "Put on air"}
                 </button>
               )}
             </div>
@@ -2410,17 +2505,23 @@ export function ThemeEditorPage() {
                     ["winner", "Winner"]
                   ] as const
                 ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={previewMode === mode}
-                    className="te-preview-mode"
-                    onClick={() => applyPreviewMode(mode)}
-                  >
-                    {mode === "live" ? <span className={live.data?.sourceStatus === "ok" ? "te-live-dot" : "te-live-dot te-live-dot--off"} aria-hidden /> : null}
-                    {label}
-                  </button>
+                  <Fragment key={mode}>
+                    {/* Gaps split the states into feed, clock, moment cards and event cards. */}
+                    {mode === "game" || mode === "timeout" || mode === "towel" ? <span className="te-preview-gap" aria-hidden /> : null}
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={previewMode === mode}
+                      className="te-preview-mode"
+                      onClick={() => {
+                      momentPreviewReturnRef.current = null;
+                      applyPreviewMode(mode);
+                    }}
+                    >
+                      {mode === "live" ? <span className={live.data?.sourceStatus === "ok" ? "te-live-dot" : "te-live-dot te-live-dot--off"} aria-hidden /> : null}
+                      {label}
+                    </button>
+                  </Fragment>
                 ))}
               </div>
               {eventKind || momentKind ? <span className="te-sep" aria-hidden /> : null}
@@ -2466,7 +2567,7 @@ export function ThemeEditorPage() {
               >
                 {appearance.preference === "system" ? <Monitor /> : appearance.preference === "light" ? <Sun /> : <Moon />}
               </IconButton>
-              <ShortcutsHelp />
+              <ShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
             </Island>
           </>
         )}
@@ -2521,6 +2622,7 @@ export function ThemeEditorPage() {
         <aside className="te-island te-layers" aria-label="Layers">
           <LayersPanel
             theme={theme}
+            warnings={new Map(nameClipWarnings.map((warning) => [warning.pieceId, warning.message]))}
             groups={editorRailGroups}
             selectedIds={new Set(selectAllMode ? listThemeComponentEntries(theme).map((entry) => entry.id) : selectedIds.length ? selectedIds : selected ? [selected] : [])}
             lockedIds={lockedIds}
@@ -2547,7 +2649,7 @@ export function ThemeEditorPage() {
               placement: theme.momentOverlays[kind].placement,
               selected: overlaySelected && momentKind === kind
             }))}
-            onSelectMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
+            onSelectMoment={openMomentPreview}
             onToggleMoment={(kind) => patchMoments((moments) => (moments[kind].enabled = !moments[kind].enabled))}
             onCollapse={() => setLayersCollapsed(true)}
           />
@@ -2556,7 +2658,7 @@ export function ThemeEditorPage() {
 
       <ThemeColorsContext.Provider value={theme.tokens.colors}>
       <ThemeFontOptionsContext.Provider value={fontOptions(theme)}>
-      <aside className="te-island te-props" aria-label="Properties">
+      <aside ref={propsRef} className="te-island te-props" aria-label="Properties">
         {propsView === "ai" ? (
           <div className="te-subview">
             <header className="te-subview-head">
@@ -2622,6 +2724,7 @@ export function ThemeEditorPage() {
             {arrangeActions && arrangeActions.count > 1 ? <ArrangePanel actions={arrangeActions} /> : null}
             {overlaySelected && momentKind ? (
               <MomentCardProperties
+                key={momentKind}
                 theme={theme}
                 kind={momentKind}
                 assets={assets.data ?? []}
@@ -2633,6 +2736,7 @@ export function ThemeEditorPage() {
               />
             ) : overlaySelected && eventKind ? (
               <EventOverlayProperties
+                key={eventKind}
                 theme={theme}
                 kind={eventKind}
                 side={previewSide}
@@ -2662,7 +2766,9 @@ export function ThemeEditorPage() {
             ) : selectedEntry ? (
               <>
               <PieceProperties
+                key={selectedEntry.id}
                 entry={selectedEntry}
+                nameClip={selectedEntry.id === "homeName" || selectedEntry.id === "awayName" ? nameClips[selectedEntry.id] : null}
                 theme={theme}
                 assets={assets.data ?? []}
                 logoContext={selectedLogoContext}
@@ -2697,7 +2803,7 @@ export function ThemeEditorPage() {
                       fit={theme.components.breakTime}
                       onFit={(next) => patchTheme((draft) => Object.assign(draft.components.breakTime, next))}
                       onPreviewBreak={previewLive.period !== "BREAK" && theme.centerSecondary.breakMode !== "hidden" ? () => applyPreviewMode("break") : undefined}
-                      onOpenMoment={(kind) => applyPreviewMode(kind === "timeout" ? "timeout" : "finished")}
+                      onOpenMoment={openMomentPreview}
                     />
                   ) : null
                 }

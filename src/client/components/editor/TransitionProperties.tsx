@@ -38,7 +38,7 @@ export function TransitionProperties({
   const usesImage = Boolean(transition.bandImageAssetId);
 
   return (
-    <PanelSection title="Show and hide">
+    <PanelSection title="Show and hide" defaultOpen={false} aside={transition.enabled ? "Band sweep" : "Piece entrances"}>
       <p className="te-field-hint">
         Plays when the operator presses Show or Hide on Operations. Loading the overlay and Replay entrance still use each piece's own entrance.
       </p>
@@ -60,6 +60,7 @@ export function TransitionProperties({
       />
       {transition.enabled ? (
         <>
+          <h3 className="te-group-title">Sweep</h3>
           <FieldRow>
             <SelectInput
               label="Direction"
@@ -97,6 +98,7 @@ export function TransitionProperties({
               ? "The band crosses the whole screen. Use the overlay full frame in vMix or OBS; a crop would cut the band off."
               : "The band only crosses the scoreboard, with some room each side, so a crop around the scoreboard shows all of it."}
           </p>
+          <h3 className="te-group-title">Band</h3>
           <Field label="Band image" hint="An image from the library fills the band instead of the colour, logo and text.">
             <AssetLibraryPicker
               label="Band image"

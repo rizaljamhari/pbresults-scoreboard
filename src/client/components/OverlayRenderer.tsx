@@ -1334,8 +1334,11 @@ export function OverlayRenderer({
               key={motion.key}
               type="button"
               className={commonClass}
+              // The editor canvas is one tab stop; Tab moves between pieces there.
+              tabIndex={-1}
               style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(componentId)}
+              aria-label={componentId === "homeTeamLogo" ? "Left team logo" : componentId === "awayTeamLogo" ? "Right team logo" : "Event logo"}
               {...motion.attrs}
             >
               <span className="component-body">
@@ -1493,6 +1496,8 @@ export function OverlayRenderer({
             key={motion.key}
             type="button"
             className={ghost ? `${commonClass} component-slot--ghost` : commonClass}
+            // The editor canvas is one tab stop; Tab moves between pieces there.
+            tabIndex={-1}
             style={{ ...frameStyles(component), ...(ghost ? {} : motion.style), display: visible || ghost || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(componentId)}
             {...motion.attrs}
@@ -1597,8 +1602,11 @@ export function OverlayRenderer({
               key={motion.key}
               type="button"
               className={commonClass}
+              // The editor canvas is one tab stop; Tab moves between pieces there.
+              tabIndex={-1}
               style={{ ...imageStyles(component), ...motion.style, ...(motion.exiting ? { display: "block" } : {}) }}
               onClick={() => onSelectComponent?.(component.id)}
+              aria-label={component.label || "Image"}
               {...motion.attrs}
             >
               <span className="component-body">
@@ -1635,6 +1643,8 @@ export function OverlayRenderer({
               key={motion.key}
               type="button"
               className={commonClass}
+              // The editor canvas is one tab stop; Tab moves between pieces there.
+              tabIndex={-1}
               style={{
                 ...frameStyles(component),
                 // The box is drawn by the shape body, so the slant never fights an entrance's transform.
@@ -1691,6 +1701,8 @@ export function OverlayRenderer({
             key={motion.key}
             type="button"
             className={commonClass}
+            // The editor canvas is one tab stop; Tab moves between pieces there.
+            tabIndex={-1}
             style={{ ...frameStyles(component), ...motion.style, display: component.visible || motion.exiting ? "flex" : "none" }}
             onClick={() => onSelectComponent?.(component.id)}
             {...motion.attrs}

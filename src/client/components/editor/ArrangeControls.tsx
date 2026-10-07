@@ -15,6 +15,7 @@ import {
   ArrowUpToLine,
   CopyPlus,
   FlipHorizontal2,
+  Layers,
   Lock,
   LockOpen,
   Trash2
@@ -216,10 +217,21 @@ export function ArrangeMenuItems({ actions }: { actions: ArrangeActions }) {
       <ContextMenu.Separator className="te-menu-sep" />
       {actions.canReorder ? (
         <>
-          {item("Bring forward", () => actions.reorder("bringForward"), <ArrowUp />, "⌘]")}
-          {item("Send backward", () => actions.reorder("bringBackward"), <ArrowDown />, "⌘[")}
-          {item("Bring to front", () => actions.reorder("sendToFront"), <ArrowUpToLine />, "⌘⇧]")}
-          {item("Send to back", () => actions.reorder("sendToBack"), <ArrowDownToLine />, "⌘⇧[")}
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger className="te-menu-item">
+              <Layers />
+              <span className="te-menu-label">Order</span>
+              <span aria-hidden>›</span>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.Portal>
+              <ContextMenu.SubContent className="te-menu" sideOffset={4}>
+                {item("Bring forward", () => actions.reorder("bringForward"), <ArrowUp />, "⌘]")}
+                {item("Send backward", () => actions.reorder("bringBackward"), <ArrowDown />, "⌘[")}
+                {item("Bring to front", () => actions.reorder("sendToFront"), <ArrowUpToLine />, "⌘⇧]")}
+                {item("Send to back", () => actions.reorder("sendToBack"), <ArrowDownToLine />, "⌘⇧[")}
+              </ContextMenu.SubContent>
+            </ContextMenu.Portal>
+          </ContextMenu.Sub>
           <ContextMenu.Separator className="te-menu-sep" />
         </>
       ) : null}

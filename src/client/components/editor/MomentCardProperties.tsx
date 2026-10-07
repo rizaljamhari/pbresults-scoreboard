@@ -107,7 +107,7 @@ export function MomentCardProperties({
         )}
       </PanelSection>
 
-      <PanelSection title="Placement">
+      <PanelSection title="Placement" defaultOpen={false}>
         <Field label="Card sits">
           <Segmented
             label="Where the card sits"
@@ -163,7 +163,7 @@ export function MomentCardProperties({
         />
       </PanelSection>
 
-      <PanelSection title="Type">
+      <PanelSection title="Type" defaultOpen={false}>
         <StylePicker
           label="Text style"
           styles={theme.styles.text}
@@ -218,7 +218,7 @@ export function MomentCardProperties({
         <ColorInput label="Text colour" value={card.color} swatches={swatches} onChange={(value) => set((draft) => (draft.color = value))} {...bindColor("color")} />
       </PanelSection>
 
-      <PanelSection title="Card">
+      <PanelSection title="Card" defaultOpen={false}>
         <StylePicker
           label="Surface style"
           styles={theme.styles.surface}
@@ -334,7 +334,7 @@ export function MomentCardProperties({
         <ShadowInput label="Shadow" kind="box" value={card.shadow} swatches={swatches} onChange={(value) => set((draft) => (draft.shadow = value))} />
       </PanelSection>
 
-      <PanelSection title="Motion">
+      <PanelSection title="Motion" defaultOpen={false}>
         <p className="te-field-hint">
           {kind === "timeout"
             ? `Flashes in, holds and fades out over ${timeout.durationMs} ms. The editor holds it on screen; press Play to see the flash.`

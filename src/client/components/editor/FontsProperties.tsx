@@ -38,7 +38,7 @@ export function FontsProperties({
   const libraryFonts = assets.filter((asset) => isFontAsset(asset) && !theme.fonts.some((font) => font.assetId === asset.id));
 
   return (
-    <PanelSection title="Fonts" defaultOpen={theme.fonts.length > 0}>
+    <PanelSection title="Fonts" defaultOpen={false} aside={theme.fonts.length || undefined}>
       <p className="te-field-hint">Your own fonts, stored on this machine so they work offline. They appear in every font menu after the built-in ones.</p>
       {theme.fonts.map((font) => {
         const asset = assets.find((candidate) => candidate.id === font.assetId);

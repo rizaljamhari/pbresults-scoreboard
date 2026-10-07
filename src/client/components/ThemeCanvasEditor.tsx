@@ -663,6 +663,9 @@ export function ThemeCanvasEditor({
       <div
         className={`canvas-pan-layer ${isPanning ? "is-panning" : spacePressed ? "can-pan" : ""}`}
         ref={panLayerRef}
+        role="region"
+        aria-label="Canvas. Tab and Shift Tab move between pieces."
+        tabIndex={0}
         onPointerDown={handleStagePointerDown}
         onPointerMove={handleStagePointerMove}
         onPointerUp={handleStagePointerUp}
