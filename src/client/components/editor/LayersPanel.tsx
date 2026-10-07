@@ -44,7 +44,7 @@ function MomentRows({
             >
               {moment.kind === "timeout" ? <Hourglass aria-hidden /> : <Flag aria-hidden />}
               <span className="te-layer-name">{moment.name}</span>
-              <span className="te-layer-tag">{moment.placement === "centreLine" ? "on line" : "free"}</span>
+              <span className="te-layer-tag">{moment.placement === "centreLine" ? "centre" : "free"}</span>
             </button>
             <IconButton
               label={moment.enabled ? `Turn off ${moment.name}` : `Turn on ${moment.name}`}
@@ -83,6 +83,7 @@ function tagFor(entry: ThemeComponentEntry) {
 
 export function LayersPanel({
   theme,
+  warnings,
   groups,
   selectedIds,
   lockedIds,
@@ -107,6 +108,8 @@ export function LayersPanel({
   onSelectMoment: (kind: MomentLayer["kind"]) => void;
   onToggleMoment: (kind: MomentLayer["kind"]) => void;
   onCollapse: () => void;
+  /** Pieces with a problem to fix before going on air, and what it is. */
+  warnings?: ReadonlyMap<string, string>;
 }) {
   const allGroups: LayerGroup[] = [...groups, { id: "custom", title: "Custom", ids: theme.freeComponents.map((component) => component.id) }];
   const logosVisible = theme.components.homeTeamLogo.visible && theme.components.awayTeamLogo.visible;
@@ -136,6 +139,7 @@ export function LayersPanel({
                 const locked = lockedIds.has(id);
                 const visible = entry.component.visible;
                 const tag = tagFor(entry);
+                const warning = warnings?.get(id);
                 const name = pieceShortName(entry);
                 const fullName = pieceName(entry);
                 return (
@@ -144,12 +148,13 @@ export function LayersPanel({
                       type="button"
                       className="te-layer-main"
                       aria-pressed={selected}
-                      aria-label={`${fullName}${visible ? "" : ", hidden"}${locked ? ", locked" : ""}`}
+                      aria-label={`${fullName}${visible ? "" : ", hidden"}${locked ? ", locked" : ""}${warning ? `. ${warning}` : ""}`}
+                      title={warning}
                       onClick={(event) => onSelect(id, event.shiftKey || event.metaKey || event.ctrlKey)}
                     >
                       {iconFor(entry)}
                       <span className="te-layer-name">{name}</span>
-                      {tag ? <span className="te-layer-tag">{tag}</span> : null}
+                      {warning ? <span className="te-layer-tag te-layer-tag--warn">cuts off</span> : tag ? <span className="te-layer-tag">{tag}</span> : null}
                     </button>
                     <IconButton label={visible ? `Hide ${fullName}` : `Show ${fullName}`} pressed={!visible} onClick={() => onToggleVisible(id)} className="te-layer-toggle">
                       {visible ? <Eye /> : <EyeOff />}

@@ -26,6 +26,7 @@ import {
   SwitchRow,
   TextFitFields,
   TextInput, useFontOptions } from "./fields";
+import type { NameClip } from "./nameFit";
 
 type LogoContext = {
   match?: { team?: { canonicalName?: string } | null; status?: string } | null;
@@ -160,7 +161,8 @@ export function PieceProperties({
   onPreviewLastSeconds,
   onPlayEntrance,
   onSaveStyle,
-  centreLine
+  centreLine,
+  nameClip = null
 }: {
   entry: ThemeComponentEntry;
   theme: ThemeDefinition;
@@ -180,12 +182,15 @@ export function PieceProperties({
   /** Saves this piece's type or box as a new style and links it. */
   onSaveStyle: (kind: "text" | "surface") => void;
   centreLine?: ReactNode;
+  /** For a team name: the longest name in Teams this box cuts off, if any. */
+  nameClip?: NameClip;
 }) {
   const component = entry.component as AnyComponent;
   const isText = component.kind === "text";
   const isImage = component.kind === "image";
   const isFree = entry.source === "free";
   const isTeamLogo = entry.id === "homeTeamLogo" || entry.id === "awayTeamLogo";
+  const isTeamName = entry.id === "homeName" || entry.id === "awayName";
   const swatches = useMemo(() => themeSwatches(theme), [theme]);
   const radius = component.borderRadius as [number, number, number, number];
   const [linkedCorners, setLinkedCorners] = useState(() => radius.every((value) => value === radius[0]));
@@ -205,6 +210,8 @@ export function PieceProperties({
   const surface = component as unknown as { fill: FillSettings; tintFill: FillSettings };
   const look = component as unknown as { blendMode: (typeof blendModeValues)[number]; backdropBlur: number };
   const imageEffects = (component as unknown as { imageEffects?: ImageEffects }).imageEffects ?? defaultImageEffects;
+  // Only the top section starts open; the rest stay closed and show "On" when they hold a setting.
+  const topSection = isFree ? "content" : isText && entry.id !== "breakTime" ? "text" : component.kind === "shape" ? "shape" : isImage ? "image" : null;
   const imageAsset = isImage
     ? logoContext?.effectiveAsset ?? assets.find((asset) => asset.id === component.assetId) ?? null
     : null;
@@ -234,7 +241,7 @@ export function PieceProperties({
       </header>
 
       {isFree ? (
-        <Group title="Content">
+        <PanelSection title="Content" defaultOpen={topSection === "content"}>
           <TextInput label="Layer name" value={String(component.label ?? "")} maxLength={80} onChange={(value) => patch((draft) => (draft.label = value))} />
           {isText ? (
             <>
@@ -299,13 +306,13 @@ export function PieceProperties({
               />
             </>
           ) : null}
-        </Group>
+        </PanelSection>
       ) : null}
 
       {/* The centre line's type comes from its break clock and play text styles, set in its own section. */}
       {isText && entry.id !== "breakTime" ? (
         <>
-          <Group title="Text">
+          <PanelSection title="Text" defaultOpen={topSection === "text"}>
             <StylePicker
               label="Text style"
               styles={theme.styles.text}
@@ -349,14 +356,24 @@ export function PieceProperties({
                 onChange={(value) => patch((draft) => (draft.textAlign = value))}
               />
             </div>
+            <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} {...bindColor("color")} />
             <TextFitFields value={component as unknown as TextFitSettings} onChange={(next) => patch((draft) => Object.assign(draft, next))} />
-          </Group>
-          <ColorInput label="Text colour" value={String(component.color)} swatches={swatches} onChange={(value) => patch((draft) => (draft.color = value))} {...bindColor("color")} />
+            {nameClip ? (
+              <div className="te-callout te-callout--action" role="status">
+                <span>“{nameClip.name}”, the longest name in Teams, is cut off here.</span>
+                <button type="button" className="te-mini-btn" onClick={() => patch((draft) => (draft.textFit = "shrink"))}>
+                  Use Shrink
+                </button>
+              </div>
+            ) : isTeamName && component.textFit === "clip" && component.textAlign === "center" ? (
+              <p className="te-field-hint">Centred and cut off: a name too long for the box loses both ends. Shrink keeps it whole.</p>
+            ) : null}
+          </PanelSection>
         </>
       ) : null}
 
       {component.kind === "shape" ? (
-        <Group title="Shape">
+        <PanelSection title="Shape" defaultOpen={topSection === "shape"}>
           <Segmented
             label="Shape"
             value={String(component.shape) as (typeof shapeValues)[number]}
@@ -370,11 +387,14 @@ export function PieceProperties({
           <Field label="Slant" hint="Leans the shape sideways; positive leans the top to the right.">
             <NumberInput label="Slant" value={Number(component.skewX)} min={-30} max={30} unit="°" onChange={(value) => patch((draft) => (draft.skewX = Math.min(30, Math.max(-30, value))))} />
           </Field>
-        </Group>
+        </PanelSection>
       ) : null}
 
+      {/* The centre line's own sections lead its panel. */}
+      {centreLine}
+
       {isText && (entry.id === "homeScore" || entry.id === "awayScore" || isFree) ? (
-        <PanelSection title="When it changes" defaultOpen={liveText.changeMotion.preset !== "none"}>
+        <PanelSection title="When it changes" defaultOpen={false} aside={liveText.changeMotion.preset !== "none" ? "On" : undefined}>
           <p className="te-field-hint">
             {isFree
               ? component.contentMode === "operator"
@@ -399,7 +419,7 @@ export function PieceProperties({
       ) : null}
 
       {isText && (entry.id === "gameTime" || entry.id === "breakTime") ? (
-        <PanelSection title="Last seconds" defaultOpen={liveText.clockWarning.belowSeconds > 0}>
+        <PanelSection title="Last seconds" defaultOpen={false} aside={liveText.clockWarning.belowSeconds > 0 ? "On" : undefined}>
           <Field label="Warn from" hint={liveText.clockWarning.belowSeconds > 0 ? "Seconds left when the warning starts." : "0 turns the warning off."}>
             <NumberInput
               label="Warn from, seconds left"
@@ -440,7 +460,7 @@ export function PieceProperties({
       ) : null}
 
       {isImage ? (
-        <Group title={isTeamLogo ? "Team logo" : "Image"}>
+        <PanelSection title={isTeamLogo ? "Team logo" : "Image"} defaultOpen={topSection === "image"}>
           {isTeamLogo ? (
             <>
               <div className="te-logo-preview">
@@ -479,20 +499,20 @@ export function PieceProperties({
             onChange={(value) => patch((draft) => (draft.assetId = value))}
             onUpload={(file) => onUpload(file, "logo")}
           />
-                      <Field label="Fit">
-              <Segmented
-                label="Image fit"
-                value={String(component.backgroundImageFit) as "cover" | "contain" | "stretch"}
-                options={FIT_OPTIONS}
-                onChange={(value) => patch((draft) => (draft.backgroundImageFit = value))}
-              />
-            </Field>
-            <SelectInput
-              label="Anchor"
-              value={String(component.backgroundImagePosition) as (typeof POSITION_OPTIONS)[number]["value"]}
-              options={POSITION_OPTIONS}
-              onChange={(value) => patch((draft) => (draft.backgroundImagePosition = value))}
+          <Field label="Fit">
+            <Segmented
+              label="Image fit"
+              value={String(component.backgroundImageFit) as "cover" | "contain" | "stretch"}
+              options={FIT_OPTIONS}
+              onChange={(value) => patch((draft) => (draft.backgroundImageFit = value))}
             />
+          </Field>
+          <SelectInput
+            label="Anchor"
+            value={String(component.backgroundImagePosition) as (typeof POSITION_OPTIONS)[number]["value"]}
+            options={POSITION_OPTIONS}
+            onChange={(value) => patch((draft) => (draft.backgroundImagePosition = value))}
+          />
           <SwitchRow
             label="Fit to visible pixels"
             hint="Ignores transparent margins in the image file."
@@ -511,49 +531,49 @@ export function PieceProperties({
               />
             </Field>
           ) : null}
-        </Group>
+        </PanelSection>
       ) : null}
 
-      {centreLine}
+      <PanelSection title="Surface" defaultOpen={false}>
+        <StylePicker
+          label="Surface style"
+          styles={theme.styles.surface}
+          styleId={design.surfaceStyleId}
+          overrides={design.overrides.filter((field) => (surfaceStyleFields as readonly string[]).includes(field))}
+          onChoose={(styleId) => patch((draft) => ((draft.design as DesignBinding).surfaceStyleId = styleId))}
+          onReset={() =>
+            patch((draft) => {
+              const binding = draft.design as DesignBinding;
+              binding.overrides = binding.overrides.filter((field) => !(surfaceStyleFields as readonly string[]).includes(field));
+            })
+          }
+          onSave={() => onSaveStyle("surface")}
+        />
+        <FillInput
+          label="Fill"
+          color={String(component.backgroundColor)}
+          fill={surface.fill}
+          swatches={swatches}
+          onColor={(value) => patch((draft) => (draft.backgroundColor = value))}
+          onFill={(next) => patch((draft) => Object.assign(draft.fill as FillSettings, next))}
+          {...bindColor("backgroundColor")}
+        />
+        <PercentSlider
+          label="Background opacity"
+          value={Math.round(Number(component.backgroundOpacity ?? 1) * 100)}
+          onChange={(value) => patch((draft) => (draft.backgroundOpacity = value / 100))}
+        />
+      </PanelSection>
 
-      <StylePicker
-        label="Surface style"
-        styles={theme.styles.surface}
-        styleId={design.surfaceStyleId}
-        overrides={design.overrides.filter((field) => (surfaceStyleFields as readonly string[]).includes(field))}
-        onChoose={(styleId) => patch((draft) => ((draft.design as DesignBinding).surfaceStyleId = styleId))}
-        onReset={() =>
-          patch((draft) => {
-            const binding = draft.design as DesignBinding;
-            binding.overrides = binding.overrides.filter((field) => !(surfaceStyleFields as readonly string[]).includes(field));
-          })
-        }
-        onSave={() => onSaveStyle("surface")}
-      />
-      <FillInput
-        label="Fill"
-        color={String(component.backgroundColor)}
-        fill={surface.fill}
-        swatches={swatches}
-        onColor={(value) => patch((draft) => (draft.backgroundColor = value))}
-        onFill={(next) => patch((draft) => Object.assign(draft.fill as FillSettings, next))}
-        {...bindColor("backgroundColor")}
-      />
-      <PercentSlider
-        label="Background opacity"
-        value={Math.round(Number(component.backgroundOpacity ?? 1) * 100)}
-        onChange={(value) => patch((draft) => (draft.backgroundOpacity = value / 100))}
-      />
-
-      <Group title="Position and size">
+      <PanelSection title="Position, size and opacity" defaultOpen={false}>
         <div className="te-grid-2">
           <NumberInput label="X position" prefix="X" value={component.x} onChange={(value) => patch((draft) => (draft.x = value))} />
           <NumberInput label="Y position" prefix="Y" value={component.y} onChange={(value) => patch((draft) => (draft.y = value))} />
           <NumberInput label="Width" prefix="W" value={component.width} min={1} onChange={(value) => patch((draft) => (draft.width = value))} />
           <NumberInput label="Height" prefix="H" value={component.height} min={1} onChange={(value) => patch((draft) => (draft.height = value))} />
         </div>
-      </Group>
-      <PercentSlider label="Opacity" value={Math.round(Number(component.opacity) * 100)} onChange={(value) => patch((draft) => (draft.opacity = value / 100))} />
+        <PercentSlider label="Opacity" value={Math.round(Number(component.opacity) * 100)} onChange={(value) => patch((draft) => (draft.opacity = value / 100))} />
+      </PanelSection>
 
       <PanelSection title="Background image" defaultOpen={false}>
         <SelectInput
@@ -658,7 +678,7 @@ export function PieceProperties({
         </div>
       </PanelSection>
 
-      <PanelSection title="Entrance and exit" defaultOpen={motion.enterMotion.preset !== "none" || motion.exitMotion.preset !== "none"}>
+      <PanelSection title="Entrance and exit" defaultOpen={false} aside={motion.enterMotion.preset !== "none" || motion.exitMotion.preset !== "none" ? "On" : undefined}>
         <p className="te-field-hint">Enters when the overlay loads, when it is shown, and when the operator plays the entrance. Exits when it is hidden.</p>
         <Group title="Entrance">
           <MotionFields name="Entrance" value={motion.enterMotion} onChange={(next) => patch((draft) => Object.assign(draft.enterMotion as MotionSettings, next))} />
@@ -680,7 +700,7 @@ export function PieceProperties({
       </PanelSection>
 
       {isImage ? (
-        <PanelSection title="Image effects" defaultOpen={imageEffects.shadow !== "none" || imageEffects.grayscale > 0 || imageEffects.dim > 0}>
+        <PanelSection title="Image effects" defaultOpen={false} aside={imageEffects.shadow !== "none" || imageEffects.grayscale > 0 || imageEffects.dim > 0 ? "On" : undefined}>
           <ShadowInput
             label="Drop shadow"
             kind="text"
@@ -711,7 +731,7 @@ export function PieceProperties({
         </PanelSection>
       ) : null}
 
-      <PanelSection title="Blend" defaultOpen={look.blendMode !== "normal" || look.backdropBlur > 0}>
+      <PanelSection title="Blend" defaultOpen={false} aside={look.blendMode !== "normal" || look.backdropBlur > 0 ? "On" : undefined}>
         <p className="te-field-hint">Mixes with overlay pieces beneath this one. vMix adds the video afterwards, so the video is never blended or blurred.</p>
         <FieldRow>
           <SelectInput

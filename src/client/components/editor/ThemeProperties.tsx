@@ -107,7 +107,7 @@ export function ThemeProperties({
 
       <VersionsProperties theme={theme} {...versions} />
 
-      <PanelSection title="Build-in" defaultOpen={entering > 0}>
+      <PanelSection title="Build-in" defaultOpen={false} aside={entering ? `${entering} ${entering === 1 ? "piece" : "pieces"}` : undefined}>
         <p className="te-field-hint">
           {entering === 0
             ? "No piece has an entrance yet. Give pieces one under Entrance and exit, then build them in here."

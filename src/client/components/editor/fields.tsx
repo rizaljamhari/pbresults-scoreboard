@@ -165,17 +165,25 @@ export function SelectInput<T extends string>({
 }: {
   label: string;
   value: T;
-  options: ReadonlyArray<{ value: T; label: string }>;
+  /** Options with a `group` are listed under that heading, after the ungrouped ones. */
+  options: ReadonlyArray<{ value: T; label: string; group?: string }>;
   onChange: (value: T) => void;
   hideLabel?: boolean;
 }) {
   const id = useId();
+  const groups = [...new Set(options.flatMap((option) => (option.group ? [option.group] : [])))];
+  const renderOption = (option: { value: T; label: string }) => (
+    <option key={option.value} value={option.value}>
+      {option.label}
+    </option>
+  );
   const select = (
     <select id={id} className="te-select" value={value} aria-label={hideLabel ? label : undefined} onChange={(event) => onChange(event.target.value as T)}>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
+      {options.filter((option) => !option.group).map(renderOption)}
+      {groups.map((group) => (
+        <optgroup key={group} label={group}>
+          {options.filter((option) => option.group === group).map(renderOption)}
+        </optgroup>
       ))}
     </select>
   );
@@ -313,7 +321,8 @@ export function ColorInput({
             key={swatch}
             type="button"
             className="te-color-swatch te-color-swatch--small"
-            aria-label={swatch}
+            aria-label={`${label} ${swatch}`}
+            title={swatch}
             aria-pressed={swatch.toLowerCase() === current}
             onClick={() => onChange(swatch)}
           >

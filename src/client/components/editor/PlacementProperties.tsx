@@ -33,7 +33,7 @@ export function PlacementProperties({
   const set = (next: Partial<ThemeDefinition["placement"]>) => patchTheme((draft) => Object.assign(draft.placement, next));
 
   return (
-    <PanelSection title="On-air placement" defaultOpen={placement.enabled}>
+    <PanelSection title="On-air placement" defaultOpen={false} aside={placement.enabled ? "On" : undefined}>
       <SwitchRow
         label="Place on air"
         hint={

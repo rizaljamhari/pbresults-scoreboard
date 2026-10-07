@@ -165,7 +165,7 @@ export function EventOverlayProperties({
           </Field>
       </PanelSection>
 
-      <PanelSection title="Shared by all events">
+      <PanelSection title="Shared by all events" defaultOpen={false}>
         <p className="te-field-hint">Changes here apply to the towel, base and winner cards.</p>
         <SwitchRow label="Event cards" hint="Master switch for every event card in this theme." checked={general.enabled} onChange={(checked) => patchGeneral((draft) => (draft.enabled = checked))} />
 

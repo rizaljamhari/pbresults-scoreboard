@@ -2,7 +2,7 @@ import { AlignCenter, AlignLeft, AlignRight, Link2 } from "lucide-react";
 import { type TextEffectSettings, type TextFitSettings, type ThemeDefinition } from "../../../shared/theme";
 import { MotionFields } from "./MotionFields";
 import { TextEffectFields } from "./ShadowInput";
-import { ColorInput, Field, FieldRow, Group, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput, useFontOptions } from "./fields";
+import { ColorInput, Field, FieldRow, NumberInput, PanelSection, Segmented, SelectInput, TextFitFields, TextInput, useFontOptions } from "./fields";
 
 type CentreLine = ThemeDefinition["centerSecondary"];
 type Moments = ThemeDefinition["momentOverlays"];
@@ -128,7 +128,7 @@ export function CentreLineProperties({
         </div>
       ) : null}
 
-      <Group title="Break clock">
+      <PanelSection title="Break clock">
         <LineStyleFields
           name="Break clock"
           style={line.timerStyle}
@@ -138,39 +138,39 @@ export function CentreLineProperties({
           patch={(update) => patch((draft) => update(draft.timerStyle))}
         />
         {line.breakMode !== "timer" ? <p className="te-field-hint">Breaks are set to {line.breakMode === "hidden" ? "hidden" : "text"} under More.</p> : null}
-      </Group>
+      </PanelSection>
 
-      <Group title="During play">
+      <PanelSection title="During play" defaultOpen={false}>
         <Segmented label="What the line shows during play" value={line.gameMode} options={PLAY_OPTIONS} onChange={(value) => patch((draft) => (draft.gameMode = value))} />
         {line.gameMode === "staticText" ? (
           <TextInput label="Text during play" value={line.gameText} onChange={(value) => patch((draft) => (draft.gameText = value))} />
         ) : null}
-      </Group>
+      </PanelSection>
 
       {showsText ? (
-        <Group title="Text style">
+        <PanelSection title="Text style" defaultOpen={false}>
           <LineStyleFields name="Text" style={line.staticStyle} swatches={swatches} patch={(update) => patch((draft) => update(draft.staticStyle))} />
-        </Group>
+        </PanelSection>
       ) : null}
 
-      <Group title="Long text">
+      <PanelSection title="Long text" defaultOpen={false}>
         <TextFitFields value={fit} onChange={onFit} />
-      </Group>
+      </PanelSection>
 
       <PanelSection title="Text effects" defaultOpen={false}>
         <TextEffectFields value={fit} swatches={swatches} onChange={onFit} />
       </PanelSection>
 
-      <Group title="Change animation">
+      <PanelSection title="Change animation" defaultOpen={false}>
         <MotionFields
           name="Centre line"
           value={line.motion}
           presets={["none", "fade", "slide-up", "slide-down", "slide-left", "slide-right", "scale"]}
           onChange={(next) => patch((draft) => Object.assign(draft.motion, next))}
         />
-      </Group>
+      </PanelSection>
 
-      <Group title="Cards that cover this line">
+      <PanelSection title="Cards that cover this line" defaultOpen={false}>
         {(["timeout", "gameFinished"] as const).map((kind) => {
           const card = moments[kind];
           const where = card.placement === "centreLine" ? "On this line" : "Placed freely";
@@ -183,9 +183,9 @@ export function CentreLineProperties({
             </button>
           );
         })}
-      </Group>
+      </PanelSection>
 
-      <PanelSection title="More" defaultOpen={line.breakMode !== "timer"}>
+      <PanelSection title="More" defaultOpen={false} aside={line.breakMode !== "timer" ? "Changed" : undefined}>
         <SelectInput label="During breaks" value={line.breakMode} options={BREAK_OPTIONS} onChange={(value) => patch((draft) => (draft.breakMode = value))} />
         {line.breakMode === "staticText" ? (
           <TextInput label="Text during breaks" value={line.breakText} onChange={(value) => patch((draft) => (draft.breakText = value))} />

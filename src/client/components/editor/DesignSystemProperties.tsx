@@ -138,7 +138,7 @@ export function DesignSystemProperties({
 
   return (
     <>
-      <PanelSection title="Theme colours" defaultOpen={colors.length > 0}>
+      <PanelSection title="Theme colours" defaultOpen={false} aside={colors.length || undefined}>
         <p className="te-field-hint">Named colours every colour picker offers first. Change one here and everything linked to it follows.</p>
         {colors.map((token) => (
           <TokenRow
@@ -175,7 +175,7 @@ export function DesignSystemProperties({
         </div>
       </PanelSection>
 
-      <PanelSection title="Text styles" defaultOpen={theme.styles.text.length > 0}>
+      <PanelSection title="Text styles" defaultOpen={false} aside={theme.styles.text.length || undefined}>
         <p className="te-field-hint">Reusable type for names, scores, clocks and cards. Pick one in a piece's Text group, or save one from a piece.</p>
         {theme.styles.text.map((style) => (
           <PanelSection key={style.id} title={style.name} defaultOpen={false}>
@@ -234,7 +234,7 @@ export function DesignSystemProperties({
         </button>
       </PanelSection>
 
-      <PanelSection title="Surface styles" defaultOpen={theme.styles.surface.length > 0}>
+      <PanelSection title="Surface styles" defaultOpen={false} aside={theme.styles.surface.length || undefined}>
         <p className="te-field-hint">Reusable boxes: fill, border, corners and shadow for plates, cards and badges.</p>
         {theme.styles.surface.map((style) => (
           <PanelSection key={style.id} title={style.name} defaultOpen={false}>
@@ -317,7 +317,7 @@ export function StylePicker({
           label={label}
           hideLabel
           value={styleId ?? ""}
-          options={[{ value: "", label: styles.length ? `No ${label.toLowerCase()}` : `No ${label.toLowerCase()}s yet` }, ...styles.map((style) => ({ value: style.id, label: style.name }))]}
+          options={[{ value: "", label: styles.length ? "None" : "None yet" }, ...styles.map((style) => ({ value: style.id, label: style.name }))]}
           onChange={(value) => onChoose(value || null)}
         />
         {onSave ? (

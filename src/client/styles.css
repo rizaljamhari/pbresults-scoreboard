@@ -2127,6 +2127,23 @@ details[open]:not(.editor-section-card) > summary::after {
   padding: 4px 16px 8px;
 }
 
+/* Problems on air regardless of this save, listed before what changes. */
+.te-review-warnings {
+  display: grid;
+  gap: 4px;
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ad-draft-soft);
+  list-style: none;
+}
+
+.te-review-warnings .te-text-btn {
+  color: var(--ad-draft);
+  font-size: 12.5px;
+  text-align: left;
+}
+
 .te-review-foot {
   display: flex;
   justify-content: flex-end;
@@ -2771,6 +2788,14 @@ details[open]:not(.editor-section-card) > summary::after {
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
+.te-layer-tag--warn {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ad-draft-soft);
+  color: var(--ad-draft);
+  font-weight: 550;
+}
+
 
 .te-view-toggle {
   display: flex;
@@ -2875,9 +2900,19 @@ details[open]:not(.editor-section-card) > summary::after {
   border-radius: 8px;
   background: #fdf1f5;
   box-shadow: none;
+  align-items: center;
   color: #8f1f48;
   font: 500 12.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   text-align: left;
+/* A short tick between state clusters: lighter than the island's full-height separators. */
+.te-preview-gap {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--ad-line-strong);
+}
+
   cursor: pointer;
 }
 
@@ -3095,7 +3130,18 @@ details[open]:not(.editor-section-card) > summary::after {
 .te-section-title {
   color: var(--te-muted);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 650;
+}
+
+/* Top-level groups are ruled off like the collapsible sections, so a group reads apart from its own fields. */
+.te-piece > .te-group {
+  padding-top: 10px;
+  border-top: 1px solid var(--te-line);
+}
+
+.te-piece > .te-piece-head + .te-group {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .te-section[open] .te-section-title {
@@ -3138,7 +3184,7 @@ details[open]:not(.editor-section-card) > summary::after {
   left: 0;
   bottom: 100%;
   padding-bottom: 6px;
-  color: var(--te-muted);
+  color: var(--te-text);
   font: 12px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3237,3 +3283,20 @@ details[open]:not(.editor-section-card) > summary::after {
   outline-color: #45454c;
 }
 
+
+/* Read by screen readers, never shown. */
+.te-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The canvas is one tab stop; show where focus is when it arrives by keyboard. */
+.canvas-pan-layer:focus-visible {
+  outline: 2px solid var(--te-accent);
+  outline-offset: -2px;
+}

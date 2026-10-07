@@ -1,7 +1,30 @@
 import { motionEasingLabels, motionEasingValues, motionPresetLabels, motionPresetValues, type MotionEasing } from "../../../shared/motion";
 import { Field, FieldRow, NumberInput, SelectInput } from "./fields";
 
-const EASING_OPTIONS = motionEasingValues.map((value) => ({ value, label: motionEasingLabels[value] }));
+// Long lists are split into short named groups; the stored values are unchanged.
+const PRESET_GROUPS: Partial<Record<string, string>> = {
+  fade: "Fade and scale",
+  scale: "Fade and scale",
+  "pop-in": "Fade and scale",
+  "slide-up": "Move in",
+  "slide-down": "Move in",
+  "slide-left": "Move in",
+  "slide-right": "Move in",
+  "drop-in": "Move in",
+  "glide-in": "Move in"
+};
+
+const EASING_GROUPS: Record<MotionEasing, string> = {
+  "ease-out": "Slows to a stop",
+  "expo-out": "Slows to a stop",
+  snappy: "Slows to a stop",
+  ease: "Other",
+  "ease-in-out": "Other",
+  "ease-in": "Other",
+  linear: "Other"
+};
+
+const EASING_OPTIONS = motionEasingValues.map((value) => ({ value, label: motionEasingLabels[value], group: EASING_GROUPS[value] }));
 
 type Motion<P extends string> = { preset: P; durationMs: number; easing: MotionEasing; delayMs: number };
 
@@ -35,7 +58,7 @@ export function MotionFields<P extends string>({
         <SelectInput
           label="Animation"
           value={value.preset}
-          options={presets.map((preset) => ({ value: preset, label: labels[preset] }))}
+          options={presets.map((preset) => ({ value: preset, label: labels[preset], group: PRESET_GROUPS[preset] }))}
           onChange={(preset) => onChange({ preset })}
         />
         {still ? null : (

@@ -74,14 +74,18 @@ const SHORTCUTS: Array<[string, string]> = [
   ["+ / −", "Zoom in or out"],
   ["0", "Fit frame"],
   ["F", "Focus the selected piece"],
+  ["⌘/Ctrl S", "Save (Save to air when on air)"],
+  ["Delete", "Delete the selected custom piece"],
+  ["Tab", "Next piece, when the canvas has focus (Shift: previous)"],
+  ["?", "Show these shortcuts"],
   ["⌘/Ctrl Z", "Undo"],
   ["⌘/Ctrl Shift Z", "Redo"],
   ["Esc", "Clear selection"]
 ];
 
-export function ShortcutsHelp() {
+export function ShortcutsHelp({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
           <Popover.Trigger asChild>

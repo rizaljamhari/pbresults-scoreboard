@@ -34,12 +34,15 @@ export function ChangeList({ changes, onSelectPiece }: { changes: ThemeChange[];
  */
 export function ChangeReview({
   changes,
+  warnings = [],
   busy,
   onSelectPiece,
   onConfirm,
   onCancel
 }: {
   changes: ThemeChange[];
+  /** Problems the theme has on air whether or not this save changes them. */
+  warnings?: Array<{ pieceId: string; message: string }>;
   busy: boolean;
   onSelectPiece: (pieceId: string) => void;
   onConfirm: () => void;
@@ -55,6 +58,17 @@ export function ChangeReview({
             : `${changes.length} ${changes.length === 1 ? "thing changes" : "things change"} on the live overlay as soon as you save.`}
         </p>
       </header>
+      {warnings.length ? (
+        <ul className="te-review-warnings">
+          {warnings.map((warning) => (
+            <li key={warning.pieceId}>
+              <button type="button" className="te-text-btn" onClick={() => onSelectPiece(warning.pieceId)}>
+                {warning.message}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {changes.length ? (
         <div className="te-review-body">
           <ChangeList changes={changes} onSelectPiece={onSelectPiece} />

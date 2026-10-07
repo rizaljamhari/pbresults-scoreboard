@@ -55,13 +55,13 @@ export function VersionsProperties({
   if (theme.builtin) {
     return (
       <PanelSection title="Versions" defaultOpen={false}>
-        <p className="te-field-hint">Built-in themes can't keep versions. Save a copy from the theme menu first.</p>
+        <p className="te-field-hint">Built-in themes can't keep versions. Use Save as a copy first, then keep versions of the copy.</p>
       </PanelSection>
     );
   }
 
   return (
-    <PanelSection title="Versions" defaultOpen={theme.versions.length > 0}>
+    <PanelSection title="Versions" defaultOpen={false} aside={theme.versions.length || undefined}>
       <p className="te-field-hint">
         Keep the theme as it is in the editor now, unsaved changes included, to come back to later. Keeping a version doesn't change what's on air. Up to {MAX_VERSIONS};
         the oldest goes first.
