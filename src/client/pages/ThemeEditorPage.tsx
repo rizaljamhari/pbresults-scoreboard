@@ -82,7 +82,7 @@ import { showToast } from "../toast";
 import { setPageTitle } from "../documentTitle";
 import { pieceName } from "../components/editor/pieceNames";
 import { ChangeReview } from "../components/editor/ChangeReview";
-import { AiAssistantPanel, useAiReview, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
+import { AI_DOCK_HEIGHT, AiAssistantDock, useAiReview, type AiImage, type AiTurn } from "../components/editor/AiAssistantPanel";
 import { toJpeg } from "html-to-image";
 import { versionTheme } from "../components/editor/VersionsProperties";
 import { diffThemes } from "../../shared/themeDiff";
@@ -443,6 +443,13 @@ function reorderComponentStack(
 const EDITOR_FIT_INSETS = { top: 100, right: 260, bottom: 72, left: 288 };
 const EDITOR_FIT_INSETS_NO_LAYERS = { ...EDITOR_FIT_INSETS, right: 14 };
 const LAYERS_HIDDEN_QUERY = "(max-width: 1100px)";
+/** Space between the AI dock and what sits above it. */
+const AI_DOCK_GAP = 14;
+
+/** The frame fits above the AI dock while AI is on. */
+function withAiDock(insets: typeof EDITOR_FIT_INSETS, dockSpace: number) {
+  return dockSpace ? { ...insets, bottom: insets.bottom + dockSpace } : insets;
+}
 
 // Locks are an editing aid, not theme data: kept per theme in this browser only.
 function lockStorageKey(themeId: string | undefined) {
@@ -477,16 +484,18 @@ export function ThemeEditorPage() {
   const appearance = useAppearance();
   const [arrangeReference, setArrangeReference] = useState<ArrangeReference>("selection");
   // Properties shows the selection (or the theme); the two older settings views are reached from the theme panel.
-  const [propsView, setPropsView] = useState<"auto" | "preview" | "ai">("auto");
-  // The AI assistant's thread lasts for this editor session, even while its panel is closed.
+  const [propsView, setPropsView] = useState<"auto" | "preview">("auto");
+  // The AI assistant: on or off from the toolbar (off hides everything AI), and its dock open or folded to one line.
+  // The thread lasts for this editor session, so a waiting proposal survives turning AI off and on.
+  const [aiMode, setAiMode] = useState(false);
+  const [aiDockOpen, setAiDockOpen] = useState(true);
   const [aiThread, setAiThread] = useState<AiTurn[]>([]);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [layersCollapsed, setLayersCollapsed] = useState(false);
   const selectionKey = selectedIds.join("|") + (selected ?? "");
   useEffect(() => {
     if (selectionKey) {
-      // The AI assistant stays open: picking a piece from its change list shouldn't close it.
-      setPropsView((view) => (view === "ai" ? view : "auto"));
+      setPropsView("auto");
     }
   }, [selectionKey]);
   const [lockedIds, setLockedIds] = useState<Set<string>>(() => readLocks(id));
@@ -541,7 +550,9 @@ export function ThemeEditorPage() {
   const theme = themeResource.data;
   // A proposal from the AI assistant is drawn on the canvas until it's applied or discarded; the draft stays as it is.
   const aiReview = useAiReview(theme ?? null, aiThread, aiPieceName);
-  const aiPreview = aiReview && "next" in aiReview ? aiReview.next : null;
+  const aiDockSpace = aiMode ? (aiDockOpen ? AI_DOCK_HEIGHT.open : AI_DOCK_HEIGHT.collapsed) + AI_DOCK_GAP : 0;
+  // With AI off, the canvas shows the draft: a waiting proposal is kept but not previewed until AI is back on.
+  const aiPreview = aiMode && aiReview && "next" in aiReview ? aiReview.next : null;
   const themeRef = useRef(theme);
   const savedSnapshotRef = useRef(savedSnapshot);
   themeRef.current = theme;
@@ -1146,6 +1157,14 @@ export function ThemeEditorPage() {
     const appliedAt = history.length === 0 ? 2 : history.length + 1;
     updateTheme(aiReview.next);
     settleAiProposal({ status: "applied", appliedAt });
+  }
+
+  /** AI on opens the dock; AI off hides everything AI-related but keeps the thread and any waiting proposal. */
+  function toggleAiMode() {
+    setAiMode((on) => {
+      if (!on) setAiDockOpen(true);
+      return !on;
+    });
   }
 
   function settleAiProposal(update: Partial<AiTurn>) {
@@ -2057,7 +2076,7 @@ export function ThemeEditorPage() {
         }
         if (key === "a") {
           event.preventDefault();
-          setPropsView((view) => (view === "ai" ? "auto" : "ai"));
+          toggleAiMode();
           return;
         }
       }
@@ -2237,7 +2256,7 @@ export function ThemeEditorPage() {
 
   return (
     <Tooltip.Provider delayDuration={350} skipDelayDuration={150}>
-    <div className="te-shell">
+    <div className="te-shell" style={{ "--te-dock-space": `${aiDockSpace}px` } as React.CSSProperties}>
       {/* Tells screen readers what is selected, since Tab and arrow keys change it without moving focus. */}
       <p className="te-sr-only" aria-live="polite">
         {selectAllMode
@@ -2254,7 +2273,7 @@ export function ThemeEditorPage() {
       <ThemeCanvasEditor
         layout="fullscreen"
         lockedIds={lockedIds}
-        fitInsets={layersHidden || layersCollapsed ? EDITOR_FIT_INSETS_NO_LAYERS : EDITOR_FIT_INSETS}
+        fitInsets={withAiDock(layersHidden || layersCollapsed ? EDITOR_FIT_INSETS_NO_LAYERS : EDITOR_FIT_INSETS, aiDockSpace)}
         panMode={tool === "hand"}
         theme={aiPreview ?? theme}
         live={previewLive}
@@ -2394,7 +2413,7 @@ export function ThemeEditorPage() {
                 </Popover.Portal>
               </Popover.Root>
               <span className="te-sep" aria-hidden />
-              <IconButton label="AI assistant" shortcut="A" pressed={propsView === "ai"} onClick={() => setPropsView((view) => (view === "ai" ? "auto" : "ai"))}>
+              <IconButton label="AI assistant" shortcut="A" pressed={aiMode} onClick={toggleAiMode}>
                 <Sparkles />
               </IconButton>
             </Island>
@@ -2412,19 +2431,6 @@ export function ThemeEditorPage() {
                 </button>
                 <button type="button" className="te-text-btn" onClick={() => setExternalTheme(null)}>
                   Keep editing
-                </button>
-              </Island>
-            ) : aiPreview && aiReview && "changes" in aiReview ? (
-              <Island className="te-banner te-banner--ai" role="status">
-                <Sparkles aria-hidden />
-                <span>
-                  Previewing the AI's change · {aiReview.changes.length} {aiReview.changes.length === 1 ? "change" : "changes"}
-                </span>
-                <button type="button" className="te-text-btn" onClick={() => settleAiProposal({ status: "discarded" })}>
-                  Discard
-                </button>
-                <button type="button" className="te-mini-btn te-mini-btn--primary" onClick={applyAiProposal}>
-                  Apply
                 </button>
               </Island>
             ) : null}
@@ -2697,32 +2703,26 @@ export function ThemeEditorPage() {
         </aside>
       )}
 
+      <AiAssistantDock
+        visible={aiMode}
+        open={aiDockOpen}
+        onOpenChange={setAiDockOpen}
+        theme={theme}
+        focusPieceId={selectAllMode ? null : selected}
+        focusPieceName={selectAllMode || !selected ? null : aiPieceName(theme)(selected, selected)}
+        thread={aiThread}
+        setThread={setAiThread}
+        review={aiReview}
+        capturePreview={() => captureCanvasForAi(theme)}
+        onApply={applyAiProposal}
+        onDiscard={() => settleAiProposal({ status: "discarded" })}
+        onSelectPiece={(pieceId) => selectComponent(pieceId)}
+      />
+
       <ThemeColorsContext.Provider value={theme.tokens.colors}>
       <ThemeFontOptionsContext.Provider value={fontOptions(theme)}>
       <aside ref={propsRef} className="te-island te-props" aria-label="Properties">
-        {propsView === "ai" ? (
-          <div className="te-subview">
-            <header className="te-subview-head">
-              <IconButton label="Back to properties" onClick={() => setPropsView("auto")}>
-                <ArrowLeft />
-              </IconButton>
-              <h2>AI assistant</h2>
-            </header>
-            <AiAssistantPanel
-              theme={theme}
-              focusPieceId={selectAllMode ? null : selected}
-              focusPieceName={selectAllMode || !selected ? null : aiPieceName(theme)(selected, selected)}
-              thread={aiThread}
-              setThread={setAiThread}
-              review={aiReview}
-              capturePreview={() => captureCanvasForAi(theme)}
-              onApply={applyAiProposal}
-              onDiscard={() => settleAiProposal({ status: "discarded" })}
-              onClose={() => setPropsView("auto")}
-              onSelectPiece={(pieceId) => selectComponent(pieceId)}
-            />
-          </div>
-        ) : propsView !== "auto" ? (
+        {propsView !== "auto" ? (
           <div className="te-subview">
             <header className="te-subview-head">
               <IconButton label="Back to properties" onClick={() => setPropsView("auto")}>

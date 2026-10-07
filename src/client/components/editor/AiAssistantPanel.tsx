@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { ImagePlus, Sparkles, X } from "lucide-react";
 import { api, ApiError } from "../../api";
@@ -11,8 +11,8 @@ import { ChangeList } from "./ChangeReview";
 export type AiImage = NonNullable<ThemeEditRequest["reference"]>;
 
 /**
- * One request in this editor session's thread. Kept by the page so closing the panel doesn't lose it, and so undo
- * and redo can keep "Applied" honest.
+ * One request in this editor session's thread. Kept by the page so it survives turning AI off, and so undo and redo
+ * can keep "Applied" honest.
  */
 export type AiTurn = {
   request: string;
@@ -44,8 +44,10 @@ export function useAiReview(theme: ThemeDefinition | null, thread: AiTurn[], pie
   }, [pending, theme, pieceNameFor]);
 }
 
+/** Heights of the dock, open and collapsed; the page keeps the canvas and side panels clear of it. */
+export const AI_DOCK_HEIGHT = { open: 264, collapsed: 46 } as const;
+
 const REFERENCE_MAX_SIDE = 1280;
-const TEXTAREA_MAX_ROWS = 6;
 /** Failures that are fixed in Maintenance → AI assistant rather than by trying again. */
 const SETTINGS_FAILURES = new Set(["not-configured", "bad-key", "model-not-found", "signed-out", "not-eligible"]);
 
@@ -81,7 +83,15 @@ function changeCount(count: number) {
   return `${count} ${count === 1 ? "change" : "changes"}`;
 }
 
-export function AiAssistantPanel({
+/**
+ * The AI assistant, docked full-width under the canvas while AI is on. It collapses to one line that keeps Discard
+ * and Apply for a waiting proposal. It stays mounted while AI is off (just hidden), so a request in flight still
+ * lands and a waiting proposal is kept.
+ */
+export function AiAssistantDock({
+  visible,
+  open,
+  onOpenChange,
   theme,
   focusPieceId,
   focusPieceName,
@@ -91,9 +101,11 @@ export function AiAssistantPanel({
   capturePreview,
   onApply,
   onDiscard,
-  onClose,
   onSelectPiece
 }: {
+  visible: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   theme: ThemeDefinition;
   focusPieceId: string | null;
   focusPieceName: string | null;
@@ -103,7 +115,6 @@ export function AiAssistantPanel({
   capturePreview: () => Promise<AiImage | null>;
   onApply: () => void;
   onDiscard: () => void;
-  onClose: () => void;
   onSelectPiece: (pieceId: string) => void;
 }) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
@@ -115,6 +126,7 @@ export function AiAssistantPanel({
   const [failure, setFailure] = useState<Failure | null>(null);
   const [lastSent, setLastSent] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [dragging, setDragging] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -122,34 +134,29 @@ export function AiAssistantPanel({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const pendingShown = useRef<AiTurn | null>(null);
 
+  // Settings are read when AI is turned on, so a provider set up meanwhile shows without a reload.
   useEffect(() => {
-    api.getAiSettings().then(setSettings, () => setSettings(null));
-    return () => abortRef.current?.abort();
-  }, []);
+    if (visible) api.getAiSettings().then(setSettings, () => setSettings(null));
+  }, [visible]);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Grow the request box with its text, up to six lines, so a long request is readable without scrolling.
-  useLayoutEffect(() => {
-    const box = textareaRef.current;
-    if (!box) return;
-    const line = parseFloat(getComputedStyle(box).lineHeight) || 18;
-    const chrome = box.offsetHeight - box.clientHeight + parseFloat(getComputedStyle(box).paddingTop) + parseFloat(getComputedStyle(box).paddingBottom);
-    box.style.height = "auto";
-    box.style.height = `${Math.min(box.scrollHeight, line * TEXTAREA_MAX_ROWS + chrome)}px`;
-  }, [request, review]);
+  // Turning AI on opens on the request box, ready to type.
+  useEffect(() => {
+    if (visible && open && !review) textareaRef.current?.focus();
+  }, [visible]);
 
   // A new proposal takes focus and is announced; settling it hands focus back to the request box.
   const pendingTurn = review?.turn ?? null;
   useEffect(() => {
     if (pendingTurn && pendingShown.current !== pendingTurn) {
       pendingShown.current = pendingTurn;
-      reviewRef.current?.scrollIntoView({ block: "nearest" });
-      reviewRef.current?.focus();
+      if (visible && open) reviewRef.current?.focus();
     }
     if (!pendingTurn && pendingShown.current) {
       pendingShown.current = null;
-      textareaRef.current?.focus();
+      if (visible && open) textareaRef.current?.focus();
     }
-  }, [pendingTurn]);
+  }, [pendingTurn, visible, open]);
 
   useEffect(() => {
     if (!review) return;
@@ -197,8 +204,7 @@ export function AiAssistantPanel({
       if (controller.signal.aborted) {
         setAnnouncement("Cancelled.");
       } else {
-        const next = failureFrom(error);
-        setFailure(next);
+        setFailure(failureFrom(error));
         setAnnouncement("");
       }
       requestAnimationFrame(() => textareaRef.current?.focus());
@@ -214,12 +220,32 @@ export function AiAssistantPanel({
     if (text) void send(text);
   }
 
+  async function attach(file: File | undefined) {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setFailure({ message: "Use a PNG, JPEG or WebP image as the reference.", kind: null });
+      return;
+    }
+    try {
+      setReference({ image: await readReferenceImage(file), name: file.name });
+    } catch {
+      setFailure({ message: "That image couldn't be read. Try a PNG or JPEG.", kind: null });
+    }
+  }
+
+  function onDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    setDragging(false);
+    if (!busy) void attach(event.dataTransfer.files[0]);
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Keys typed here never reach the editor's shortcuts; Escape closes the panel instead of clearing the selection.
+    // Keys typed here never reach the editor's shortcuts; Escape folds the dock instead of clearing the selection.
     event.stopPropagation();
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      textareaRef.current?.blur();
+      onOpenChange(false);
       return;
     }
     if (event.key === "ArrowUp" && !request && thread.length) {
@@ -234,198 +260,238 @@ export function AiAssistantPanel({
     }
   }
 
-  if (settings && !active) {
-    return (
-      <div className="te-subview-body">
-        <p className="te-note">
-          The AI assistant isn't set up yet. Choose a provider in <Link to="/admin/maintenance#set-ai">Maintenance → AI assistant</Link>. Signing in with ChatGPT,
-          Google Gemini's free tier and OpenRouter's free models cost nothing extra, and Ollama runs free on this computer.
-        </p>
-      </div>
-    );
-  }
-
   const settled = thread.filter((turn) => turn.status !== "pending");
   const usage = latest?.usage ?? null;
   const showTokens = Boolean(usage) && active?.id !== "chatgpt";
+  const proposal = review && "changes" in review ? review : null;
+  const notSetUp = settings !== null && !active;
 
   return (
-    <div className="te-subview-body te-ai">
-      <p className="te-ai-sr" role="status" aria-live="polite">
+    <section className="te-island te-ai-dock" data-open={open} hidden={!visible} aria-label="AI assistant" onContextMenu={(event) => event.stopPropagation()}>
+      <p className="te-sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
 
-      {settled.length === 0 && !review ? (
-        <p className="te-note">
-          Describe a change, like "use Oswald for every name and score" or "match the colours in this poster". The AI edits this theme's settings: colours,
-          fonts, sizes, positions and layers. You see the result on the canvas before anything is applied.
-        </p>
-      ) : null}
-
-      {settled.length ? (
-        <ol className="te-ai-thread" aria-label="Earlier requests">
-          {settled.map((turn, index) => {
-            const tag = STATUS_TAGS[turn.status];
-            // The newest answer stays open so its reply is read; older ones fold to one line.
-            const isLatest = index === settled.length - 1 && !review;
-            return (
-              <li key={index}>
-                <details className={`te-ai-turn te-ai-turn--${turn.status}`} open={isLatest}>
-                  <summary>
-                    <span className="te-ai-request">{turn.request}</span>
-                    {tag ? <span className={`te-ai-tag te-ai-tag--${tag.tone}`}>{tag.label}</span> : null}
-                  </summary>
-                  <p className="te-ai-summary">{turn.summary}</p>
-                  {isLatest && turn.status === "applied" ? <p className="te-ai-aftercare">In your draft, not on air until you save. ⌘Z undoes it.</p> : null}
-                </details>
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
-
-      {review ? (
-        <section ref={reviewRef} className="te-ai-review" aria-label="Proposed change" tabIndex={-1}>
-          <header className="te-ai-review-head">
-            <p className="te-ai-request">{review.turn.request}</p>
-            <p className="te-ai-summary">{review.turn.summary}</p>
-          </header>
-          {"error" in review ? (
-            <div className="te-callout te-callout--action">
-              <span>{review.error}</span>
-              <button type="button" className="te-mini-btn" onClick={askAgain}>
-                Ask again
-              </button>
-            </div>
-          ) : review.changes.length ? (
-            <>
-              <p className="te-ai-preview-note">
-                <span className="te-ai-preview-dot" aria-hidden />
-                Previewing {changeCount(review.changes.length)} on the canvas
-              </p>
-              <div className="te-review-body">
-                <ChangeList changes={review.changes} onSelectPiece={onSelectPiece} />
-              </div>
-            </>
-          ) : (
-            <p className="te-note">These edits don't change anything visible.</p>
-          )}
-          <div className="te-ai-actions">
+      <header className="te-ai-dock-head">
+        <h2 className="te-ai-dock-title">
+          <Sparkles aria-hidden /> AI assistant
+        </h2>
+        {active ? (
+          <span className="te-ai-meta">
+            {active.id === "chatgpt" ? "Using ChatGPT plan" : `Using ${active.label}`}
+            {active.model ? ` · ${active.model}` : ""}
+            {showTokens && usage ? ` · last request ${(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens` : ""}
+          </span>
+        ) : null}
+        <span className="te-ai-dock-spacer" />
+        {busy && !open ? (
+          <span className="te-ai-preview-note">
+            <span className="te-ai-spinner" aria-hidden /> Waiting for the AI
+          </span>
+        ) : null}
+        {proposal ? (
+          <span className="te-ai-preview-note">
+            <span className="te-ai-preview-dot" aria-hidden />
+            Previewing {changeCount(proposal.changes.length)}
+          </span>
+        ) : null}
+        {review && !open ? (
+          <span className="te-ai-actions">
             <button type="button" className="te-btn" onClick={onDiscard}>
               Discard
             </button>
-            {"error" in review ? null : (
+            {proposal ? (
               <button type="button" className="te-btn te-btn--primary" onClick={onApply}>
                 Apply
               </button>
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {failure ? (
-        <div className="te-callout te-callout--crit" role="alert">
-          <p>{failure.message}</p>
-          <div className="te-ai-actions te-ai-actions--start">
-            {failure.kind && SETTINGS_FAILURES.has(failure.kind) ? (
-              <Link className="te-mini-btn" to="/admin/maintenance#set-ai">
-                Open AI settings
-              </Link>
-            ) : lastSent ? (
-              <button type="button" className="te-mini-btn" onClick={() => void send(lastSent)}>
-                Try again
-              </button>
             ) : null}
-          </div>
-        </div>
-      ) : null}
+          </span>
+        ) : null}
+        <button type="button" className="te-btn te-btn--quiet" aria-expanded={open} onClick={() => onOpenChange(!open)}>
+          {open ? "Collapse" : "Expand"}
+        </button>
+      </header>
 
-      {review ? null : (
-        <div className="te-ai-composer">
-          <div className="te-field">
-            <label className="te-field-label" htmlFor="te-ai-request">
-              {settled.length ? "What next?" : "What should change?"}
-            </label>
-            <textarea
-              ref={textareaRef}
-              id="te-ai-request"
-              className="te-input te-textarea te-ai-input"
-              rows={2}
-              maxLength={4000}
-              placeholder="Enter to ask · Shift+Enter for a new line"
-              value={request}
-              readOnly={busy}
-              aria-describedby="te-ai-request-hint"
-              onChange={(event) => setRequest(event.target.value)}
-              onKeyDown={onKeyDown}
-            />
-            <span id="te-ai-request-hint" className="te-ai-sr">
-              Press up arrow in an empty box to bring back your last request. Escape closes the assistant.
-            </span>
-          </div>
+      <div className="te-ai-dock-body">
+        <section className="te-ai-history" aria-label="Earlier requests">
+          <h3 className="te-field-label">Earlier requests</h3>
+          {settled.length ? (
+            <ol className="te-ai-thread">
+              {settled.map((turn, index) => {
+                const tag = STATUS_TAGS[turn.status];
+                return (
+                  <li key={index}>
+                    <details className={`te-ai-turn te-ai-turn--${turn.status}`} open={turn.status === "answered" && index === settled.length - 1}>
+                      <summary>
+                        <span className="te-ai-request">{turn.request}</span>
+                        {tag ? <span className={`te-ai-tag te-ai-tag--${tag.tone}`}>{tag.label}</span> : null}
+                      </summary>
+                      <p className="te-ai-summary">{turn.summary}</p>
+                    </details>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="te-ai-empty">
+              Your requests show here. Ask for one change at a time, like "use Oswald for every name and score". You see it on the canvas before anything is
+              applied.
+            </p>
+          )}
+        </section>
 
-          {reference ? (
-            <div className="te-ai-attachment">
-              <img src={`data:${reference.image.mediaType};base64,${reference.image.data}`} alt="" />
-              <span>{reference.name}</span>
-              <button type="button" className="te-icon-btn" aria-label={`Remove ${reference.name}`} onClick={() => setReference(null)} disabled={busy}>
-                <X />
-              </button>
+        <div className="te-ai-main">
+          {notSetUp ? (
+            <p className="te-note">
+              The AI assistant isn't set up yet. Choose a provider in <Link to="/admin/maintenance#set-ai">Maintenance → AI assistant</Link>. Signing in with
+              ChatGPT, Google Gemini's free tier and OpenRouter's free models cost nothing extra, and Ollama runs free on this computer.
+            </p>
+          ) : review ? (
+            <section ref={reviewRef} className="te-ai-review" aria-label="Proposed change" tabIndex={-1}>
+              <header className="te-ai-review-head">
+                <p className="te-ai-request">{review.turn.request}</p>
+                <p className="te-ai-summary">{review.turn.summary}</p>
+              </header>
+              <div className="te-ai-review-changes">
+                {"error" in review ? (
+                  <div className="te-callout te-callout--action">
+                    <span>{review.error}</span>
+                    <button type="button" className="te-mini-btn" onClick={askAgain}>
+                      Ask again
+                    </button>
+                  </div>
+                ) : review.changes.length ? (
+                  <div className="te-review-body">
+                    <ChangeList changes={review.changes} onSelectPiece={onSelectPiece} />
+                  </div>
+                ) : (
+                  <p className="te-note">These edits don't change anything visible.</p>
+                )}
+              </div>
+              <div className="te-ai-actions te-ai-review-actions">
+                <button type="button" className="te-btn" onClick={onDiscard}>
+                  Discard
+                </button>
+                {proposal ? (
+                  <button type="button" className="te-btn te-btn--primary" onClick={onApply}>
+                    Apply
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : (
+            <div className="te-ai-composer">
+              <div className="te-ai-ask">
+                <label className="te-field-label" htmlFor="te-ai-request">
+                  {latest?.status === "applied" ? (
+                    <span className="te-ai-aftercare">Applied to your draft, not on air until you save. ⌘Z undoes it.</span>
+                  ) : settled.length ? (
+                    "What next?"
+                  ) : (
+                    "What should change?"
+                  )}
+                </label>
+                {failure ? (
+                  <div className="te-callout te-callout--crit te-callout--action" role="alert">
+                    <span>{failure.message}</span>
+                    {failure.kind && SETTINGS_FAILURES.has(failure.kind) ? (
+                      <Link className="te-mini-btn" to="/admin/maintenance#set-ai">
+                        Open AI settings
+                      </Link>
+                    ) : lastSent ? (
+                      <button type="button" className="te-mini-btn" onClick={() => void send(lastSent)}>
+                        Try again
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <textarea
+                  ref={textareaRef}
+                  id="te-ai-request"
+                  className="te-input te-textarea te-ai-input"
+                  maxLength={4000}
+                  placeholder="Enter to ask · Shift+Enter for a new line"
+                  value={request}
+                  readOnly={busy}
+                  aria-describedby="te-ai-request-hint"
+                  onChange={(event) => setRequest(event.target.value)}
+                  onKeyDown={onKeyDown}
+                />
+                <span id="te-ai-request-hint" className="te-sr-only">
+                  Press up arrow in an empty box to bring back your last request. Escape collapses the assistant.
+                </span>
+                <div className="te-ai-ask-row">
+                  <div className="te-ai-options">
+                    <label className="te-ai-option">
+                      <input type="checkbox" checked={includePreview} onChange={(event) => setIncludePreview(event.target.checked)} disabled={busy} />
+                      <span>
+                        Let the AI see the canvas
+                        <small>Sends a picture of the frame with your request.</small>
+                      </span>
+                    </label>
+                    {focusPieceId && focusPieceName ? (
+                      <label className="te-ai-option">
+                        <input type="checkbox" checked={onlySelected} onChange={(event) => setOnlySelected(event.target.checked)} disabled={busy} />
+                        <span>Only change {focusPieceName}</span>
+                      </label>
+                    ) : null}
+                  </div>
+                  {busy ? (
+                    <button ref={cancelRef} type="button" className="te-btn" onClick={() => abortRef.current?.abort()}>
+                      <span className="te-ai-spinner" aria-hidden /> Cancel
+                    </button>
+                  ) : (
+                    <button type="button" className="te-btn te-btn--primary" onClick={() => void send(request.trim())} disabled={!request.trim()}>
+                      <Sparkles aria-hidden /> Ask
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className="te-ai-drop"
+                data-dragging={dragging}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+              >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    void attach(file);
+                  }}
+                />
+                {reference ? (
+                  <>
+                    <img src={`data:${reference.image.mediaType};base64,${reference.image.data}`} alt={`Reference: ${reference.name}`} />
+                    <span className="te-ai-drop-name">
+                      <span>{reference.name}</span>
+                      <button type="button" className="te-icon-btn" aria-label={`Remove ${reference.name}`} onClick={() => setReference(null)} disabled={busy}>
+                        <X />
+                      </button>
+                    </span>
+                  </>
+                ) : (
+                  <button type="button" className="te-ai-drop-pick" onClick={() => fileRef.current?.click()} disabled={busy}>
+                    <ImagePlus aria-hidden />
+                    <b>Reference image</b>
+                    <span>Drop a poster or another broadcast's scorebug, or choose a file</span>
+                  </button>
+                )}
+              </div>
             </div>
-          ) : null}
-
-          <label className="te-ai-option">
-            <input type="checkbox" checked={includePreview} onChange={(event) => setIncludePreview(event.target.checked)} disabled={busy} />
-            <span>
-              Let the AI see the canvas
-              <small>Sends a picture of the frame with your request.</small>
-            </span>
-          </label>
-          {focusPieceId && focusPieceName ? (
-            <label className="te-ai-option">
-              <input type="checkbox" checked={onlySelected} onChange={(event) => setOnlySelected(event.target.checked)} disabled={busy} />
-              <span>Only change {focusPieceName}</span>
-            </label>
-          ) : null}
-
-          <div className="te-ai-actions">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (!file) return;
-                try {
-                  setReference({ image: await readReferenceImage(file), name: file.name });
-                } catch {
-                  setFailure({ message: "That image couldn't be read. Try a PNG or JPEG.", kind: null });
-                }
-              }}
-            />
-            <button type="button" className="te-btn te-btn--quiet" onClick={() => fileRef.current?.click()} disabled={busy}>
-              <ImagePlus aria-hidden /> {reference ? "Change image" : "Image"}
-            </button>
-            {busy ? (
-              <button ref={cancelRef} type="button" className="te-btn" onClick={() => abortRef.current?.abort()}>
-                <span className="te-ai-spinner" aria-hidden /> Cancel
-              </button>
-            ) : (
-              <button type="button" className="te-btn te-btn--primary" onClick={() => void send(request.trim())} disabled={!request.trim()}>
-                <Sparkles aria-hidden /> Ask
-              </button>
-            )}
-          </div>
+          )}
+          {busy && open ? <p className="te-ai-meta">Waiting for the AI. This can take up to a minute.</p> : null}
         </div>
-      )}
-
-      <div className="te-ai-meta">
-        {busy ? <p>Waiting for the AI. This can take up to a minute.</p> : null}
-        {active ? <p>{active.id === "chatgpt" ? "Using ChatGPT plan" : `Using ${active.label}`}{active.model ? ` · ${active.model}` : ""}</p> : null}
-        {showTokens && usage ? <p>Last request: {(usage.inputTokens + usage.outputTokens).toLocaleString()} tokens</p> : null}
       </div>
-    </div>
+    </section>
   );
 }
