@@ -2676,6 +2676,14 @@ details[open]:not(.editor-section-card) > summary::after {
   font-size: 11.5px;
 }
 
+.te-layer-tag--warn {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ad-draft-soft);
+  color: var(--ad-draft);
+  font-weight: 550;
+}
+
 .te-layer-toggle {
   width: 26px;
   height: 26px;
@@ -2780,7 +2788,17 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .te-preview-modes {
   display: flex;
+  align-items: center;
   gap: 2px;
+}
+
+/* A short tick between state clusters: lighter than the island's full-height separators. */
+.te-preview-gap {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--ad-line-strong);
 }
 
 .te-preset-grid {
@@ -2788,14 +2806,6 @@ details[open]:not(.editor-section-card) > summary::after {
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
-.te-layer-tag--warn {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--ad-draft-soft);
-  color: var(--ad-draft);
-  font-weight: 550;
-}
-
 
 .te-view-toggle {
   display: flex;
@@ -2900,19 +2910,9 @@ details[open]:not(.editor-section-card) > summary::after {
   border-radius: 8px;
   background: #fdf1f5;
   box-shadow: none;
-  align-items: center;
   color: #8f1f48;
   font: 500 12.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   text-align: left;
-/* A short tick between state clusters: lighter than the island's full-height separators. */
-.te-preview-gap {
-  flex: none;
-  width: 1px;
-  height: 14px;
-  margin: 0 5px;
-  background: var(--ad-line-strong);
-}
-
   cursor: pointer;
 }
 
@@ -3049,9 +3049,20 @@ details[open]:not(.editor-section-card) > summary::after {
 
 .te-group-title {
   margin: 0;
-  color: var(--te-muted);
+  color: var(--te-text);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 650;
+}
+
+/* Top-level groups are ruled off like the collapsible sections, so a group reads apart from its own fields. */
+.te-piece > .te-group {
+  padding-top: 10px;
+  border-top: 1px solid var(--te-line);
+}
+
+.te-piece > .te-piece-head + .te-group {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .te-group-body {
@@ -3130,18 +3141,7 @@ details[open]:not(.editor-section-card) > summary::after {
 .te-section-title {
   color: var(--te-muted);
   font-size: 12px;
-  font-weight: 650;
-}
-
-/* Top-level groups are ruled off like the collapsible sections, so a group reads apart from its own fields. */
-.te-piece > .te-group {
-  padding-top: 10px;
-  border-top: 1px solid var(--te-line);
-}
-
-.te-piece > .te-piece-head + .te-group {
-  padding-top: 0;
-  border-top: 0;
+  font-weight: 550;
 }
 
 .te-section[open] .te-section-title {
@@ -3184,7 +3184,7 @@ details[open]:not(.editor-section-card) > summary::after {
   left: 0;
   bottom: 100%;
   padding-bottom: 6px;
-  color: var(--te-text);
+  color: var(--te-muted);
   font: 12px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
