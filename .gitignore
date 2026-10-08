@@ -18,6 +18,7 @@ data/uploads/*
 *.db
 *.db-shm
 *.db-wal
+.claude
 
 .DS_Store
 .vite/
@@ -27,3 +28,4 @@ data/uploads/*
 backups/
 
 secrets/
+demo/
