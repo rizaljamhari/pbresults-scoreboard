@@ -2835,14 +2835,12 @@ tr[aria-selected="true"] .ad-row-open {
   color: var(--ad-crit);
 }
 
-/* Motion stays out of the way for people who ask for less of it. */
+/* Motion stays out of the way for people who ask for less of it. The overlay canvas is left alone: its motion is the
+   theme being designed and previewed, and on air it follows the Operations "Reduce motion" switch instead. */
 @media (prefers-reduced-motion: reduce) {
-  .ad-scope *,
-  .ad-scope *::before,
-  .ad-scope *::after,
-  .te-shell *,
-  .te-shell *::before,
-  .te-shell *::after {
+  :is(.ad-scope, .te-shell) :not(.overlay-canvas, .overlay-canvas *),
+  :is(.ad-scope, .te-shell) :not(.overlay-canvas, .overlay-canvas *)::before,
+  :is(.ad-scope, .te-shell) :not(.overlay-canvas, .overlay-canvas *)::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

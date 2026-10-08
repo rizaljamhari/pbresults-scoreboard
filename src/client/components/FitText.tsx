@@ -19,7 +19,9 @@ export function fitTextToBox(element: HTMLElement, minScale: number, multiline: 
   if (element.clientWidth === 0 || !overflows(element)) {
     return;
   }
-  const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  // The full size is the inherited one. Read it from the parent, which this function never resizes, so a size left
+  // over from an earlier fit can never become the new starting point.
+  const baseSize = Number.parseFloat(getComputedStyle(element.parentElement ?? element).fontSize);
   if (!Number.isFinite(baseSize) || baseSize <= 0) {
     return;
   }

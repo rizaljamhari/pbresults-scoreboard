@@ -383,6 +383,8 @@ details[open]:not(.editor-section-card) > summary::after {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Shrink sets the size and measures it straight away; a transition would hand back a half-way size. */
+  transition-property: none;
 }
 
 .text-fit--multiline {

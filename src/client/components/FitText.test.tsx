@@ -52,6 +52,16 @@ describe("fitTextToBox", () => {
     fitTextToBox(element, 0.6, false);
     expect(Number.parseFloat(element.style.fontSize)).toBeCloseTo(60, 5);
   });
+
+  it("starts every fit from the parent's size, not one left over from the last fit", () => {
+    const parent = {} as HTMLElement;
+    const element = Object.assign(fakeText(500, 400), { parentElement: parent });
+    // The element itself still reports its shrunk size, as it does mid-transition when Windows asks for less motion.
+    vi.stubGlobal("getComputedStyle", (target: HTMLElement) => ({ fontSize: target === parent ? "100px" : "79.8px" }));
+    fitTextToBox(element, 0.6, false);
+    fitTextToBox(element, 0.6, false);
+    expect(Number.parseFloat(element.style.fontSize)).toBeCloseTo(79.8, 5);
+  });
 });
 
 describe("text fit in the overlay", () => {
