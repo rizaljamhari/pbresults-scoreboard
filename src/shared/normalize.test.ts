@@ -125,6 +125,17 @@ describe("normalizeLiveState", () => {
     expect(result.displayLeftTeam.name).toBe("OVERRIDE");
   });
 
+  it("shows the team name when a team has no scoreboard name, matched or picked by hand", () => {
+    const plain: TeamRecord = { ...registry[0], id: "team-plain", canonicalName: "Red Tide", scoreboardDisplayName: "", aliases: ["RT"] };
+    const live = { state: "RUNNING", period: "GAME", mainGame: [{ name: "RT", score: 1 }, { name: "Unknown Squad", score: 0 }] };
+
+    expect(normalizeLiveState(live, { teams: [plain] }).displayLeftTeam.name).toBe("Red Tide");
+    const picked = normalizeLiveState(live, { teams: [plain], teamOverrides: { right: plain } });
+    expect(picked.displayRightTeam.name).toBe("Red Tide");
+    // A name nobody has confirmed stays as the feed sends it.
+    expect(normalizeLiveState(live, { teams: [] }).displayRightTeam.name).toBe("Unknown Squad");
+  });
+
   it("infers GAME when period is missing and the game timer is running", () => {
     const result = normalizeLiveState({
       mainGame: [{ name: "MPKK", score: 0 }, { name: "MPS", score: 0 }],

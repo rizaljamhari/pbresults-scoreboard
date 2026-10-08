@@ -85,7 +85,8 @@ function applyScoreboardDisplayName(
   team: ReturnType<typeof sanitizeTeam>,
   match: ReturnType<typeof matchTeamName>
 ) {
-  const preferred = match.team?.scoreboardDisplayName?.trim();
+  // A confirmed team shows its scoreboard name, or its team name when that is left blank (as the Teams page promises).
+  const preferred = match.team ? match.team.scoreboardDisplayName.trim() || match.team.canonicalName.trim() : "";
   if (!preferred) {
     return team;
   }
