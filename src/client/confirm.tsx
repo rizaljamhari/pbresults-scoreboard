@@ -76,7 +76,7 @@ export function ConfirmHost() {
   return (
     <dialog
       ref={dialogRef}
-      className="ad-scope ad-dialog"
+      className="pba-scope pba-dialog"
       aria-labelledby="confirm-title"
       aria-describedby={current?.message ? "confirm-message" : undefined}
       onCancel={(event) => {
@@ -86,16 +86,16 @@ export function ConfirmHost() {
     >
       {current ? (
         <>
-          <div className={danger ? "ad-dialog-head is-danger" : "ad-dialog-head is-question"}>
+          <div className={danger ? "pba-dialog-head is-danger" : "pba-dialog-head is-question"}>
             {danger ? <TriangleAlert aria-hidden /> : <CircleHelp aria-hidden />}
             <h2 id="confirm-title">{current.title}</h2>
           </div>
           {current.message ? (
-            <p id="confirm-message" className="ad-hint ad-dialog-message">
+            <p id="confirm-message" className="pba-hint pba-dialog-message">
               {current.message}
             </p>
           ) : null}
-          <div className="ad-dialog-actions">
+          <div className="pba-dialog-actions">
             <Button variant="ghost" onClick={() => settle(false)}>
               {current.cancelLabel ?? "Cancel"}
             </Button>

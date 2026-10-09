@@ -49,7 +49,7 @@ function FontSample({ asset, className }: { asset: Pick<AssetLibraryEntry, "id" 
   const family = `asset-${asset.id}`;
   useThemeFonts([{ family, url: asset.url }]);
   return (
-    <span className={cn("ad-font-sample", className)} style={{ fontFamily: `"${family}", sans-serif` }} aria-label="Font">
+    <span className={cn("pba-font-sample", className)} style={{ fontFamily: `"${family}", sans-serif` }} aria-label="Font">
       Aa
     </span>
   );
@@ -181,7 +181,7 @@ export function AssetsPage() {
 
   return (
     <div
-      className={cn("ad-page ad-scope", dragging && "is-dropping")}
+      className={cn("pba-page pba-scope", dragging && "is-dropping")}
       onDragOver={(event) => {
         if (!event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
@@ -255,16 +255,16 @@ export function AssetsPage() {
         />
       </Toolbar>
 
-      <div className={panelOpen ? "ad-split has-panel" : "ad-split"}>
-        <div className="ad-table-wrap">
+      <div className={panelOpen ? "pba-split has-panel" : "pba-split"}>
+        <div className="pba-table-wrap">
           {!library.data ? (
-            <p className="ad-hint" style={{ padding: 20 }}>
+            <p className="pba-hint" style={{ padding: 20 }}>
               Loading assets…
             </p>
           ) : shown.length === 0 ? (
-            <div className="ad-empty">
+            <div className="pba-empty">
               <b>{all.length ? "No assets match" : "No assets yet"}</b>
-              <p className="ad-hint">
+              <p className="pba-hint">
                 {all.length
                   ? "Try another name, or show everything."
                   : "Upload logos, backgrounds and other images here, or drop them anywhere on this page."}
@@ -286,15 +286,15 @@ export function AssetsPage() {
               )}
             </div>
           ) : view === "list" ? (
-            <table className="ad-table ad-asset-table" aria-label="Assets">
+            <table className="pba-table pba-asset-table" aria-label="Assets">
               <thead>
                 <tr>
                   <th>Asset</th>
                   <th>Used in</th>
-                  <th className="ad-col-2nd">Type</th>
-                  <th className="ad-col-2nd">Dimensions</th>
-                  <th className="ad-num">Size</th>
-                  <th className="ad-col-2nd">Added</th>
+                  <th className="pba-col-2nd">Type</th>
+                  <th className="pba-col-2nd">Dimensions</th>
+                  <th className="pba-num">Size</th>
+                  <th className="pba-col-2nd">Added</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,20 +302,20 @@ export function AssetsPage() {
                   const open = asset.id === openAssetId;
                   return (
                     <tr key={asset.id} data-asset-id={asset.id} aria-selected={open} onClick={() => openPanel(asset.id)}>
-                      <td className="ad-cell-name">
+                      <td className="pba-cell-name">
                         <button
                           type="button"
-                          className="ad-row-open"
+                          className="pba-row-open"
                           aria-pressed={open}
                           onClick={(event) => {
                             event.stopPropagation();
                             openPanel(asset.id);
                           }}
                         >
-                          <span className="ad-asset-row-thumb ad-checker">
+                          <span className="pba-asset-row-thumb pba-checker">
                             <AssetThumb asset={asset} />
                           </span>
-                          <span className="ad-asset-row-name" title={assetName(asset)}>
+                          <span className="pba-asset-row-name" title={assetName(asset)}>
                             {assetName(asset)}
                           </span>
                         </button>
@@ -324,43 +324,43 @@ export function AssetsPage() {
                         {asset.fileMissing ? (
                           <Chip tone="critical">File missing</Chip>
                         ) : asset.usages.length ? (
-                          <span className="ad-asset-row-usage" title={groupUsages(asset.usages).map(({ usage }) => usageOwnerName(usage)).join(", ")}>
+                          <span className="pba-asset-row-usage" title={groupUsages(asset.usages).map(({ usage }) => usageOwnerName(usage)).join(", ")}>
                             {usageSummary(asset.usages).replace(/^Used in /, "")}
                           </span>
                         ) : (
                           <Chip tone="quiet">Unused</Chip>
                         )}
                       </td>
-                      <td className="ad-col-2nd">
+                      <td className="pba-col-2nd">
                         {assetTypeLabel(asset.mimeType)}
-                        {asset.backgroundRemoved ? <span className="ad-faint"> · cut out</span> : null}
+                        {asset.backgroundRemoved ? <span className="pba-faint"> · cut out</span> : null}
                       </td>
-                      <td className="ad-col-2nd">{assetDimensions(asset) ?? <span className="ad-faint">—</span>}</td>
-                      <td className="ad-num">{formatBytes(asset.byteSize)}</td>
-                      <td className="ad-col-2nd">{formatAdded(asset.createdAt)}</td>
+                      <td className="pba-col-2nd">{assetDimensions(asset) ?? <span className="pba-faint">—</span>}</td>
+                      <td className="pba-num">{formatBytes(asset.byteSize)}</td>
+                      <td className="pba-col-2nd">{formatAdded(asset.createdAt)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           ) : (
-            <ul className="ad-asset-grid" aria-label="Assets">
+            <ul className="pba-asset-grid" aria-label="Assets">
               {shown.map((asset) => (
                 <li key={asset.id}>
                   <button
                     type="button"
                     data-asset-id={asset.id}
-                    className="ad-asset-card"
+                    className="pba-asset-card"
                     aria-pressed={asset.id === openAssetId}
                     onClick={() => openPanel(asset.id)}
                   >
-                    <span className="ad-asset-thumb ad-checker">
+                    <span className="pba-asset-thumb pba-checker">
                       <AssetThumb asset={asset} />
                     </span>
-                    <span className="ad-asset-name" title={assetName(asset)}>
+                    <span className="pba-asset-name" title={assetName(asset)}>
                       {assetName(asset)}
                     </span>
-                    <span className="ad-asset-meta">
+                    <span className="pba-asset-meta">
                       {asset.fileMissing ? (
                         <Chip tone="critical">File missing</Chip>
                       ) : (
@@ -368,7 +368,7 @@ export function AssetsPage() {
                           {asset.usages.length ? plural(groupUsages(asset.usages).length, "use") : "Unused"}
                         </Chip>
                       )}
-                      <span className="ad-faint">{formatBytes(asset.byteSize)}</span>
+                      <span className="pba-faint">{formatBytes(asset.byteSize)}</span>
                     </span>
                   </button>
                 </li>
@@ -391,7 +391,7 @@ export function AssetsPage() {
       </div>
 
       {dragging ? (
-        <div className="ad-drop-hint" aria-hidden>
+        <div className="pba-drop-hint" aria-hidden>
           <ImageUp />
           Drop images to upload
         </div>
@@ -402,19 +402,19 @@ export function AssetsPage() {
 
 function UsageList({ usages }: { usages: AssetUsage[] }) {
   if (!usages.length) {
-    return <p className="ad-hint">Not used by any theme, team or branding.</p>;
+    return <p className="pba-hint">Not used by any theme, team or branding.</p>;
   }
   return (
-    <ul className="ad-usage-list">
+    <ul className="pba-usage-list">
       {groupUsages(usages).map(({ key, usage, places }) => (
         <li key={key}>
-          <Link to={usageHref(usage)} className="ad-usage-owner">
+          <Link to={usageHref(usage)} className="pba-usage-owner">
             {usageOwnerName(usage)}
           </Link>
-          <span className="ad-usage-kind">{usage.kind === "theme" ? "Theme" : usage.kind === "team" ? "Team" : "Settings"}</span>
+          <span className="pba-usage-kind">{usage.kind === "theme" ? "Theme" : usage.kind === "team" ? "Team" : "Settings"}</span>
           {usage.kind === "theme" && usage.published ? <Chip tone="air">On air</Chip> : null}
           {usage.kind === "theme" && usage.builtin ? <Chip tone="quiet">Built-in</Chip> : null}
-          <span className="ad-usage-places">{places.join(" · ")}</span>
+          <span className="pba-usage-places">{places.join(" · ")}</span>
         </li>
       ))}
     </ul>
@@ -451,11 +451,11 @@ function AssetInspector({
 
   if (!asset) {
     return (
-      <aside className="ad-inspector" aria-label="Asset">
+      <aside className="pba-inspector" aria-label="Asset">
         {loaded ? (
-          <div className="ad-empty">
+          <div className="pba-empty">
             <b>Asset not found</b>
-            <p className="ad-hint">It may have been deleted somewhere else.</p>
+            <p className="pba-hint">It may have been deleted somewhere else.</p>
             <Button onClick={onClose}>Close</Button>
           </div>
         ) : null}
@@ -553,10 +553,10 @@ function AssetInspector({
   }
 
   return (
-    <aside className="ad-inspector" aria-label={assetName(current)}>
-      <div className="ad-insp-head">
-        <span className="ad-insp-logo ad-checker">{current.fileMissing ? null : isFontAsset(current) ? <FontSample asset={current} /> : <img src={current.url} alt="" />}</span>
-        <div className="ad-insp-title">
+    <aside className="pba-inspector" aria-label={assetName(current)}>
+      <div className="pba-insp-head">
+        <span className="pba-insp-logo pba-checker">{current.fileMissing ? null : isFontAsset(current) ? <FontSample asset={current} /> : <img src={current.url} alt="" />}</span>
+        <div className="pba-insp-title">
           <b>{assetName(current)}</b>
           <span>{usageSummary(current.usages)}</span>
         </div>
@@ -578,16 +578,16 @@ function AssetInspector({
         </IconButton>
       </div>
 
-      <div className="ad-insp-body">
+      <div className="pba-insp-body">
         {blockedBy ? (
-          <div className="ad-callout ad-callout--critical ad-callout--stack">
-            <div className="ad-callout-line">
+          <div className="pba-callout pba-callout--critical pba-callout--stack">
+            <div className="pba-callout-line">
               <TriangleAlert aria-hidden />
               <b>This asset is still in use</b>
             </div>
             <p>Deleting it removes the image from these places. Themes and teams keep everything else.</p>
             <UsageList usages={blockedBy} />
-            <div className="ad-callout-actions">
+            <div className="pba-callout-actions">
               <Button size="sm" onClick={() => setBlockedBy(null)}>
                 Keep it
               </Button>
@@ -598,21 +598,21 @@ function AssetInspector({
           </div>
         ) : null}
 
-        <section className="ad-insp-group">
-          <div className="ad-asset-preview ad-checker">
+        <section className="pba-insp-group">
+          <div className="pba-asset-preview pba-checker">
             {current.fileMissing ? (
-              <span className="ad-hint">
+              <span className="pba-hint">
                 <ImageOff aria-hidden /> The file for this asset is missing. Replace it to repair every place that uses it.
               </span>
             ) : isFontAsset(current) ? (
-              <FontSample asset={current} className="ad-font-sample--large" />
+              <FontSample asset={current} className="pba-font-sample--large" />
             ) : (
               <img src={previewUrl} alt={preview === "original" ? "Original upload" : "Current image"} />
             )}
           </div>
           {current.original ? (
             <Segmented
-              className="ad-asset-preview-toggle"
+              className="pba-asset-preview-toggle"
               label="Preview"
               value={preview}
               onChange={setPreview}
@@ -624,12 +624,12 @@ function AssetInspector({
           ) : null}
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <Field label="Name" hint={current.displayName ? `Uploaded as ${current.originalName}` : undefined}>
             {(id) => (
               <input
                 id={id}
-                className="ad-input"
+                className="pba-input"
                 value={name}
                 placeholder={current.originalName}
                 onChange={(event) => setName(event.target.value)}
@@ -644,7 +644,7 @@ function AssetInspector({
               />
             )}
           </Field>
-          <dl className="ad-asset-facts">
+          <dl className="pba-asset-facts">
             <dt>Type</dt>
             <dd>{assetTypeLabel(current.mimeType)}</dd>
             <dt>Size</dt>
@@ -666,28 +666,28 @@ function AssetInspector({
           </dl>
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <h2>
-            Used by<span className="ad-hint">{current.usages.length ? plural(current.usages.length, "place") : null}</span>
+            Used by<span className="pba-hint">{current.usages.length ? plural(current.usages.length, "place") : null}</span>
           </h2>
           <UsageList usages={current.usages} />
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <h2>File</h2>
           {isFontAsset(current) ? (
-            <p className="ad-hint">A font file. Add it to a theme from the Fonts section of the theme panel.</p>
+            <p className="pba-hint">A font file. Add it to a theme from the Fonts section of the theme panel.</p>
           ) : (
-          <div className="ad-asset-actions">
+          <div className="pba-asset-actions">
             <Button disabled={busy !== null} onClick={() => replaceRef.current?.click()}>
               <ImageUp aria-hidden />
               {busy === "Replace" ? "Replacing…" : "Replace file…"}
             </Button>
-            <label className="ad-check-row">
-              <input className="ad-check" type="checkbox" checked={removeBg} onChange={(event) => setRemoveBackground(event.target.checked)} />
+            <label className="pba-check-row">
+              <input className="pba-check" type="checkbox" checked={removeBg} onChange={(event) => setRemoveBackground(event.target.checked)} />
               Remove background from the new file
             </label>
-            <p className="ad-hint">Every theme and team using this asset switches to the new file. It keeps its name and links.</p>
+            <p className="pba-hint">Every theme and team using this asset switches to the new file. It keeps its name and links.</p>
             {current.backgroundRemoved ? (
               <Button
                 disabled={busy !== null}
@@ -830,12 +830,12 @@ function CleanupPanel({ onClose, onDone }: { onClose: () => void; onDone: () => 
   }
 
   return (
-    <aside className="ad-inspector" aria-label="Clean up assets">
-      <div className="ad-insp-head">
-        <span className="ad-insp-logo">
+    <aside className="pba-inspector" aria-label="Clean up assets">
+      <div className="pba-insp-head">
+        <span className="pba-insp-logo">
           <Images aria-hidden />
         </span>
-        <div className="ad-insp-title">
+        <div className="pba-insp-title">
           <b>Clean up</b>
           <span>{report ? (total ? `${plural(total, "item")} · ${formatBytes(report.reclaimableBytes)} can be freed` : "Nothing to clean up") : "Scanning…"}</span>
         </div>
@@ -844,9 +844,9 @@ function CleanupPanel({ onClose, onDone }: { onClose: () => void; onDone: () => 
         </IconButton>
       </div>
 
-      <div className="ad-insp-body">
+      <div className="pba-insp-body">
         {error ? (
-          <div className="ad-callout ad-callout--critical">
+          <div className="pba-callout pba-callout--critical">
             <TriangleAlert aria-hidden />
             <span style={{ flex: 1 }}>{error}</span>
             <Button size="sm" onClick={() => void load()}>
@@ -856,9 +856,9 @@ function CleanupPanel({ onClose, onDone }: { onClose: () => void; onDone: () => 
         ) : null}
         {report && selection ? (
           total === 0 ? (
-            <div className="ad-empty">
+            <div className="pba-empty">
               <b>All tidy</b>
-              <p className="ad-hint">Every asset is used by a theme or team, and the uploads folder has no leftovers.</p>
+              <p className="pba-hint">Every asset is used by a theme or team, and the uploads folder has no leftovers.</p>
             </div>
           ) : (
             <>
@@ -901,8 +901,8 @@ function CleanupPanel({ onClose, onDone }: { onClose: () => void; onDone: () => 
       </div>
 
       {report && total > 0 ? (
-        <div className="ad-insp-foot">
-          <span className="ad-hint">
+        <div className="pba-insp-foot">
+          <span className="pba-hint">
             {selectedCount ? `${plural(selectedCount, "item")} · ${formatBytes(selectedBytes)}` : "Nothing selected"}
           </span>
           <Button variant="danger" disabled={busy || !selectedCount} onClick={() => void runCleanup()}>
@@ -931,10 +931,10 @@ function CleanupGroup({
   if (!items.length) return null;
   const allSelected = items.every((item) => selected.has(item.id));
   return (
-    <section className="ad-insp-group">
+    <section className="pba-insp-group">
       <h2>
         <input
-          className="ad-check"
+          className="pba-check"
           type="checkbox"
           aria-label={`Select all ${title.toLowerCase()}`}
           checked={allSelected}
@@ -944,21 +944,21 @@ function CleanupGroup({
           onChange={(event) => items.forEach((item) => onToggle(item.id, event.target.checked))}
         />
         {title}
-        <span className="ad-hint">{items.length}</span>
+        <span className="pba-hint">{items.length}</span>
       </h2>
-      <p className="ad-hint" style={{ margin: "-4px 0 10px" }}>
+      <p className="pba-hint" style={{ margin: "-4px 0 10px" }}>
         {hint}
       </p>
-      <ul className="ad-cleanup-list">
+      <ul className="pba-cleanup-list">
         {items.map((item) => (
           <li key={item.id}>
             <label>
-              <input className="ad-check" type="checkbox" checked={selected.has(item.id)} onChange={(event) => onToggle(item.id, event.target.checked)} />
-              <span className="ad-cleanup-thumb ad-checker">{item.url ? <img src={item.url} alt="" loading="lazy" /> : <ImageOff aria-hidden />}</span>
-              <span className="ad-cleanup-name" title={item.name}>
+              <input className="pba-check" type="checkbox" checked={selected.has(item.id)} onChange={(event) => onToggle(item.id, event.target.checked)} />
+              <span className="pba-cleanup-thumb pba-checker">{item.url ? <img src={item.url} alt="" loading="lazy" /> : <ImageOff aria-hidden />}</span>
+              <span className="pba-cleanup-name" title={item.name}>
                 {item.name}
               </span>
-              <span className="ad-faint">{item.detail}</span>
+              <span className="pba-faint">{item.detail}</span>
             </label>
           </li>
         ))}

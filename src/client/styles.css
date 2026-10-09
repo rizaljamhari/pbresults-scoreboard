@@ -60,7 +60,7 @@ textarea {
 }
 
 /* Global element styles skip the theme editor, which styles its own controls. */
-button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)) {
+button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)) {
   border: 0;
   border-radius: 999px;
   min-height: 42px;
@@ -77,18 +77,18 @@ button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-sco
     transform 140ms ease;
 }
 
-button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)):hover {
+button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)):hover {
   background: var(--md-primary-hover);
   box-shadow: var(--md-shadow-2);
 }
 
-button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)):active {
+button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)):active {
   transform: translateY(1px);
 }
 
-input:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)),
-select:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)),
-textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)) {
+input:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)),
+select:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)),
+textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)) {
   width: 100%;
   margin-top: 0.35rem;
   padding: 0.85rem 0.95rem;
@@ -103,19 +103,19 @@ textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-s
     background-color 140ms ease;
 }
 
-input:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)):focus,
-select:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)):focus,
-textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)):focus {
+input:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)):focus,
+select:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)):focus,
+textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)):focus {
   border-color: var(--md-primary);
   box-shadow: 0 0 0 4px rgba(0, 95, 163, 0.14);
 }
 
-textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)) {
+textarea:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)) {
   resize: vertical;
   min-height: 120px;
 }
 
-input[type="color"]:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)) {
+input[type="color"]:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)) {
   width: 48px;
   min-width: 48px;
   height: 48px;
@@ -123,7 +123,7 @@ input[type="color"]:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-toolt
   border-radius: 12px;
 }
 
-label:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *)) {
+label:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *)) {
   display: grid;
   gap: 0.3rem;
   font-size: var(--admin-meta-size);
@@ -142,11 +142,11 @@ details > summary::-webkit-details-marker {
   display: none;
 }
 
-details:not(.editor-section-card):not(:where(.ad-scope *)) > summary {
+details:not(.editor-section-card):not(:where(.pba-scope *)) > summary {
   padding-right: 2rem;
 }
 
-details:not(.editor-section-card):not(:where(.ad-scope *)) > summary::after {
+details:not(.editor-section-card):not(:where(.pba-scope *)) > summary::after {
   content: "▾";
   position: absolute;
   top: 50%;

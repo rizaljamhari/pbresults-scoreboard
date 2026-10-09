@@ -75,13 +75,13 @@ export function useLeaveGuard({ dirty, saving, onSave, onDiscard }: LeaveGuardOp
   }
 
   const prompt = (
-    <dialog ref={dialogRef} className="ad-scope ad-dialog" aria-labelledby="unsaved-title" onClose={() => setPending(null)}>
-      <div className="ad-dialog-head">
+    <dialog ref={dialogRef} className="pba-scope pba-dialog" aria-labelledby="unsaved-title" onClose={() => setPending(null)}>
+      <div className="pba-dialog-head">
         <TriangleAlert aria-hidden />
         <h2 id="unsaved-title">Save your changes before leaving?</h2>
       </div>
-      <p className="ad-hint">Your changes here are not saved yet. If you leave without saving, they are lost.</p>
-      <div className="ad-dialog-actions">
+      <p className="pba-hint">Your changes here are not saved yet. If you leave without saving, they are lost.</p>
+      <div className="pba-dialog-actions">
         <Button variant="ghost" onClick={() => setPending(null)}>
           Stay here
         </Button>

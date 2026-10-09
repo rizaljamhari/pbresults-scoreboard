@@ -122,45 +122,45 @@ export function AppShell() {
 
   return (
     <AppearanceContext.Provider value={appearance}>
-      <div className={cn("ad-shell", collapsed && "is-collapsed", focusMode && "is-focus")}>
-        <aside className="ad-side ad-scope" aria-label="Main" hidden={focusMode}>
-          <div className="ad-side-head">
+      <div className={cn("pba-shell", collapsed && "is-collapsed", focusMode && "is-focus")}>
+        <aside className="pba-side pba-scope" aria-label="Main" hidden={focusMode}>
+          <div className="pba-side-head">
             {brandLogoUrl ? (
-              <span className="ad-mark ad-mark--logo" aria-hidden>
+              <span className="pba-mark pba-mark--logo" aria-hidden>
                 <img src={brandLogoUrl} alt="" />
               </span>
             ) : (
-              <span className="ad-mark" aria-hidden>
+              <span className="pba-mark" aria-hidden>
                 <ScanLine />
               </span>
             )}
-            <span className="ad-app-name" title={appName}>
+            <span className="pba-app-name" title={appName}>
               {appName}
               {showPoweredBy ? <small>Powered by {DEFAULT_APP_NAME}</small> : null}
             </span>
           </div>
 
-          <nav className="ad-nav">
+          <nav className="pba-nav">
             {navItems.map((item) => (
               <Link key={item.to} to={item.to} aria-current={item.active ? "page" : undefined} title={collapsed ? item.label : undefined}>
                 <item.icon aria-hidden />
                 <span>{item.label}</span>
-                {item.count !== undefined ? <span className="ad-nav-count">{item.count}</span> : null}
+                {item.count !== undefined ? <span className="pba-nav-count">{item.count}</span> : null}
               </Link>
             ))}
-            <div className="ad-nav-sep" />
-            <a className="ad-nav-ext" href="/overlay/live" target="_blank" rel="noreferrer" title="Opens the live overlay in a new tab">
+            <div className="pba-nav-sep" />
+            <a className="pba-nav-ext" href="/overlay/live" target="_blank" rel="noreferrer" title="Opens the live overlay in a new tab">
               <MonitorPlay aria-hidden />
               <span>Open live overlay</span>
-              <ArrowUpRight className="ad-trail" aria-hidden />
+              <ArrowUpRight className="pba-trail" aria-hidden />
             </a>
           </nav>
 
-          <div className="ad-side-foot">
+          <div className="pba-side-foot">
             <SidebarLiveStatus settings={settings.data} onAirTheme={onAirTheme} />
 
-            <div className="ad-foot-row">
-              <div className="ad-seg" role="radiogroup" aria-label="Appearance">
+            <div className="pba-foot-row">
+              <div className="pba-seg" role="radiogroup" aria-label="Appearance">
                 {APPEARANCE_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -175,16 +175,16 @@ export function AppShell() {
                   </button>
                 ))}
               </div>
-              <IconButton className="ad-rail-collapse" label="Collapse sidebar" title="Collapse sidebar (Ctrl/Cmd+\)" onClick={toggleCollapsed}>
+              <IconButton className="pba-rail-collapse" label="Collapse sidebar" title="Collapse sidebar (Ctrl/Cmd+\)" onClick={toggleCollapsed}>
                 <PanelLeftClose />
               </IconButton>
-              <IconButton className="ad-rail-expand" label="Expand sidebar" title="Expand sidebar (Ctrl/Cmd+\)" onClick={toggleCollapsed}>
+              <IconButton className="pba-rail-expand" label="Expand sidebar" title="Expand sidebar (Ctrl/Cmd+\)" onClick={toggleCollapsed}>
                 <PanelLeftOpen />
               </IconButton>
             </div>
           </div>
         </aside>
-        <main className="ad-main">
+        <main className="pba-main">
           {/* Teams and Assets keep one page while their side panel opens different records, so the list and filters stay put. */}
           <RemoteAccessBanner />
           <RehearsalBanner />
@@ -217,20 +217,20 @@ function SidebarLiveStatus({
   const StateIcon = summary.tone === "ok" ? CircleCheck : summary.tone === "critical" ? CircleAlert : TriangleAlert;
 
   return (
-    <Link className="ad-live" to="/admin/operations" title={`Feed ${summary.feedLabel.toLowerCase()} · Overlay ${overlayLine.label} · ${summary.stateLabel}. Opens Operations.`}>
-      <div className="ad-live-body">
-        <div className="ad-live-row">
-          <span className="ad-k">On air</span>
+    <Link className="pba-live" to="/admin/operations" title={`Feed ${summary.feedLabel.toLowerCase()} · Overlay ${overlayLine.label} · ${summary.stateLabel}. Opens Operations.`}>
+      <div className="pba-live-body">
+        <div className="pba-live-row">
+          <span className="pba-k">On air</span>
           <Dot tone={onAirTheme ? "tally" : undefined} />
-          <span className="ad-v">{onAirTheme?.name ?? "No theme"}</span>
+          <span className="pba-v">{onAirTheme?.name ?? "No theme"}</span>
         </div>
-        <div className="ad-live-row" title="Whether the page vMix loads (/overlay/live) is connected and current">
-          <span className="ad-k">Overlay</span>
+        <div className="pba-live-row" title="Whether the page vMix loads (/overlay/live) is connected and current">
+          <span className="pba-k">Overlay</span>
           <Dot tone={overlayLine.tone} />
-          <span className="ad-v">{overlayLine.label}</span>
+          <span className="pba-v">{overlayLine.label}</span>
         </div>
         {state && state.sourceStatus !== "idle" ? (
-          <div className="ad-live-score">
+          <div className="pba-live-score">
             <b>
               {state.displayLeftTeam.name || "Left"} {state.displayLeftTeam.score}–{state.displayRightTeam.score}{" "}
               {state.displayRightTeam.name || "Right"}
@@ -239,18 +239,18 @@ function SidebarLiveStatus({
           </div>
         ) : null}
         {rehearsing && rehearsal.data ? (
-          <div className="ad-live-state ad-live-state--rehearsal">
+          <div className="pba-live-state pba-live-state--rehearsal">
             <Dot tone="rehearsal" />
             Rehearsing · case {rehearsal.data.caseIndex + 1} of {rehearsal.data.cases.length}
           </div>
         ) : (
-          <div className={`ad-live-state ad-live-state--${summary.tone}`}>
+          <div className={`pba-live-state pba-live-state--${summary.tone}`}>
             <StateIcon aria-hidden />
             {summary.stateLabel}
           </div>
         )}
       </div>
-      <div className="ad-live-mini" aria-hidden>
+      <div className="pba-live-mini" aria-hidden>
         <Dot tone={onAirTheme ? "tally" : undefined} />
         <Dot tone={overlayLine.tone} />
         {/* The overall state, so a feed problem still shows with the sidebar collapsed. */}
@@ -273,16 +273,16 @@ function RemoteAccessBanner() {
   const degraded = status.phase === "degraded";
   const remaining = formatRemaining(status.expiresAt, now);
   return (
-    <div className={cn("ad-ra-banner ad-scope", degraded && "ad-ra-banner--critical")} role="status">
+    <div className={cn("pba-ra-banner pba-scope", degraded && "pba-ra-banner--critical")} role="status">
       <Globe aria-hidden />
       {degraded ? "Remote access is reconnecting" : status.remoteRequest ? "You are connected remotely" : "Remote access is on"}
       <span>
         {status.remoteRequest ? "" : `· ${formatRemoteConnections(status.remoteConnections)} `}·{" "}
         {remaining === "ending now" ? "ending now" : `ends ${formatTime(status.expiresAt)} (${remaining})`}
       </span>
-      <span className="ad-grow" />
+      <span className="pba-grow" />
       {status.managementAllowed && location.pathname !== "/admin/maintenance" ? (
-        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/maintenance#set-remote">
+        <Link className="pba-btn pba-btn--sm pba-btn--ghost" to="/admin/maintenance#set-remote">
           Manage
         </Link>
       ) : null}
@@ -297,21 +297,21 @@ function RehearsalBanner() {
   const location = useLocation();
   if (!status || status.phase !== "running") return null;
   return (
-    <div className="ad-rh-banner ad-scope" role="status">
+    <div className="pba-rh-banner pba-scope" role="status">
       <Dot tone="rehearsal" />
       Rehearsing
       <span>
         · vMix is showing test data, case {status.caseIndex + 1} of {status.cases.length}
       </span>
-      <span className="ad-grow" />
+      <span className="pba-grow" />
       {location.pathname !== "/admin/operations" ? (
-        <Link className="ad-btn ad-btn--sm ad-btn--ghost" to="/admin/operations">
+        <Link className="pba-btn pba-btn--sm pba-btn--ghost" to="/admin/operations">
           Open rehearsal
         </Link>
       ) : null}
       <button
         type="button"
-        className="ad-btn ad-btn--sm"
+        className="pba-btn pba-btn--sm"
         onClick={() => void api.rehearsal("stop").then((next) => rehearsal.setData?.(next)).catch(() => undefined)}
       >
         Stop rehearsal

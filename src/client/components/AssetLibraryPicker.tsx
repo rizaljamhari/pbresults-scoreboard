@@ -66,11 +66,11 @@ export function AssetLibraryPicker({
         )}
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="ad-scope ad-pop ad-asset-picker" align={align} sideOffset={6} aria-label={label}>
-          <label className="ad-search">
+        <Popover.Content className="pba-scope pba-pop pba-asset-picker" align={align} sideOffset={6} aria-label={label}>
+          <label className="pba-search">
             <Search aria-hidden />
             <input
-              className="ad-input"
+              className="pba-input"
               type="search"
               autoFocus
               placeholder="Search images"
@@ -79,10 +79,10 @@ export function AssetLibraryPicker({
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <ul className="ad-asset-picker-grid" role="listbox" aria-label={label}>
+          <ul className="pba-asset-picker-grid" role="listbox" aria-label={label}>
             {onUpload ? (
               <li>
-                <label className="ad-asset-picker-item" title="Upload a new image">
+                <label className="pba-asset-picker-item" title="Upload a new image">
                   <ImagePlus aria-label="Upload a new image" />
                   <input
                     hidden
@@ -101,7 +101,7 @@ export function AssetLibraryPicker({
               </li>
             ) : null}
             <li>
-              <button type="button" role="option" aria-selected={value === null} className="ad-asset-picker-item" title="No image" onClick={() => choose(null)}>
+              <button type="button" role="option" aria-selected={value === null} className="pba-asset-picker-item" title="No image" onClick={() => choose(null)}>
                 <CircleSlash aria-hidden />
               </button>
             </li>
@@ -111,7 +111,7 @@ export function AssetLibraryPicker({
                   type="button"
                   role="option"
                   aria-selected={asset.id === value}
-                  className="ad-asset-picker-item ad-checker"
+                  className="pba-asset-picker-item pba-checker"
                   title={displayName(asset)}
                   onClick={() => choose(asset.id)}
                 >
@@ -120,8 +120,8 @@ export function AssetLibraryPicker({
               </li>
             ))}
           </ul>
-          <div className="ad-asset-picker-foot">
-            <span className="ad-hint">{assets.length ? `${shown.length} of ${assets.length}` : "The library is empty"}</span>
+          <div className="pba-asset-picker-foot">
+            <span className="pba-hint">{assets.length ? `${shown.length} of ${assets.length}` : "The library is empty"}</span>
             <a href={value ? `/admin/assets/${encodeURIComponent(value)}` : "/admin/assets"} target="_blank" rel="noreferrer">
               Manage assets
             </a>

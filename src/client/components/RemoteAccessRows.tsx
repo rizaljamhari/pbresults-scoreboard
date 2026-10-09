@@ -82,7 +82,7 @@ export function RemoteAccessRows() {
 
   if (!status) {
     return (
-      <div className="ad-callout">
+      <div className="pba-callout">
         <Info aria-hidden />
         <span>{remote.error ?? "Loading remote access…"}</span>
       </div>
@@ -98,7 +98,7 @@ export function RemoteAccessRows() {
   return (
     <>
       {status.lastError && !sessionOn ? (
-        <div className="ad-callout ad-callout--critical">
+        <div className="pba-callout pba-callout--critical">
           <CircleAlert aria-hidden />
           <span>{status.lastError.message}</span>
         </div>
@@ -109,12 +109,12 @@ export function RemoteAccessRows() {
       ) : sessionOn ? (
         <ActiveSession status={status} busy={busyAction !== null} onStop={() => runAction("stop", api.stopRemoteAccess, "Remote access stopped.")} />
       ) : status.phase === "starting" || busyAction === "start" ? (
-        <div className="ad-callout ad-callout--info">
+        <div className="pba-callout pba-callout--info">
           <Info aria-hidden />
           <span>Starting remote access and checking it works from the internet…</span>
         </div>
       ) : status.phase === "stopping" ? (
-        <div className="ad-callout">
+        <div className="pba-callout">
           <Info aria-hidden />
           <span>Stopping remote access…</span>
         </div>
@@ -143,7 +143,7 @@ function RemoteAccessReadOnly({ status }: { status: RemoteAccessStatus }) {
   const sessionOn = status.phase === "active" || status.phase === "degraded";
   return (
     <>
-      <div className="ad-callout ad-callout--info">
+      <div className="pba-callout pba-callout--info">
         <Info aria-hidden />
         <span>
           {status.remoteRequest
@@ -151,12 +151,12 @@ function RemoteAccessReadOnly({ status }: { status: RemoteAccessStatus }) {
             : "Remote access is set up and started on the scoreboard computer, through localhost."}
         </span>
       </div>
-      <div className="ad-set-block">
+      <div className="pba-set-block">
         <b>
           Remote access{" "}
           {sessionOn ? <Chip tone="critical">{status.phase === "degraded" ? "Reconnecting" : "Open to the internet"}</Chip> : <Chip>Off</Chip>}
         </b>
-        <p className="ad-hint ad-break" style={{ margin: 0 }}>
+        <p className="pba-hint pba-break" style={{ margin: 0 }}>
           {sessionOn ? `${status.url ?? ""} · until ${formatTime(status.expiresAt)} · ${formatRemaining(status.expiresAt, now)}` : status.configured ? "Ready to start." : "Not set up."}
         </p>
       </div>
@@ -180,7 +180,7 @@ function TokenInput({ busy, onSubmit, submitLabel, onCancel }: { busy: boolean; 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
       <input
-        className="ad-input"
+        className="pba-input"
         style={{ flex: "1 1 260px", minWidth: 0 }}
         type="password"
         autoComplete="off"
@@ -206,16 +206,16 @@ function TokenInput({ busy, onSubmit, submitLabel, onCancel }: { busy: boolean; 
 
 function TokenSetup({ busy, onSave }: { busy: boolean; onSave: (token: string) => Promise<boolean> }) {
   return (
-    <div className="ad-set-block">
+    <div className="pba-set-block">
       <b>Connect an ngrok account</b>
-      <p className="ad-hint">
+      <p className="pba-hint">
         Remote access lets trusted staff off site open this admin in a normal browser, through ngrok. Paste the account's authtoken once. It is saved
         on this computer only, outside event data and backups, and staff off site never see it. If this folder is ever copied somewhere else,
         replace the authtoken in the ngrok dashboard.
       </p>
       <TokenInput busy={busy} submitLabel="Save and test" onSubmit={(token) => void onSave(token)} />
       <div>
-        <a className="ad-btn ad-btn--text" href={NGROK_AUTHTOKEN_URL} target="_blank" rel="noreferrer">
+        <a className="pba-btn pba-btn--text" href={NGROK_AUTHTOKEN_URL} target="_blank" rel="noreferrer">
           Find your authtoken
           <ArrowUpRight aria-hidden />
         </a>
@@ -279,7 +279,7 @@ function ConfiguredInactive({
       </SettingRow>
 
       {replacing ? (
-        <div className="ad-set-block">
+        <div className="pba-set-block">
           <TokenInput
             busy={busyAction === "save"}
             submitLabel="Save and test"
@@ -297,11 +297,11 @@ function ConfiguredInactive({
           </Button>
         </SettingRow>
       ) : (
-        <div className="ad-set-block">
+        <div className="pba-set-block">
           <b>Start remote access</b>
           <label style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
             Ends after
-            <select className="ad-select" style={{ width: "auto" }} aria-label="Session length" value={minutes} disabled={busy} onChange={(event) => setMinutes(Number(event.target.value))}>
+            <select className="pba-select" style={{ width: "auto" }} aria-label="Session length" value={minutes} disabled={busy} onChange={(event) => setMinutes(Number(event.target.value))}>
               {REMOTE_ACCESS_DURATIONS_MINUTES.map((value) => (
                 <option key={value} value={value}>
                   {formatDuration(value)}
@@ -309,14 +309,14 @@ function ConfiguredInactive({
               ))}
             </select>
           </label>
-          <ul className="ad-hint" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4 }}>
+          <ul className="pba-hint" style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4 }}>
             <li>Anyone with the address, username and password gets full control of themes, settings, teams and live operations.</li>
             <li>Updates, backup restore and remote access itself stay on this computer only.</li>
             <li>Changes are shared: if two people edit the same thing, the last save wins.</li>
             <li>A new password is made every time. Stopping, or the time running out, locks everyone out at once.</li>
           </ul>
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input className="ad-check" type="checkbox" checked={acknowledged} disabled={busy} onChange={(event) => setAcknowledged(event.target.checked)} />I
+            <input className="pba-check" type="checkbox" checked={acknowledged} disabled={busy} onChange={(event) => setAcknowledged(event.target.checked)} />I
             only share these details with trusted staff.
           </label>
           <div style={{ display: "flex", gap: 6 }}>
@@ -363,12 +363,12 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
   return (
     <>
       {degraded ? (
-        <div className="ad-callout ad-callout--critical">
+        <div className="pba-callout pba-callout--critical">
           <TriangleAlert aria-hidden />
           <span>The connection to ngrok dropped and is reconnecting. Everything on this computer keeps working; staff off site may be cut off for now.</span>
         </div>
       ) : (
-        <div className="ad-callout ad-callout--critical" role="status">
+        <div className="pba-callout pba-callout--critical" role="status">
           <Globe aria-hidden />
           <span>This scoreboard is open to the internet. Anyone with the details below can control it until {formatTime(status.expiresAt)}.</span>
         </div>
@@ -399,7 +399,7 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
         </Button>
       </SettingRow>
 
-      <SettingRow title="Address" hint={<span className="ad-break">{url}</span>}>
+      <SettingRow title="Address" hint={<span className="pba-break">{url}</span>}>
         <Button variant="ghost" onClick={() => void copy(url, "Address")}>
           <Copy aria-hidden />
           Copy
@@ -408,7 +408,7 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
 
       {credentials ? (
         <>
-          <SettingRow title="Username" hint={<span className="ad-break">{credentials.username}</span>}>
+          <SettingRow title="Username" hint={<span className="pba-break">{credentials.username}</span>}>
             <Button variant="ghost" onClick={() => void copy(credentials.username, "Username")}>
               <Copy aria-hidden />
               Copy
@@ -418,7 +418,7 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
             title="Password"
             hint={
               <input
-                className="ad-input"
+                className="pba-input"
                 style={{ width: "100%", maxWidth: 280 }}
                 readOnly
                 type={revealed ? "text" : "password"}
@@ -449,7 +449,7 @@ function ActiveSession({ status, busy, onStop }: { status: LocalRemoteAccessStat
         </>
       ) : null}
 
-      <div className="ad-callout">
+      <div className="pba-callout">
         <Info aria-hidden />
         <span>On ngrok's free plan, people off site first see an ngrok warning page and must click Visit Site before the password prompt.</span>
       </div>

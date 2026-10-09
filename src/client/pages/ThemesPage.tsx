@@ -71,10 +71,10 @@ const ThemeThumb = memo(function ThemeThumb({
   const fit = box ? fitContent(bounds, box.width, box.height, THUMB_PADDING) : null;
 
   return (
-    <div ref={boxRef} className="ad-theme-thumb ad-checker" aria-hidden>
+    <div ref={boxRef} className="pba-theme-thumb pba-checker" aria-hidden>
       {fit ? (
         <div
-          className="ad-theme-thumb-stage"
+          className="pba-theme-thumb-stage"
           style={{ width: theme.canvas.width, height: theme.canvas.height, transform: `translate(${fit.x}px, ${fit.y}px) scale(${fit.scale})` }}
         >
           <OverlayRenderer theme={theme} live={live} assets={assets} transparentBackground />
@@ -123,8 +123,8 @@ function themeMenu(theme: ThemeDefinition, onAir: boolean, actions: CardActions)
 /** The theme's name, led by its acronym in bold so a long list can be skimmed. */
 function ThemeName({ theme }: { theme: ThemeDefinition }) {
   return (
-    <b className="ad-theme-name" title={theme.acronym ? `${theme.acronym} · ${theme.name}` : theme.name}>
-      {theme.acronym ? <abbr className="ad-theme-acronym" title={theme.name}>{theme.acronym}</abbr> : null}
+    <b className="pba-theme-name" title={theme.acronym ? `${theme.acronym} · ${theme.name}` : theme.name}>
+      {theme.acronym ? <abbr className="pba-theme-acronym" title={theme.name}>{theme.acronym}</abbr> : null}
       <span>{theme.name}</span>
     </b>
   );
@@ -167,31 +167,31 @@ function ThemeItem({
     />
   );
   const edit = (
-    <Link className="ad-btn" to={`/admin/themes/${theme.id}`}>
+    <Link className="pba-btn" to={`/admin/themes/${theme.id}`}>
       <PenLine aria-hidden />
       Edit
     </Link>
   );
-  const classes = ["ad-surface", view === "grid" ? "ad-theme" : "ad-theme-row", onAir ? "is-air" : "", theme.archived ? "is-archived" : ""].join(" ");
+  const classes = ["pba-surface", view === "grid" ? "pba-theme" : "pba-theme-row", onAir ? "is-air" : "", theme.archived ? "is-archived" : ""].join(" ");
 
   return (
     <article className={classes}>
-      <Link to={`/admin/themes/${theme.id}`} className="ad-theme-link" aria-label={`Edit ${theme.name}`} tabIndex={-1}>
+      <Link to={`/admin/themes/${theme.id}`} className="pba-theme-link" aria-label={`Edit ${theme.name}`} tabIndex={-1}>
         <ThemeThumb theme={theme} live={live} assets={assets} />
       </Link>
       {view === "grid" ? (
-        <div className="ad-theme-body">
-          <div className="ad-theme-title">
+        <div className="pba-theme-body">
+          <div className="pba-theme-title">
             <ThemeName theme={theme} />
             {chip ?? builtinChip}
           </div>
           {theme.description ? (
-            <p className="ad-theme-desc" title={theme.description}>
+            <p className="pba-theme-desc" title={theme.description}>
               {theme.description}
             </p>
           ) : null}
-          {meta ? <p className="ad-theme-meta">{meta}</p> : null}
-          <div className="ad-theme-actions">
+          {meta ? <p className="pba-theme-meta">{meta}</p> : null}
+          <div className="pba-theme-actions">
             {edit}
             <Grow />
             {menu}
@@ -199,13 +199,13 @@ function ThemeItem({
         </div>
       ) : (
         <>
-          <div className="ad-theme-row-text">
+          <div className="pba-theme-row-text">
             <ThemeName theme={theme} />
             {theme.description ? <span title={theme.description}>{theme.description}</span> : null}
           </div>
-          <span className="ad-theme-meta">{meta}</span>
-          <span className="ad-theme-row-chip">{chip ?? builtinChip}</span>
-          <div className="ad-theme-actions">
+          <span className="pba-theme-meta">{meta}</span>
+          <span className="pba-theme-row-chip">{chip ?? builtinChip}</span>
+          <div className="pba-theme-actions">
             {edit}
             {menu}
           </div>
@@ -357,7 +357,7 @@ export function ThemesPage() {
   ];
 
   const renderList = (list: ThemeDefinition[]) => (
-    <div className={view === "grid" ? "ad-gallery" : "ad-theme-list"}>
+    <div className={view === "grid" ? "pba-gallery" : "pba-theme-list"}>
       {list.map((theme) => (
         <ThemeItem
           key={theme.id}
@@ -380,10 +380,10 @@ export function ThemesPage() {
       return renderList(list);
     }
     return groups.map((group) => (
-      <div key={group.acronym || "none"} className="ad-theme-group">
-        <h3 className="ad-theme-group-title">
-          {group.acronym ? <span className="ad-theme-acronym">{group.acronym}</span> : "No acronym"}
-          <span className="ad-theme-section-count">{group.themes.length}</span>
+      <div key={group.acronym || "none"} className="pba-theme-group">
+        <h3 className="pba-theme-group-title">
+          {group.acronym ? <span className="pba-theme-acronym">{group.acronym}</span> : "No acronym"}
+          <span className="pba-theme-section-count">{group.themes.length}</span>
         </h3>
         {renderList(group.themes)}
       </div>
@@ -391,10 +391,10 @@ export function ThemesPage() {
   };
 
   return (
-    <div className="ad-page ad-scope">
+    <div className="pba-page pba-scope">
       <Toolbar title="Themes" count={themes.data ? eventThemeCount : undefined}>
         <SearchField ref={searchRef} label="Search themes" placeholder="Search themes" shortcut="/" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <select className="ad-select" style={{ width: "auto" }} aria-label="Sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as ThemeSort)}>
+        <select className="pba-select" style={{ width: "auto" }} aria-label="Sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as ThemeSort)}>
           <option value="recent">Recently edited</option>
           <option value="nameAsc">Name A–Z</option>
           <option value="nameDesc">Name Z–A</option>
@@ -433,42 +433,42 @@ export function ThemesPage() {
         />
       </Toolbar>
 
-      <div className="ad-body">
+      <div className="pba-body">
         {!themes.data ? (
-          <p className="ad-hint" style={{ padding: 20 }}>
+          <p className="pba-hint" style={{ padding: 20 }}>
             Loading themes…
           </p>
         ) : nothingMatches ? (
-          <div className="ad-empty">
+          <div className="pba-empty">
             <b>No themes match</b>
-            <p className="ad-hint">Try another name, or clear the search.</p>
+            <p className="pba-hint">Try another name, or clear the search.</p>
             <Button onClick={() => setSearch("")}>Clear search</Button>
           </div>
         ) : (
           <>
             {sections.onAir ? (
-              <section className="ad-theme-section" aria-labelledby="themes-on-air">
-                <h2 id="themes-on-air" className="ad-theme-section-title">
+              <section className="pba-theme-section" aria-labelledby="themes-on-air">
+                <h2 id="themes-on-air" className="pba-theme-section-title">
                   On air
                 </h2>
                 {renderList([sections.onAir])}
               </section>
             ) : null}
 
-            <section className="ad-theme-section" aria-labelledby="themes-yours">
-              <h2 id="themes-yours" className="ad-theme-section-title">
+            <section className="pba-theme-section" aria-labelledby="themes-yours">
+              <h2 id="themes-yours" className="pba-theme-section-title">
                 Your themes
-                {sections.active.length ? <span className="ad-theme-section-count">{sections.active.length}</span> : null}
+                {sections.active.length ? <span className="pba-theme-section-count">{sections.active.length}</span> : null}
               </h2>
               {sections.active.length ? (
                 renderItems(sections.active)
               ) : searching ? (
-                <p className="ad-hint ad-theme-section-empty">No other themes match.</p>
+                <p className="pba-hint pba-theme-section-empty">No other themes match.</p>
               ) : (
-                <div className="ad-empty ad-theme-section-empty">
+                <div className="pba-empty pba-theme-section-empty">
                   <b>No themes of your own yet</b>
-                  <p className="ad-hint">Start from a built-in layout, then make it yours.</p>
-                  <div className="ad-theme-starters">
+                  <p className="pba-hint">Start from a built-in layout, then make it yours.</p>
+                  <div className="pba-theme-starters">
                     {sections.templates.map((template) => (
                       <Button key={template.id} onClick={() => void createFrom(template, "Theme created.")}>
                         <Plus aria-hidden />
@@ -481,8 +481,8 @@ export function ThemesPage() {
             </section>
 
             {sections.archived.length ? (
-              <section className="ad-theme-section ad-theme-archive" aria-label="Archived themes">
-                <button type="button" className="ad-btn ad-btn--text" aria-expanded={archivedOpen} onClick={() => setShowArchived((open) => !open)}>
+              <section className="pba-theme-section pba-theme-archive" aria-label="Archived themes">
+                <button type="button" className="pba-btn pba-btn--text" aria-expanded={archivedOpen} onClick={() => setShowArchived((open) => !open)}>
                   <Archive aria-hidden />
                   {archivedOpen ? "Hide archived" : `Show archived (${sections.archived.length})`}
                 </button>

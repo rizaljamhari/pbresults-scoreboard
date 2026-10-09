@@ -60,7 +60,7 @@ export function AiAssistantRows() {
 
   if (!view) {
     return (
-      <div className="ad-callout">
+      <div className="pba-callout">
         <Info aria-hidden />
         <span>{error ?? "Loading AI settings…"}</span>
       </div>
@@ -71,7 +71,7 @@ export function AiAssistantRows() {
 
   if (!view.canManage) {
     return (
-      <div className="ad-callout">
+      <div className="pba-callout">
         <Info aria-hidden />
         <span>
           {active
@@ -91,7 +91,7 @@ export function AiAssistantRows() {
         hint="The theme editor's AI assistant sends the theme, any image you attach and a capture of the canvas to this provider. Keys and sign-ins stay on this computer, outside event data and backups."
       >
         <select
-          className="ad-select"
+          className="pba-select"
           style={{ width: "auto" }}
           aria-label="Provider in use"
           value={view.activeProvider ?? ""}
@@ -287,23 +287,23 @@ function ProviderDetails({
   const ready = provider.configured && (provider.needs !== "apiKey" || !editingKey);
 
   return (
-    <div className="ad-set-block">
-      <p className="ad-hint">{provider.note}</p>
+    <div className="pba-set-block">
+      <p className="pba-hint">{provider.note}</p>
 
       {provider.needs === "signIn" && !provider.configured ? (
         <div style={rowStyle}>
           <Button variant="primary" disabled={disabled} onClick={() => void signIn()}>
             Continue with ChatGPT
           </Button>
-          {waitingForSignIn ? <span className="ad-hint">Finish signing in in the tab that opened…</span> : null}
-          {provider.needsSignInAgain && !waitingForSignIn ? <span className="ad-hint">The last sign-in expired.</span> : null}
+          {waitingForSignIn ? <span className="pba-hint">Finish signing in in the tab that opened…</span> : null}
+          {provider.needsSignInAgain && !waitingForSignIn ? <span className="pba-hint">The last sign-in expired.</span> : null}
         </div>
       ) : null}
 
       {provider.needs === "apiKey" && editingKey ? (
         <div style={rowStyle}>
           <input
-            className="ad-input"
+            className="pba-input"
             style={{ flex: "1 1 260px", minWidth: 0 }}
             type="password"
             autoComplete="off"
@@ -329,7 +329,7 @@ function ProviderDetails({
       {provider.needs === "baseUrl" ? (
         <div style={rowStyle}>
           <input
-            className="ad-input"
+            className="pba-input"
             style={{ flex: "1 1 260px", minWidth: 0 }}
             spellCheck={false}
             aria-label="Ollama address"
@@ -347,7 +347,7 @@ function ProviderDetails({
       {ready ? (
         <div style={rowStyle}>
           <input
-            className="ad-input"
+            className="pba-input"
             style={{ flex: "1 1 220px", minWidth: 0 }}
             list={listId}
             spellCheck={false}
@@ -394,7 +394,7 @@ function ProviderDetails({
 
       {link ? (
         <div>
-          <a className="ad-btn ad-btn--text" href={link.url} target="_blank" rel="noreferrer">
+          <a className="pba-btn pba-btn--text" href={link.url} target="_blank" rel="noreferrer">
             {link.label}
             <ArrowUpRight aria-hidden />
           </a>

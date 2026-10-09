@@ -113,16 +113,16 @@ export function OnAirStrip({
   const scale = band && stageWidth ? Math.min(stageWidth / band.width, MAX_BAND_HEIGHT / band.height) : 0;
 
   return (
-    <section className="ad-surface ad-strip" aria-labelledby="on-air-title">
-      <div className="ad-strip-head">
+    <section className="pba-surface pba-strip" aria-labelledby="on-air-title">
+      <div className="pba-strip-head">
         {theme ? (
           // The theme name is the heading; the red dot is the tally light, so the section reads as on air.
-          <h2 id="on-air-title" className="ad-title ad-strip-title" title="Theme on air">
+          <h2 id="on-air-title" className="pba-title pba-strip-title" title="Theme on air">
             <Dot tone="tally" flat />
             {theme.name}
           </h2>
         ) : (
-          <h2 id="on-air-title" className="ad-title ad-strip-title">
+          <h2 id="on-air-title" className="pba-title pba-strip-title">
             <Chip tone="critical">No theme on air</Chip>
           </h2>
         )}
@@ -133,7 +133,7 @@ export function OnAirStrip({
           </Chip>
         ) : null}
         {overlayStatus ? (
-          <button type="button" className="ad-strip-overlay" onClick={overlayStatus.onOpen} title="Show the pages showing the overlay">
+          <button type="button" className="pba-strip-overlay" onClick={overlayStatus.onOpen} title="Show the pages showing the overlay">
             <Chip tone={overlayStatus.level === "ok" ? "ok" : overlayStatus.level === "info" ? "quiet" : overlayStatus.level}>
               <Dot tone={overlayStatus.level === "ok" ? "live" : overlayStatus.level === "info" ? undefined : overlayStatus.level} flat />
               {overlayStatus.label}
@@ -145,17 +145,17 @@ export function OnAirStrip({
       </div>
 
       <div
-        className={`ad-strip-stage ad-strip-stage--${backdrop}`}
+        className={`pba-strip-stage pba-strip-stage--${backdrop}`}
         style={backdrop === "theme" && theme ? { background: theme.canvas.backgroundColor } : undefined}
         ref={stageRef}
       >
         {!theme ? (
-          <p className="ad-hint ad-strip-empty">Nothing is on air. Put a theme on air from Themes.</p>
+          <p className="pba-hint pba-strip-empty">Nothing is on air. Put a theme on air from Themes.</p>
         ) : view === "band" && band ? (
           scale > 0 ? (
-            <div className="ad-strip-band" style={{ width: band.width * scale, height: band.height * scale }}>
+            <div className="pba-strip-band" style={{ width: band.width * scale, height: band.height * scale }}>
               <div
-                className="ad-strip-canvas"
+                className="pba-strip-canvas"
                 style={{
                   width: theme.canvas.width,
                   height: theme.canvas.height,
@@ -171,7 +171,7 @@ export function OnAirStrip({
                 return (
                   <span
                     key={marker.side}
-                    className={`ad-strip-mark is-${marker.tone}`}
+                    className={`pba-strip-mark is-${marker.tone}`}
                     style={{
                       left: `${((rect.x - band.x) / band.width) * 100}%`,
                       top: `${((rect.y - band.y) / band.height) * 100}%`,
@@ -186,29 +186,29 @@ export function OnAirStrip({
             </div>
           ) : null
         ) : (
-          <div className="ad-strip-frame">
-            <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="ad-strip-frame-box" innerClassName="ad-strip-frame-stage" mode="width">
+          <div className="pba-strip-frame">
+            <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="pba-strip-frame-box" innerClassName="pba-strip-frame-stage" mode="width">
               <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} applyPlacement transparentBackground />
             </ScaledCanvasFrame>
           </div>
         )}
         {theme && !scoreboardVisible ? (
           // An empty preview should never look like a fault.
-          <p className="ad-strip-hidden" role="status">
-            Scoreboard hidden · press <kbd className="ad-kbd">H</kbd> to show
+          <p className="pba-strip-hidden" role="status">
+            Scoreboard hidden · press <kbd className="pba-kbd">H</kbd> to show
           </p>
         ) : null}
       </div>
 
-      <div className="ad-strip-feed">
-        <span className="ad-strip-feed-k">Feed</span>
+      <div className="pba-strip-feed">
+        <span className="pba-strip-feed-k">Feed</span>
         {live && live.sourceStatus !== "ok" ? (
           <Chip tone={live.sourceStatus === "error" ? "critical" : "warning"}>
             <Dot tone={live.sourceStatus === "error" ? "critical" : "warning"} flat />
             {FEED_STATUS[live.sourceStatus]}
           </Chip>
         ) : null}
-        <span className="ad-strip-feed-v">{summary}</span>
+        <span className="pba-strip-feed-v">{summary}</span>
       </div>
     </section>
   );
@@ -243,14 +243,14 @@ function PreviewMenu({
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content className="ad-scope ad-pop" align="end" sideOffset={6}>
-          <DropdownMenu.Label className="ad-menu-label">Show</DropdownMenu.Label>
+        <DropdownMenu.Content className="pba-scope pba-pop" align="end" sideOffset={6}>
+          <DropdownMenu.Label className="pba-menu-label">Show</DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={view} onValueChange={(value) => onView(value as View)}>
             <PreviewChoice value="band" icon={<RectangleHorizontal aria-hidden />} label="Scoreboard" hint="The part the scoreboard uses" />
             <PreviewChoice value="frame" icon={<Monitor aria-hidden />} label="Full frame" hint="The whole frame" />
           </DropdownMenu.RadioGroup>
-          <DropdownMenu.Separator className="ad-menu-sep" />
-          <DropdownMenu.Label className="ad-menu-label">Backdrop</DropdownMenu.Label>
+          <DropdownMenu.Separator className="pba-menu-sep" />
+          <DropdownMenu.Label className="pba-menu-label">Backdrop</DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={backdrop} onValueChange={(value) => onBackdrop(value as Backdrop)}>
             {backdrops.map((option) => (
               <PreviewChoice
@@ -258,7 +258,7 @@ function PreviewMenu({
                 value={option.value}
                 icon={
                   <span
-                    className={`ad-backdrop ad-backdrop--${option.value}`}
+                    className={`pba-backdrop pba-backdrop--${option.value}`}
                     style={option.value === "theme" && theme ? { background: theme.canvas.backgroundColor } : undefined}
                     aria-hidden
                   />
@@ -276,10 +276,10 @@ function PreviewMenu({
 
 function PreviewChoice({ value, icon, label, hint }: { value: string; icon: ReactNode; label: string; hint?: string }) {
   return (
-    <DropdownMenu.RadioItem value={value} className="ad-menu-item" title={hint}>
+    <DropdownMenu.RadioItem value={value} className="pba-menu-item" title={hint}>
       {icon}
       {label}
-      <DropdownMenu.ItemIndicator className="ad-menu-end">
+      <DropdownMenu.ItemIndicator className="pba-menu-end">
         <Check aria-hidden />
       </DropdownMenu.ItemIndicator>
     </DropdownMenu.RadioItem>

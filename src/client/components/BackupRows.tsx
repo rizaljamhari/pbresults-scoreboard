@@ -178,7 +178,7 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
       </SettingRow>
 
       {lastFailureIsNewest && status?.lastFailure ? (
-        <div className="ad-callout ad-callout--critical">
+        <div className="pba-callout pba-callout--critical">
           <CircleAlert aria-hidden />
           <span>
             <b>Backup failed</b> · {formatDate(status.lastFailure.at)} · {status.lastFailure.error}
@@ -186,7 +186,7 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
         </div>
       ) : null}
       {status?.lastSuccess?.extraCopy === "failed" ? (
-        <div className="ad-callout ad-callout--warning">
+        <div className="pba-callout pba-callout--warning">
           <CircleAlert aria-hidden />
           <span>
             <b>Extra folder copy failed</b> · {status.lastSuccess.extraCopyError}
@@ -194,16 +194,16 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
         </div>
       ) : null}
 
-      <div className="ad-set-block">
+      <div className="pba-set-block">
         <b>Extra backup folder</b>
-        <p className="ad-hint">
+        <p className="pba-hint">
           {isLocal
             ? "Optional second copy of every backup, such as a USB drive."
             : "Open Maintenance through localhost on the scoreboard computer to change backup folders."}
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
           <input
-            className="ad-input"
+            className="pba-input"
             style={{ flex: "1 1 220px", minWidth: 0 }}
             placeholder="Full folder path, e.g. E:\Scoreboard backups"
             aria-label="Extra backup folder"
@@ -211,12 +211,12 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
             disabled={!isLocal || locked}
             onChange={(event) => setFolderDraft(event.target.value)}
           />
-          <span className="ad-hint" aria-hidden>
+          <span className="pba-hint" aria-hidden>
             Automatic backups
           </span>
-          <label className="ad-unit" title="How many automatic backups to keep">
+          <label className="pba-unit" title="How many automatic backups to keep">
             <input
-              className="ad-input"
+              className="pba-input"
               type="number"
               min={5}
               max={500}
@@ -232,7 +232,7 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
           </Button>
         </div>
         {status ? (
-          <p className="ad-hint" style={{ overflowWrap: "anywhere" }}>
+          <p className="pba-hint" style={{ overflowWrap: "anywhere" }}>
             Backups are always kept in {status.backupsDir}
           </p>
         ) : null}
@@ -268,9 +268,9 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
       </SettingRow>
 
       {pending ? (
-        <div className="ad-set-block" ref={pendingRef}>
+        <div className="pba-set-block" ref={pendingRef}>
           <b>Restore {pending.label}?</b>
-          <p className="ad-hint">
+          <p className="pba-hint">
             {pending.preview.counts.themes} themes · {pending.preview.counts.teams} teams · {pending.preview.counts.assets} logos (
             {formatBytes(pending.preview.totalAssetBytes)})
             {pending.preview.counts.operatorTextOverrides !== null
@@ -280,12 +280,12 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
             {pending.preview.appVersion ? ` by version ${pending.preview.appVersion}` : ""}
           </p>
           {pending.preview.warnings.map((warning) => (
-            <div key={warning} className="ad-callout ad-callout--warning">
+            <div key={warning} className="pba-callout pba-callout--warning">
               <Info aria-hidden />
               <span>{warning}</span>
             </div>
           ))}
-          <p className="ad-hint">
+          <p className="pba-hint">
             This replaces the current settings, themes, teams, logos and operations state. A safety backup of the current data is saved
             first.
           </p>
@@ -301,19 +301,19 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
       ) : null}
 
       {!status ? (
-        <div className="ad-callout">
+        <div className="pba-callout">
           <Info aria-hidden />
           <span>{backups.error ?? "Loading backups…"}</span>
         </div>
       ) : status.backups.length > 0 ? (
-        <div className="ad-set-block">
+        <div className="pba-set-block">
           <b>Saved backups</b>
-          <table className="ad-table ad-backup-table">
+          <table className="pba-table pba-backup-table">
             <thead>
               <tr>
                 <th>Saved</th>
                 <th>Reason</th>
-                <th className="ad-num">Size</th>
+                <th className="pba-num">Size</th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -322,8 +322,8 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
                 <tr key={entry.file}>
                   <td>{formatDate(entry.createdAt)}</td>
                   <td>{entry.automatic ? reasonLabels[entry.reason] : <Chip>{reasonLabels[entry.reason]}</Chip>}</td>
-                  <td className="ad-num">{formatBytes(entry.sizeBytes)}</td>
-                  <td className="ad-num">
+                  <td className="pba-num">{formatBytes(entry.sizeBytes)}</td>
+                  <td className="pba-num">
                     <Button
                       size="sm"
                       variant="ghost"
@@ -346,7 +346,7 @@ export function BackupRows({ onRestored }: { onRestored: (result: RestoreResult)
               </Button>
             </div>
           ) : null}
-          <p className="ad-hint">Manual backups are never deleted automatically. The newest {status.retainAutomatic} automatic backups are kept.</p>
+          <p className="pba-hint">Manual backups are never deleted automatically. The newest {status.retainAutomatic} automatic backups are kept.</p>
         </div>
       ) : null}
     </>

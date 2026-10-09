@@ -30,7 +30,7 @@ export function MaintenancePage() {
   const { activeSection, jumpTo } = useSectionNav(SECTIONS, bodyRef, true);
 
   return (
-    <div className="ad-page ad-scope">
+    <div className="pba-page pba-scope">
       <Toolbar title="Maintenance">
         <Chip tone="quiet">
           <Zap aria-hidden />
@@ -38,41 +38,41 @@ export function MaintenancePage() {
         </Chip>
       </Toolbar>
 
-      <div className="ad-body" ref={bodyRef}>
-        <div className="ad-settings">
-          <div className="ad-toc-col">
+      <div className="pba-body" ref={bodyRef}>
+        <div className="pba-settings">
+          <div className="pba-toc-col">
             <SectionToc sections={SECTIONS} activeSection={activeSection} onJump={jumpTo} label="Maintenance sections" />
-            <p className="ad-hint ad-toc-note">
+            <p className="pba-hint pba-toc-note">
               The feed address, branding and uploads are on <Link to="/admin/settings">Settings</Link>.
             </p>
           </div>
 
           <div>
-            <section className="ad-set-group" id="set-backup">
+            <section className="pba-set-group" id="set-backup">
               <h2>Backup and restore</h2>
-              <div className="ad-surface" style={{ overflow: "hidden" }}>
+              <div className="pba-surface" style={{ overflow: "hidden" }}>
                 <BackupRows onRestored={(restored) => settings.setData(restored.settings)} />
               </div>
             </section>
 
-            <section className="ad-set-group" id="set-updates">
+            <section className="pba-set-group" id="set-updates">
               <h2>Software updates</h2>
-              <div className="ad-surface" style={{ overflow: "hidden" }}>
+              <div className="pba-surface" style={{ overflow: "hidden" }}>
                 <SoftwareUpdateRows update={update} />
                 {update.data?.managedUpdatesSupported && settings.data ? <UpdatePreferenceRows settings={settings.data} onSaved={settings.setData} /> : null}
               </div>
             </section>
 
-            <section className="ad-set-group" id="set-remote">
+            <section className="pba-set-group" id="set-remote">
               <h2>Remote access</h2>
-              <div className="ad-surface" style={{ overflow: "hidden" }}>
+              <div className="pba-surface" style={{ overflow: "hidden" }}>
                 <RemoteAccessRows />
               </div>
             </section>
 
-            <section className="ad-set-group" id="set-ai">
+            <section className="pba-set-group" id="set-ai">
               <h2>AI assistant</h2>
-              <div className="ad-surface" style={{ overflow: "hidden" }}>
+              <div className="pba-surface" style={{ overflow: "hidden" }}>
                 <AiAssistantRows />
               </div>
             </section>
@@ -117,7 +117,7 @@ function UpdatePreferenceRows({ settings, onSaved }: { settings: AppSettings; on
         htmlFor="maint-update-check"
         hint={
           hoursError ? (
-            <span className="ad-inline-warning" role="alert">
+            <span className="pba-inline-warning" role="alert">
               <CircleAlert aria-hidden />
               {hoursError}
             </span>
@@ -126,9 +126,9 @@ function UpdatePreferenceRows({ settings, onSaved }: { settings: AppSettings; on
           )
         }
       >
-        <label className="ad-unit" title="How often to check">
+        <label className="pba-unit" title="How often to check">
           <input
-            className="ad-input"
+            className="pba-input"
             type="number"
             min={CHECK_HOURS_MIN}
             max={CHECK_HOURS_MAX}

@@ -43,16 +43,16 @@ function MatchTester() {
         </Button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className="ad-scope ad-pop ad-tester" align="end" sideOffset={6}>
+        <Popover.Content className="pba-scope pba-pop pba-tester" align="end" sideOffset={6}>
           <form
-            className="ad-tester-form"
+            className="pba-tester-form"
             onSubmit={(event) => {
               event.preventDefault();
               void run();
             }}
           >
             <input
-              className="ad-input"
+              className="pba-input"
               autoFocus
               placeholder="A name the feed might send, e.g. SBJ"
               aria-label="Name to test"
@@ -64,23 +64,23 @@ function MatchTester() {
             </Button>
           </form>
           {result ? (
-            <div className="ad-tester-result">
-              <div className="ad-tester-line">
+            <div className="pba-tester-result">
+              <div className="pba-tester-line">
                 <Chip tone={tone}>{statusLabel}</Chip>
                 <b>{result.team?.canonicalName ?? "No team"}</b>
-                <span className="ad-hint" style={{ marginLeft: "auto" }}>
+                <span className="pba-hint" style={{ marginLeft: "auto" }}>
                   {(result.confidence * 100).toFixed(0)}% sure
                 </span>
               </div>
-              <p className="ad-hint">
+              <p className="pba-hint">
                 Read as “{result.normalizedInput || "—"}”{result.matchedAlias ? ` · matched “${result.matchedAlias}”` : ""}
               </p>
               {result.candidates.length ? (
-                <ul className="ad-tester-candidates">
+                <ul className="pba-tester-candidates">
                   {result.candidates.map((candidate) => (
                     <li key={`${candidate.teamId}:${candidate.matchedAlias ?? "candidate"}`}>
                       <span>{candidate.teamName}</span>
-                      <span className="ad-hint">
+                      <span className="pba-hint">
                         {(candidate.confidence * 100).toFixed(0)}%{candidate.matchedAlias ? ` · ${candidate.matchedAlias}` : ""}
                       </span>
                     </li>
@@ -89,7 +89,7 @@ function MatchTester() {
               ) : null}
             </div>
           ) : (
-            <p className="ad-hint" style={{ marginTop: 8 }}>
+            <p className="pba-hint" style={{ marginTop: 8 }}>
               Shows which team the feed name would pick, and how sure the matcher is.
             </p>
           )}
@@ -117,7 +117,7 @@ function SortHeader({
   const active = sortBy === asc || sortBy === desc;
   return (
     <th className={className} aria-sort={sortBy === asc ? "ascending" : sortBy === desc ? "descending" : "none"}>
-      <button type="button" className="ad-th-sort" onClick={() => onSort(sortBy === asc ? desc : asc)}>
+      <button type="button" className="pba-th-sort" onClick={() => onSort(sortBy === asc ? desc : asc)}>
         {label}
         {active ? sortBy === asc ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden /> : null}
       </button>
@@ -289,7 +289,7 @@ export function TeamsPage() {
   }
 
   return (
-    <div className="ad-page ad-scope">
+    <div className="pba-page pba-scope">
       <Toolbar title="Teams" count={teams.data ? allTeams.length : undefined}>
         <SearchField
           ref={searchRef}
@@ -311,7 +311,7 @@ export function TeamsPage() {
         />
         {selectedIds.length ? (
           <>
-            <span className="ad-tb-sep" />
+            <span className="pba-tb-sep" />
             <Chip tone="blue">{selectedIds.length} selected</Chip>
             <Menu
               align="start"
@@ -362,16 +362,16 @@ export function TeamsPage() {
         </Button>
       </Toolbar>
 
-      <div className={openTeamId ? "ad-split has-panel" : "ad-split"}>
-        <div className="ad-table-wrap">
+      <div className={openTeamId ? "pba-split has-panel" : "pba-split"}>
+        <div className="pba-table-wrap">
           {!teams.data ? (
-            <p className="ad-hint" style={{ padding: 20 }}>
+            <p className="pba-hint" style={{ padding: 20 }}>
               Loading teams…
             </p>
           ) : filteredTeams.length === 0 ? (
-            <div className="ad-empty">
+            <div className="pba-empty">
               <b>{allTeams.length ? "No teams match" : "No teams yet"}</b>
-              <p className="ad-hint">
+              <p className="pba-hint">
                 {allTeams.length ? "Try another name, or show all teams." : "Add every team the feed may send, with its logo and the names it goes by."}
               </p>
               {allTeams.length ? (
@@ -391,12 +391,12 @@ export function TeamsPage() {
               )}
             </div>
           ) : (
-            <table className="ad-table">
+            <table className="pba-table">
               <thead>
                 <tr>
-                  <th className="ad-col-check">
+                  <th className="pba-col-check">
                     <input
-                      className="ad-check"
+                      className="pba-check"
                       type="checkbox"
                       aria-label="Select all shown teams"
                       checked={allFilteredSelected}
@@ -407,13 +407,13 @@ export function TeamsPage() {
                     />
                   </th>
                   <SortHeader label="Team" asc="nameAsc" desc="nameDesc" sortBy={sortBy} onSort={setSortBy} />
-                  <th className="ad-col-2nd">Scoreboard name</th>
+                  <th className="pba-col-2nd">Scoreboard name</th>
                   <th>Short</th>
-                  <th className="ad-num" title="Names you added plus names learned from live">
+                  <th className="pba-num" title="Names you added plus names learned from live">
                     Match names
                   </th>
                   <th>Status</th>
-                  <SortHeader label="Updated" asc="updatedAsc" desc="updatedDesc" sortBy={sortBy} onSort={setSortBy} className="ad-col-2nd" />
+                  <SortHeader label="Updated" asc="updatedAsc" desc="updatedDesc" sortBy={sortBy} onSort={setSortBy} className="pba-col-2nd" />
                 </tr>
               </thead>
               <tbody>
@@ -422,38 +422,38 @@ export function TeamsPage() {
                   const open = team.id === openTeamId;
                   return (
                     <tr key={team.id} data-team-id={team.id} aria-selected={open} onClick={() => openTeam(team.id)}>
-                      <td className="ad-col-check" onClick={(event) => event.stopPropagation()}>
+                      <td className="pba-col-check" onClick={(event) => event.stopPropagation()}>
                         <input
-                          className="ad-check"
+                          className="pba-check"
                           type="checkbox"
                           aria-label={`Select ${team.canonicalName}`}
                           checked={selectedIds.includes(team.id)}
                           onChange={(event) => toggleOne(team.id, event.target.checked)}
                         />
                       </td>
-                      <td className="ad-cell-name">
+                      <td className="pba-cell-name">
                         <button
                           type="button"
-                          className="ad-row-open"
+                          className="pba-row-open"
                           onClick={(event) => {
                             event.stopPropagation();
                             openTeam(team.id);
                           }}
                         >
-                          <span className="ad-row-logo">{logo ? <img src={logo} alt="" loading="lazy" /> : null}</span>
+                          <span className="pba-row-logo">{logo ? <img src={logo} alt="" loading="lazy" /> : null}</span>
                           {team.canonicalName || "Untitled team"}
                         </button>
                       </td>
-                      <td className="ad-col-2nd">{team.scoreboardDisplayName || <span className="ad-faint">—</span>}</td>
-                      <td>{team.shortName || <span className="ad-faint">—</span>}</td>
-                      <td className="ad-num">{team.aliases.length + team.liveMatchNames.length}</td>
+                      <td className="pba-col-2nd">{team.scoreboardDisplayName || <span className="pba-faint">—</span>}</td>
+                      <td>{team.shortName || <span className="pba-faint">—</span>}</td>
+                      <td className="pba-num">{team.aliases.length + team.liveMatchNames.length}</td>
                       <td>
-                        <span className={team.active ? "ad-status is-on" : "ad-status"}>
-                          <span className="ad-dot" aria-hidden />
+                        <span className={team.active ? "pba-status is-on" : "pba-status"}>
+                          <span className="pba-dot" aria-hidden />
                           {team.active ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td className="ad-col-2nd ad-faint" title={formatUpdatedAtFull(team.updatedAt)}>
+                      <td className="pba-col-2nd pba-faint" title={formatUpdatedAtFull(team.updatedAt)}>
                         {formatUpdatedAt(team.updatedAt)}
                       </td>
                     </tr>

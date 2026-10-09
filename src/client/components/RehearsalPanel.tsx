@@ -153,13 +153,13 @@ export function RehearsalPanel({
 
   if (phase === "idle" || !status) {
     return (
-      <section className="ad-surface ad-rh-panel" aria-labelledby="rehearsal-title">
-        <div className="ad-section-head ad-ops-head">
-          <h2 id="rehearsal-title" className="ad-title">
+      <section className="pba-surface pba-rh-panel" aria-labelledby="rehearsal-title">
+        <div className="pba-section-head pba-ops-head">
+          <h2 id="rehearsal-title" className="pba-title">
             Rehearsal
           </h2>
           {themeName ? (
-            <Chip className="ad-strip-theme">
+            <Chip className="pba-strip-theme">
               <Dot tone="tally" flat />
               {themeName}
             </Chip>
@@ -169,8 +169,8 @@ export function RehearsalPanel({
             Back to checks
           </Button>
         </div>
-        <div className="ad-rh-intro">
-          {blockedReason ? <p className="ad-callout ad-callout--critical ad-rh-callout">{blockedReason}</p> : null}
+        <div className="pba-rh-intro">
+          {blockedReason ? <p className="pba-callout pba-callout--critical pba-rh-callout">{blockedReason}</p> : null}
           <p>
             Plays <b>{REHEARSAL_CASE_COUNT} test cases</b> through the real live overlay, the page vMix shows, so you can check this theme before doors open. Each case says what
             should appear, based on the theme's own settings.
@@ -180,12 +180,12 @@ export function RehearsalPanel({
             <li>Logos: with, without (fallback per slot), mixed</li>
             <li>Every event, timeout, game finished and winner, team switch, feed lost</li>
           </ul>
-          <p className="ad-callout ad-callout--warning ad-rh-callout">
+          <p className="pba-callout pba-callout--warning pba-rh-callout">
             vMix shows test data until you stop. It stops by itself if a match starts, after the last case in auto-play, or after 10 minutes without activity.
             Nothing is saved.
           </p>
-          <div className="ad-actions">
-            <Button className="ad-btn--rehearsal" disabled={busy || Boolean(blockedReason)} onClick={() => void start(false)}>
+          <div className="pba-actions">
+            <Button className="pba-btn--rehearsal" disabled={busy || Boolean(blockedReason)} onClick={() => void start(false)}>
               <Play aria-hidden />
               Start rehearsal
             </Button>
@@ -203,13 +203,13 @@ export function RehearsalPanel({
     const notMarked = status.cases.length - counts.pass - counts.issue;
     const critical = status.stopReason === "match-started" || status.stopReason === "theme-changed";
     return (
-      <section className="ad-surface ad-rh-panel" aria-labelledby="rehearsal-title">
-        <div className="ad-section-head ad-ops-head">
-          <h2 id="rehearsal-title" className="ad-title">
+      <section className="pba-surface pba-rh-panel" aria-labelledby="rehearsal-title">
+        <div className="pba-section-head pba-ops-head">
+          <h2 id="rehearsal-title" className="pba-title">
             Rehearsal {status.stopReason === "finished" ? "finished" : "stopped"}
           </h2>
           {status.themeName ? (
-            <Chip className="ad-strip-theme">
+            <Chip className="pba-strip-theme">
               <Dot tone="tally" flat />
               {status.themeName}
             </Chip>
@@ -219,16 +219,16 @@ export function RehearsalPanel({
             Back to checks
           </Button>
         </div>
-        <div className="ad-rh-summary">
+        <div className="pba-rh-summary">
           {status.stopReason && status.stopReason !== "finished" ? (
-            <p className={`ad-callout ${critical ? "ad-callout--critical" : "ad-callout--warning"} ad-rh-callout`}>{STOP_REASONS[status.stopReason]}</p>
+            <p className={`pba-callout ${critical ? "pba-callout--critical" : "pba-callout--warning"} pba-rh-callout`}>{STOP_REASONS[status.stopReason]}</p>
           ) : null}
-          <p className="ad-rh-totals">
+          <p className="pba-rh-totals">
             <span className="is-pass">{counts.pass} passed</span> · <span className="is-issue">{counts.issue} {counts.issue === 1 ? "issue" : "issues"}</span>
-            {notMarked ? <span className="ad-muted"> · {notMarked} not marked</span> : null}
+            {notMarked ? <span className="pba-muted"> · {notMarked} not marked</span> : null}
           </p>
           {issues.length ? (
-            <ul className="ad-rh-issues">
+            <ul className="pba-rh-issues">
               {issues.map((item) => (
                 <li key={item.id}>
                   <b>
@@ -239,12 +239,12 @@ export function RehearsalPanel({
               ))}
             </ul>
           ) : counts.pass ? (
-            <p className="ad-muted">No issues marked.</p>
+            <p className="pba-muted">No issues marked.</p>
           ) : null}
           {reportText ? (
-            <textarea className="ad-input ad-rh-report" readOnly rows={8} value={reportText} onFocus={(event) => event.currentTarget.select()} aria-label="Rehearsal report" />
+            <textarea className="pba-input pba-rh-report" readOnly rows={8} value={reportText} onFocus={(event) => event.currentTarget.select()} aria-label="Rehearsal report" />
           ) : null}
-          <div className="ad-actions">
+          <div className="pba-actions">
             <Button variant="primary" onClick={() => void copyReport()}>
               <Copy aria-hidden />
               Copy report
@@ -260,16 +260,16 @@ export function RehearsalPanel({
 
   let group = "";
   return (
-    <section className="ad-surface ad-rh-panel" aria-labelledby="rehearsal-title">
-      <div className="ad-section-head ad-ops-head">
-        <h2 id="rehearsal-title" className="ad-title">
+    <section className="pba-surface pba-rh-panel" aria-labelledby="rehearsal-title">
+      <div className="pba-section-head pba-ops-head">
+        <h2 id="rehearsal-title" className="pba-title">
           Rehearsal
         </h2>
         <Chip tone="rehearsal">
           <Dot tone="rehearsal" flat />
           Case {status.caseIndex + 1} of {status.cases.length}
         </Chip>
-        <span className="ad-hint">
+        <span className="pba-hint">
           {counts.pass} ✓ · {counts.issue} ⚠
         </span>
         <Grow />
@@ -278,10 +278,10 @@ export function RehearsalPanel({
           Stop
         </Button>
       </div>
-      <div className="ad-rh-progress" aria-hidden>
+      <div className="pba-rh-progress" aria-hidden>
         <i style={{ width: `${(status.caseIndex / status.cases.length) * 100}%` }} />
       </div>
-      <div className="ad-rh-cases" ref={listRef} role="list" aria-label="Rehearsal cases">
+      <div className="pba-rh-cases" ref={listRef} role="list" aria-label="Rehearsal cases">
         {status.cases.map((item, index) => {
           const header = item.group !== group ? item.group : null;
           group = item.group;
@@ -289,26 +289,26 @@ export function RehearsalPanel({
           const isCurrent = index === status.caseIndex;
           return (
             <div key={item.id} role="listitem">
-              {header ? <div className="ad-rh-group">{header}</div> : null}
+              {header ? <div className="pba-rh-group">{header}</div> : null}
               <button
                 type="button"
-                className={isCurrent ? "ad-rh-case is-current" : "ad-rh-case"}
+                className={isCurrent ? "pba-rh-case is-current" : "pba-rh-case"}
                 data-current={isCurrent ? "true" : undefined}
                 aria-current={isCurrent ? "step" : undefined}
                 onClick={() => void call("go", { to: item.id })}
               >
-                <span className="ad-rh-n">{index + 1}</span>
-                <span className="ad-rh-t">
+                <span className="pba-rh-n">{index + 1}</span>
+                <span className="pba-rh-t">
                   {item.title}
-                  {mark?.note ? <span className="ad-rh-note">{mark.note}</span> : null}
+                  {mark?.note ? <span className="pba-rh-note">{mark.note}</span> : null}
                 </span>
                 {isCurrent ? (
-                  <span className="ad-rh-now">on vMix</span>
+                  <span className="pba-rh-now">on vMix</span>
                 ) : mark ? (
                   mark.result === "pass" ? (
-                    <CircleCheck className="ad-rh-pass" aria-label="Passed" />
+                    <CircleCheck className="pba-rh-pass" aria-label="Passed" />
                   ) : (
-                    <TriangleAlert className="ad-rh-issue" aria-label="Issue" />
+                    <TriangleAlert className="pba-rh-issue" aria-label="Issue" />
                   )
                 ) : null}
               </button>
@@ -317,27 +317,27 @@ export function RehearsalPanel({
         })}
       </div>
       {current ? (
-        <div className="ad-rh-expect">
-          <div className="ad-rh-label">Now on vMix · {current.group}</div>
+        <div className="pba-rh-expect">
+          <div className="pba-rh-label">Now on vMix · {current.group}</div>
           <h3>
             {status.caseIndex + 1}. {current.title}
           </h3>
           <p>
             <b>Expect:</b> {current.expectation}
           </p>
-          {current.source ? <p className="ad-hint">From: {current.source}</p> : null}
+          {current.source ? <p className="pba-hint">From: {current.source}</p> : null}
         </div>
       ) : null}
-      <div className="ad-rh-controls">
+      <div className="pba-rh-controls">
         <Button size="sm" disabled={busy || status.caseIndex === 0} onClick={() => void call("go", { to: "prev" })} title="Back (←)">
           <ChevronLeft aria-hidden />
           Back
         </Button>
-        <Button size="sm" className="ad-btn--pass" disabled={busy} onClick={() => void markAndNext("pass")} title="Pass and move on (P)">
+        <Button size="sm" className="pba-btn--pass" disabled={busy} onClick={() => void markAndNext("pass")} title="Pass and move on (P)">
           <CircleCheck aria-hidden />
           Pass
         </Button>
-        <Button size="sm" className="ad-btn--issue" disabled={busy} onClick={() => setNoteOpen(true)} title="Mark an issue (I)">
+        <Button size="sm" className="pba-btn--issue" disabled={busy} onClick={() => setNoteOpen(true)} title="Mark an issue (I)">
           <TriangleAlert aria-hidden />
           Issue
         </Button>
@@ -345,14 +345,14 @@ export function RehearsalPanel({
           {status.caseIndex === status.cases.length - 1 ? "Finish" : "Next"}
           <ChevronRight aria-hidden />
         </Button>
-        <label className="ad-rh-auto">
+        <label className="pba-rh-auto">
           Auto-play every 6 s
           <Switch label="Auto-play" checked={status.autoPlay} onChange={(on) => void call("autoplay", { on })} />
         </label>
       </div>
       {noteOpen ? (
         <form
-          className="ad-rh-noteform"
+          className="pba-rh-noteform"
           onSubmit={(event) => {
             event.preventDefault();
             void markAndNext("issue", note.trim());
@@ -360,7 +360,7 @@ export function RehearsalPanel({
         >
           <input
             ref={noteRef}
-            className="ad-input"
+            className="pba-input"
             placeholder="What's wrong? e.g. right name clips the score"
             maxLength={200}
             value={note}
@@ -370,12 +370,12 @@ export function RehearsalPanel({
             }}
             aria-label="Issue note"
           />
-          <Button type="submit" size="sm" className="ad-btn--issue" disabled={busy}>
+          <Button type="submit" size="sm" className="pba-btn--issue" disabled={busy}>
             Mark issue
           </Button>
         </form>
       ) : (
-        <p className="ad-hint ad-rh-keys">Keys: P pass · I issue · ← → move</p>
+        <p className="pba-hint pba-rh-keys">Keys: P pass · I issue · ← → move</p>
       )}
     </section>
   );

@@ -48,7 +48,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
 
   if (!status) {
     return (
-      <div className="ad-callout">
+      <div className="pba-callout">
         <Info aria-hidden />
         <span>{update.error ?? "Loading update status…"}</span>
       </div>
@@ -58,7 +58,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
   if (!status.managedUpdatesSupported) {
     return (
       <>
-        <div className="ad-callout">
+        <div className="pba-callout">
           <Info aria-hidden />
           <span>{status.unsupportedReason ?? "Managed updates only work in the Windows portable package."}</span>
         </div>
@@ -75,7 +75,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
   return (
     <>
       {!isLocal ? (
-        <div className="ad-callout ad-callout--info">
+        <div className="pba-callout pba-callout--info">
           <Info aria-hidden />
           <span>Open Maintenance through localhost on the scoreboard computer to control updates.</span>
         </div>
@@ -149,7 +149,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
             </>
           }
         >
-          <a className="ad-btn ad-btn--text" href={status.available.releasePageUrl} target="_blank" rel="noreferrer">
+          <a className="pba-btn pba-btn--text" href={status.available.releasePageUrl} target="_blank" rel="noreferrer">
             Release notes
             <ArrowUpRight aria-hidden />
           </a>
@@ -165,21 +165,21 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
       ) : null}
 
       {status.prepared && ["downloading", "verifying", "staging"].includes(status.phase) ? (
-        <div className="ad-set-block">
+        <div className="pba-set-block">
           <b>{status.phase === "downloading" ? `Downloading ${progress}%` : status.phase === "verifying" ? "Verifying download" : "Preparing update"}</b>
-          <div className="ad-progress" role="progressbar" aria-valuenow={status.phase === "downloading" ? progress : 100} aria-valuemin={0} aria-valuemax={100}>
+          <div className="pba-progress" role="progressbar" aria-valuenow={status.phase === "downloading" ? progress : 100} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ transform: `scaleX(${(status.phase === "downloading" ? progress : 100) / 100})` }} />
           </div>
-          <p className="ad-hint">
+          <p className="pba-hint">
             {formatBytes(status.prepared.downloadedBytes)} of {formatBytes(status.prepared.totalBytes)}
           </p>
         </div>
       ) : null}
 
       {status.phase === "ready-to-install" && status.prepared ? (
-        <div className="ad-set-block">
+        <div className="pba-set-block">
           <b>Version {status.prepared.version} is ready to install</b>
-          <p className="ad-hint">
+          <p className="pba-hint">
             Choose a moment when nothing is live. The updater stops the server, snapshots your data, restarts on the same port, and rolls back
             by itself if the health checks fail.
           </p>
@@ -192,7 +192,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
           ) : (
             <>
               <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input className="ad-check" type="checkbox" checked={restartAcknowledged} onChange={(event) => setRestartAcknowledged(event.target.checked)} />
+                <input className="pba-check" type="checkbox" checked={restartAcknowledged} onChange={(event) => setRestartAcknowledged(event.target.checked)} />
                 The admin and the overlay will disconnect briefly. Nothing is live right now.
               </label>
               <div style={{ display: "flex", gap: 6 }}>
@@ -222,7 +222,7 @@ export function SoftwareUpdateRows({ update }: { update: ReturnType<typeof useUp
       ) : null}
 
       {status.error ? (
-        <div className="ad-callout ad-callout--critical">
+        <div className="pba-callout pba-callout--critical">
           <CircleAlert aria-hidden />
           <span>
             {status.error.message} ({status.error.code})

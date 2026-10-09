@@ -88,7 +88,7 @@ export function useSectionNav(sections: readonly PageSection[], bodyRef: RefObje
 
 export function SectionToc({ sections, activeSection, onJump, label }: { sections: readonly PageSection[]; activeSection: string; onJump: (id: string) => void; label: string }) {
   return (
-    <nav className="ad-toc" aria-label={label}>
+    <nav className="pba-toc" aria-label={label}>
       {sections.map((section) => (
         <a
           key={section.id}

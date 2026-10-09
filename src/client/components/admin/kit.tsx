@@ -4,7 +4,7 @@ import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { Check, Search } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-/** The admin's shared controls. Styles live in admin.css (.ad-*); every page that uses them sits inside .ad-scope. */
+/** The admin's shared controls. Styles live in admin.css (.ad-*); every page that uses them sits inside .pba-scope. */
 
 type ButtonVariant = "default" | "primary" | "ghost" | "text" | "danger";
 
@@ -16,7 +16,7 @@ export const Button = forwardRef<
     <button
       ref={ref}
       type={type}
-      className={cn("ad-btn", variant !== "default" && `ad-btn--${variant}`, size === "sm" && "ad-btn--sm", className)}
+      className={cn("pba-btn", variant !== "default" && `pba-btn--${variant}`, size === "sm" && "pba-btn--sm", className)}
       {...props}
     />
   );
@@ -24,7 +24,7 @@ export const Button = forwardRef<
 
 export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string }>(
   function IconButton({ label, className, type = "button", title, ...props }, ref) {
-    return <button ref={ref} type={type} className={cn("ad-icon-btn", className)} aria-label={label} title={title ?? label} {...props} />;
+    return <button ref={ref} type={type} className={cn("pba-icon-btn", className)} aria-label={label} title={title ?? label} {...props} />;
   }
 );
 
@@ -32,23 +32,23 @@ export type Tone = "neutral" | "ok" | "warning" | "critical" | "air" | "blue" | 
 
 export function Chip({ tone = "neutral", children, className, title }: { tone?: Tone; children: ReactNode; className?: string; title?: string }) {
   return (
-    <span className={cn("ad-chip", tone !== "neutral" && `ad-chip--${tone}`, className)} title={title}>
+    <span className={cn("pba-chip", tone !== "neutral" && `pba-chip--${tone}`, className)} title={title}>
       {children}
     </span>
   );
 }
 
 export function Dot({ tone, flat = false }: { tone?: "live" | "tally" | "warning" | "critical" | "rehearsal"; flat?: boolean }) {
-  return <span className={cn("ad-dot", tone && `ad-dot--${tone}`, flat && "ad-dot--flat")} aria-hidden />;
+  return <span className={cn("pba-dot", tone && `pba-dot--${tone}`, flat && "pba-dot--flat")} aria-hidden />;
 }
 
 /** One page's toolbar: title, then the page's search, filters and actions. */
 export function Toolbar({ title, count, children }: { title: string; count?: number; children?: ReactNode }) {
   return (
-    <header className="ad-toolbar">
+    <header className="pba-toolbar">
       <h1>
         {title}
-        {count !== undefined ? <span className="ad-toolbar-count">{count}</span> : null}
+        {count !== undefined ? <span className="pba-toolbar-count">{count}</span> : null}
       </h1>
       {children}
     </header>
@@ -56,15 +56,15 @@ export function Toolbar({ title, count, children }: { title: string; count?: num
 }
 
 export function Grow() {
-  return <div className="ad-grow" />;
+  return <div className="pba-grow" />;
 }
 
 export const SearchField = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { label: string; shortcut?: string }>(
   function SearchField({ label, shortcut, className, ...props }, ref) {
     return (
-      <label className={cn("ad-search", className)}>
+      <label className={cn("pba-search", className)}>
         <Search aria-hidden />
-        <input ref={ref} className="ad-input" type="search" aria-label={label} {...props} />
+        <input ref={ref} className="pba-input" type="search" aria-label={label} {...props} />
         {shortcut ? <kbd aria-hidden>{shortcut}</kbd> : null}
       </label>
     );
@@ -86,7 +86,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("ad-seg", className)} role="radiogroup" aria-label={label}>
+    <div className={cn("pba-seg", className)} role="radiogroup" aria-label={label}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -97,7 +97,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(option.value)}
         >
           {option.label}
-          {option.count !== undefined ? <span className="ad-seg-count">{option.count}</span> : null}
+          {option.count !== undefined ? <span className="pba-seg-count">{option.count}</span> : null}
         </button>
       ))}
     </div>
@@ -120,9 +120,9 @@ export function Switch({
   // Inside a form, Radix adds a hidden absolutely positioned checkbox next to the switch. The wrapper gives it a
   // containing block, so it scrolls with the switch instead of stretching the whole page.
   return (
-    <span className="ad-switch-wrap">
-      <SwitchPrimitive.Root id={id} className="ad-switch" checked={checked} onCheckedChange={onChange} aria-label={label} disabled={disabled}>
-        <SwitchPrimitive.Thumb className="ad-switch-thumb" />
+    <span className="pba-switch-wrap">
+      <SwitchPrimitive.Root id={id} className="pba-switch" checked={checked} onCheckedChange={onChange} aria-label={label} disabled={disabled}>
+        <SwitchPrimitive.Thumb className="pba-switch-thumb" />
       </SwitchPrimitive.Root>
     </span>
   );
@@ -131,12 +131,12 @@ export function Switch({
 export function Field({ label, children, hint }: { label: string; children: (id: string) => ReactNode; hint?: ReactNode }) {
   const id = useId();
   return (
-    <div className="ad-field">
-      <label className="ad-label" htmlFor={id}>
+    <div className="pba-field">
+      <label className="pba-label" htmlFor={id}>
         {label}
       </label>
       {children(id)}
-      {hint ? <p className="ad-hint" style={{ marginTop: 5 }}>{hint}</p> : null}
+      {hint ? <p className="pba-hint" style={{ marginTop: 5 }}>{hint}</p> : null}
     </div>
   );
 }
@@ -159,18 +159,18 @@ export function SettingRow({
   htmlFor?: string;
 }) {
   return (
-    <div className={cn("ad-set-row", dim && "is-dim")}>
-      <div className="ad-set-text">
+    <div className={cn("pba-set-row", dim && "is-dim")}>
+      <div className="pba-set-text">
         {htmlFor ? (
-          <label className="ad-set-title" htmlFor={htmlFor}>
+          <label className="pba-set-title" htmlFor={htmlFor}>
             {title}
           </label>
         ) : (
-          <b className="ad-set-title">{title}</b>
+          <b className="pba-set-title">{title}</b>
         )}
-        {hint ? <p className="ad-hint">{hint}</p> : null}
+        {hint ? <p className="pba-hint">{hint}</p> : null}
       </div>
-      <div className="ad-set-ctl">{children}</div>
+      <div className="pba-set-ctl">{children}</div>
     </div>
   );
 }
@@ -196,10 +196,10 @@ export function Menu({ trigger, items, align = "end" }: { trigger: ReactNode; it
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content className="ad-scope ad-pop" align={align} sideOffset={6}>
+        <DropdownMenu.Content className="pba-scope pba-pop" align={align} sideOffset={6}>
           {items.map((item, index) =>
             item.kind === "separator" ? (
-              <DropdownMenu.Separator key={`sep-${index}`} className="ad-menu-sep" />
+              <DropdownMenu.Separator key={`sep-${index}`} className="pba-menu-sep" />
             ) : (
               <MenuRow key={item.label} item={item} />
             )
@@ -216,14 +216,14 @@ function MenuRow({ item }: { item: Extract<MenuItem, { label: string }> }) {
       {item.icon}
       {item.label}
       {item.hint || item.checked !== undefined ? (
-        <span className="ad-menu-end">
-          {item.hint ? <kbd className="ad-kbd">{item.hint}</kbd> : null}
+        <span className="pba-menu-end">
+          {item.hint ? <kbd className="pba-kbd">{item.hint}</kbd> : null}
           {item.checked ? <Check aria-hidden /> : null}
         </span>
       ) : null}
     </>
   );
-  const className = cn("ad-menu-item", item.danger && "ad-menu-item--danger");
+  const className = cn("pba-menu-item", item.danger && "pba-menu-item--danger");
   // A switch-like item is a checkbox item, so screen readers hear whether it is on.
   return item.checked !== undefined ? (
     <DropdownMenu.CheckboxItem className={className} disabled={item.disabled} checked={item.checked} onSelect={item.onSelect}>

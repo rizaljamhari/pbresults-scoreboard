@@ -57,7 +57,7 @@ describe("overlay slots and the global button rule", () => {
   });
 
   it("does not let the admin's 42px button minimum stretch an overlay slot", () => {
-    const button = Object.entries(declarations("button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .ad-scope *, .ad-pop *))"));
+    const button = Object.entries(declarations("button:not(:where(.te-shell *, .te-popover *, .te-menu *, .te-tooltip *, .pba-scope *, .pba-pop *))"));
     expect(button).toContainEqual(["min-height", "42px"]);
     // .component-slot outranks the global rule (class vs element), so its reset is what the slot gets.
     expect(declarations(".component-slot")["min-height"]).toBe("0");

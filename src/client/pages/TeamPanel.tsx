@@ -38,7 +38,7 @@ function NameTokens({
   return (
     <>
       {names.map((name) => (
-        <span key={name} className={auto ? "ad-token ad-token--auto" : "ad-token"}>
+        <span key={name} className={auto ? "pba-token pba-token--auto" : "pba-token"}>
           {name}
           {onRemove ? (
             <button type="button" aria-label={`${removeLabel ?? "Remove"} ${name}`} onClick={() => onRemove(name)}>
@@ -247,10 +247,10 @@ export function TeamPanel({
 
   if (teams.data && !selectedTeam) {
     return (
-      <aside className="ad-inspector" aria-label="Team">
-        <div className="ad-empty">
+      <aside className="pba-inspector" aria-label="Team">
+        <div className="pba-empty">
           <b>Team not found</b>
-          <p className="ad-hint">It may have been deleted somewhere else.</p>
+          <p className="pba-hint">It may have been deleted somewhere else.</p>
           <Button onClick={onClose}>Close</Button>
         </div>
       </aside>
@@ -258,7 +258,7 @@ export function TeamPanel({
   }
 
   if (!draft || !selectedTeam) {
-    return <aside className="ad-inspector" aria-label="Team" />;
+    return <aside className="pba-inspector" aria-label="Team" />;
   }
 
   const logos = [
@@ -269,10 +269,10 @@ export function TeamPanel({
   const automatic = generatedNames(draft);
 
   return (
-    <aside className="ad-inspector" aria-label={draft.canonicalName}>
-      <div className="ad-insp-head">
-        <span className="ad-insp-logo ad-checker">{primaryLogo ? <img src={primaryLogo.url} alt="" /> : null}</span>
-        <div className="ad-insp-title">
+    <aside className="pba-inspector" aria-label={draft.canonicalName}>
+      <div className="pba-insp-head">
+        <span className="pba-insp-logo pba-checker">{primaryLogo ? <img src={primaryLogo.url} alt="" /> : null}</span>
+        <div className="pba-insp-title">
           <b>{draft.canonicalName || "Untitled team"}</b>
           <span>{onAirSide ? `On air now · ${onAirSide} team` : draft.active ? "Used in live matching" : "Not used in live matching"}</span>
         </div>
@@ -293,9 +293,9 @@ export function TeamPanel({
         </IconButton>
       </div>
 
-      <div className="ad-insp-body">
+      <div className="pba-insp-body">
         {externallyChanged ? (
-          <div className="ad-callout ad-callout--warning">
+          <div className="pba-callout pba-callout--warning">
             <TriangleAlert aria-hidden />
             <span style={{ flex: 1 }}>This team was changed somewhere else while you were editing.</span>
             <Button
@@ -322,17 +322,17 @@ export function TeamPanel({
           </div>
         ) : null}
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <h2>Names</h2>
           <Field label="Team name">
-            {(id) => <input id={id} className="ad-input" value={draft.canonicalName} onChange={(event) => setDraft({ ...draft, canonicalName: event.target.value })} />}
+            {(id) => <input id={id} className="pba-input" value={draft.canonicalName} onChange={(event) => setDraft({ ...draft, canonicalName: event.target.value })} />}
           </Field>
-          <div className="ad-row2">
+          <div className="pba-row2">
             <Field label="On the scoreboard">
               {(id) => (
                 <input
                   id={id}
-                  className="ad-input"
+                  className="pba-input"
                   value={draft.scoreboardDisplayName}
                   placeholder={draft.canonicalName}
                   onChange={(event) => setDraft({ ...draft, scoreboardDisplayName: event.target.value })}
@@ -340,20 +340,20 @@ export function TeamPanel({
               )}
             </Field>
             <Field label="Short name">
-              {(id) => <input id={id} className="ad-input" value={draft.shortName} onChange={(event) => setDraft({ ...draft, shortName: event.target.value })} />}
+              {(id) => <input id={id} className="pba-input" value={draft.shortName} onChange={(event) => setDraft({ ...draft, shortName: event.target.value })} />}
             </Field>
           </div>
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <h2>
-            Match names<span className="ad-hint">Feed names that pick this team</span>
+            Match names<span className="pba-hint">Feed names that pick this team</span>
           </h2>
-          <div className="ad-sub">You added</div>
-          <div className="ad-tokens">
+          <div className="pba-sub">You added</div>
+          <div className="pba-tokens">
             <NameTokens names={draft.aliases} removeLabel="Remove" onRemove={(name) => setDraft({ ...draft, aliases: draft.aliases.filter((entry) => entry !== name) })} />
             <input
-              className="ad-input ad-token-add"
+              className="pba-input pba-token-add"
               placeholder="Add a name"
               aria-label="Add a match name"
               value={pendingAlias}
@@ -378,10 +378,10 @@ export function TeamPanel({
               onBlur={commitPendingAlias}
             />
           </div>
-          <div className="ad-sub">
-            Learned from live<span className="ad-hint">from Use and remember in Operations</span>
+          <div className="pba-sub">
+            Learned from live<span className="pba-hint">from Use and remember in Operations</span>
           </div>
-          <div className="ad-tokens">
+          <div className="pba-tokens">
             {draft.liveMatchNames.length ? (
               <NameTokens
                 names={draft.liveMatchNames}
@@ -389,37 +389,37 @@ export function TeamPanel({
                 onRemove={(name) => setDraft({ ...draft, liveMatchNames: draft.liveMatchNames.filter((entry) => entry !== name) })}
               />
             ) : (
-              <span className="ad-hint">None yet.</span>
+              <span className="pba-hint">None yet.</span>
             )}
           </div>
           {automatic.length ? (
             <>
-              <div className="ad-sub">
-                Automatic<span className="ad-hint">made from the names above</span>
+              <div className="pba-sub">
+                Automatic<span className="pba-hint">made from the names above</span>
               </div>
-              <div className="ad-tokens">
+              <div className="pba-tokens">
                 <NameTokens names={automatic} auto />
               </div>
             </>
           ) : null}
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <h2>Logos</h2>
-          <div className="ad-logos">
+          <div className="pba-logos">
             {logos.map(({ slot, label, assetId }) => {
               const asset = assetId ? assets.data?.find((item) => item.id === assetId) ?? null : null;
               return (
-                <div key={slot} className="ad-logo-slot">
+                <div key={slot} className="pba-logo-slot">
                   <button
                     type="button"
-                    className={asset ? "ad-logo-well ad-checker" : "ad-logo-well is-empty"}
+                    className={asset ? "pba-logo-well pba-checker" : "pba-logo-well is-empty"}
                     onClick={() => uploadRefs[slot].current?.click()}
                     aria-label={asset ? `Replace ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}
                   >
                     {asset ? <img src={asset.url} alt="" /> : `No ${label.toLowerCase()}`}
                   </button>
-                  <div className="ad-logo-meta">
+                  <div className="pba-logo-meta">
                     <span title={asset ? asset.displayName ?? asset.originalName : undefined}>
                       {asset ? `${label} · ${asset.displayName ?? asset.originalName}` : "PNG, JPG, WebP or GIF"}
                     </span>
@@ -454,36 +454,36 @@ export function TeamPanel({
           </div>
         </section>
 
-        <section className="ad-insp-group">
-          <div className="ad-switch-row">
+        <section className="pba-insp-group">
+          <div className="pba-switch-row">
             <div>
               <b>Use in live matching</b>
-              <p className="ad-hint">Inactive teams are skipped by automatic matching.</p>
+              <p className="pba-hint">Inactive teams are skipped by automatic matching.</p>
             </div>
             <Switch label="Use in live matching" checked={draft.active} onChange={(active) => setDraft({ ...draft, active })} />
           </div>
         </section>
 
-        <section className="ad-insp-group">
+        <section className="pba-insp-group">
           <Field label="Notes">
             {(id) => (
               <textarea
                 id={id}
-                className="ad-textarea"
+                className="pba-textarea"
                 placeholder="Anything the next operator should know"
                 value={draft.notes}
                 onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
               />
             )}
           </Field>
-          <p className="ad-hint" title={formatUpdatedAtFull(draft.updatedAt)}>
+          <p className="pba-hint" title={formatUpdatedAtFull(draft.updatedAt)}>
             Last saved {formatUpdatedAtFull(draft.updatedAt)}
           </p>
         </section>
       </div>
 
-      <div className="ad-insp-foot">
-        <p className="ad-hint">
+      <div className="pba-insp-foot">
+        <p className="pba-hint">
           {hasUnsavedChanges ? (
             <>
               {changeCount === 1 ? "1 unsaved change" : `${changeCount} unsaved changes`} · <kbd>{SAVE_SHORTCUT}</kbd>

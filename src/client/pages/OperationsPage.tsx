@@ -547,7 +547,7 @@ function statusTone(variant: ReturnType<typeof describeResolution>["variant"]): 
 
 function FactList({ items }: { items: Array<[string, React.ReactNode]> }) {
   return (
-    <dl className="ad-facts">
+    <dl className="pba-facts">
       {items.map(([label, value]) => (
         <Fragment key={label}>
           <dt>{label}</dt>
@@ -572,14 +572,14 @@ function Disclosure({
   id?: string;
 }) {
   return (
-    <details className="ad-disclose" id={id}>
+    <details className="pba-disclose" id={id}>
       <summary>
         {icon}
         <b>{title}</b>
-        <span className="ad-muted">{summary}</span>
-        <ChevronDown className="ad-disclose-chevron" aria-hidden />
+        <span className="pba-muted">{summary}</span>
+        <ChevronDown className="pba-disclose-chevron" aria-hidden />
       </summary>
-      <div className="ad-disclose-body">{children}</div>
+      <div className="pba-disclose-body">{children}</div>
     </details>
   );
 }
@@ -598,14 +598,14 @@ const CONNECTION_COPY: Record<OverlayClient["connection"], string> = {
 /** Every page showing the overlay: what it renders and when it last reported. */
 function OverlayPages({ state, now }: { state: OverlayState | null; now: number }) {
   if (!state) {
-    return <p className="ad-hint">Checking…</p>;
+    return <p className="pba-hint">Checking…</p>;
   }
   if (!state.clients.length) {
-    return <p className="ad-hint">No page has loaded the overlay since the server started.</p>;
+    return <p className="pba-hint">No page has loaded the overlay since the server started.</p>;
   }
   return (
     <>
-      <ul className="ad-overlay-pages">
+      <ul className="pba-overlay-pages">
         {state.clients.map((client) => {
           const tone =
             client.connection === "lost" || client.connection === "stale"
@@ -626,16 +626,16 @@ function OverlayPages({ state, now }: { state: OverlayState | null; now: number 
                 : `connected ${ago(client.firstSeenAt, now)}`
               : `${CONNECTION_COPY[client.connection]} ${ago(client.lastSeenAt, now)} ago`;
           return (
-            <li key={client.clientId} className={`ad-overlay-page is-${client.connection}`}>
+            <li key={client.clientId} className={`pba-overlay-page is-${client.connection}`}>
               <Dot tone={tone} flat />
               <div>
-                <div className="ad-overlay-page-head">
+                <div className="pba-overlay-page-head">
                   <b>
                     {client.page === "live" ? "Live" : "Preview"} · {client.local ? "This computer" : client.remoteAddress}
                   </b>
-                  <span className="ad-hint">{status}</span>
+                  <span className="pba-hint">{status}</span>
                 </div>
-                <dl className="ad-overlay-page-facts">
+                <dl className="pba-overlay-page-facts">
                   <dt>Browser</dt>
                   <dd>{client.browser}</dd>
                   <dt>Theme</dt>
@@ -662,7 +662,7 @@ function OverlayPages({ state, now }: { state: OverlayState | null; now: number 
           );
         })}
       </ul>
-      <p className="ad-hint">Shows what each page renders and when it last reported. Whether vMix has the input on Program is not visible from here.</p>
+      <p className="pba-hint">Shows what each page renders and when it last reported. Whether vMix has the input on Program is not visible from here.</p>
     </>
   );
 }
@@ -719,9 +719,9 @@ function TeamPicker({
   }
 
   return (
-    <div className="ad-picker">
+    <div className="pba-picker">
       <input
-        className="ad-input"
+        className="pba-input"
         role="combobox"
         aria-expanded={options.length > 0}
         aria-controls={listId}
@@ -754,9 +754,9 @@ function TeamPicker({
           }
         }}
       />
-      <ul id={listId} role="listbox" className="ad-picker-list" aria-label={query.trim() ? "Matching teams" : "Suggested teams"}>
+      <ul id={listId} role="listbox" className="pba-picker-list" aria-label={query.trim() ? "Matching teams" : "Suggested teams"}>
         {options.length === 0 ? (
-          <li className="ad-picker-empty">{query.trim() ? `No active team matches “${query.trim()}”.` : "Type to search the team registry."}</li>
+          <li className="pba-picker-empty">{query.trim() ? `No active team matches “${query.trim()}”.` : "Type to search the team registry."}</li>
         ) : (
           options.map((option, index) => {
             const logo = logoFor(option.team);
@@ -766,35 +766,35 @@ function TeamPicker({
                 id={`${listId}-${option.id}`}
                 role="option"
                 aria-selected={index === highlight}
-                className="ad-picker-option"
+                className="pba-picker-option"
                 onMouseEnter={() => setHighlight(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   pick(index, remember || event.shiftKey);
                 }}
               >
-                <span className="ad-picker-logo">{logo ? <img src={logo} alt="" /> : null}</span>
-                <span className="ad-picker-name">{option.name}</span>
-                {option.tag ? <span className="ad-picker-tag">{option.tag}</span> : null}
+                <span className="pba-picker-logo">{logo ? <img src={logo} alt="" /> : null}</span>
+                <span className="pba-picker-name">{option.name}</span>
+                {option.tag ? <span className="pba-picker-tag">{option.tag}</span> : null}
               </li>
             );
           })
         )}
       </ul>
       {createName ? (
-        <button type="button" className="ad-picker-create" disabled={disabled} onClick={onCreate}>
+        <button type="button" className="pba-picker-create" disabled={disabled} onClick={onCreate}>
           <Plus aria-hidden />
           Create team “{createName}”
         </button>
       ) : null}
-      <label className="ad-picker-remember">
-        <input className="ad-check" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+      <label className="pba-picker-remember">
+        <input className="pba-check" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
         <span>
           Remember “{inputName || "this name"}”
-          <span className="ad-hint">Next time the feed sends it, the same team is picked automatically.</span>
+          <span className="pba-hint">Next time the feed sends it, the same team is picked automatically.</span>
         </span>
       </label>
-      <div className="ad-picker-keys ad-hint">
+      <div className="pba-picker-keys pba-hint">
         <kbd>↵</kbd> Use for this match <kbd>⇧↵</kbd> Use and remember
       </div>
     </div>
@@ -871,35 +871,35 @@ function TeamSide({
   );
 
   return (
-    <div className={needsPick ? "ad-team-side needs-pick" : "ad-team-side"}>
-      <div className="ad-side-label">
+    <div className={needsPick ? "pba-team-side needs-pick" : "pba-team-side"}>
+      <div className="pba-side-label">
         {side === "left" ? <ArrowLeftToLine aria-hidden /> : <ArrowRightToLine aria-hidden />}
         {side === "left" ? "Left team" : "Right team"}
         <Chip tone={statusTone(status.variant)}>{label}</Chip>
       </div>
 
       {hasInput ? (
-        <div className="ad-team-id">
-          <span className={logo ? "ad-team-logo" : "ad-team-logo is-empty"}>{logo ? <img src={logo} alt="" /> : <ImageOff aria-hidden />}</span>
-          <div className="ad-team-text">
-            <div className={match.team ? "ad-team-name" : "ad-team-name is-missing"}>{match.team?.canonicalName ?? "No team yet"}</div>
-            <div className="ad-feed-name">
+        <div className="pba-team-id">
+          <span className={logo ? "pba-team-logo" : "pba-team-logo is-empty"}>{logo ? <img src={logo} alt="" /> : <ImageOff aria-hidden />}</span>
+          <div className="pba-team-text">
+            <div className={match.team ? "pba-team-name" : "pba-team-name is-missing"}>{match.team?.canonicalName ?? "No team yet"}</div>
+            <div className="pba-feed-name">
               Feed sends <code>{match.inputName}</code>
               {match.team ? null : " · on air as typed"}
             </div>
           </div>
         </div>
       ) : (
-        <p className="ad-hint">{status.hint}</p>
+        <p className="pba-hint">{status.hint}</p>
       )}
 
       {needsPick ? (
         <>
-          <p className={match.status === "unmatched" ? "ad-side-hint is-critical" : "ad-side-hint"}>{pickHint}</p>
+          <p className={match.status === "unmatched" ? "pba-side-hint is-critical" : "pba-side-hint"}>{pickHint}</p>
           {picker}
         </>
       ) : hasInput ? (
-        <div className="ad-team-actions">
+        <div className="pba-team-actions">
           <Popover.Root open={changing} onOpenChange={setChanging}>
             <Popover.Trigger asChild>
               <Button disabled={busy}>
@@ -908,7 +908,7 @@ function TeamSide({
               </Button>
             </Popover.Trigger>
             <Popover.Portal>
-              <Popover.Content className="ad-scope ad-pop ad-picker-pop" align="start" sideOffset={6}>
+              <Popover.Content className="pba-scope pba-pop pba-picker-pop" align="start" sideOffset={6}>
                 {picker}
               </Popover.Content>
             </Popover.Portal>
@@ -918,14 +918,14 @@ function TeamSide({
               {clearing ? "Clearing…" : "Back to automatic"}
             </Button>
           ) : null}
-          {resolving ? <span className="ad-hint">Applying…</span> : null}
+          {resolving ? <span className="pba-hint">Applying…</span> : null}
         </div>
       ) : null}
 
-      {status.hint && hasInput && !needsPick ? <p className="ad-side-hint">{status.hint}</p> : null}
+      {status.hint && hasInput && !needsPick ? <p className="pba-side-hint">{status.hint}</p> : null}
 
       {hasInput ? (
-        <details className="ad-why">
+        <details className="pba-why">
           <summary>
             <ChevronRight aria-hidden />
             Why this team?
@@ -1396,9 +1396,9 @@ export function OperationsPage() {
 
   if (!settings.data || !themes.data || !teams.data) {
     return (
-      <div className="ad-page ad-scope">
+      <div className="pba-page pba-scope">
         <Toolbar title="Operations" />
-        <p className="ad-hint" style={{ padding: 20 }}>
+        <p className="pba-hint" style={{ padding: 20 }}>
           Loading operations…
         </p>
       </div>
@@ -1445,30 +1445,30 @@ export function OperationsPage() {
   };
 
   return (
-    <div className="ad-page ad-scope">
+    <div className="pba-page pba-scope">
       <Toolbar title="Operations">
         <Popover.Root>
           <Popover.Trigger asChild>
-            <button type="button" className="ad-feed-trigger" title={`${feed.detail} Click for feed controls.`}>
+            <button type="button" className="pba-feed-trigger" title={`${feed.detail} Click for feed controls.`}>
               <Chip tone={feedTone(feed.variant)}>
                 <Dot tone={feed.variant === "success" ? "live" : feed.variant === "critical" ? "critical" : feed.variant === "warning" ? "warning" : undefined} flat />
                 {feed.label === "Live" ? "Feed live" : feed.label}
-                <ChevronDown aria-hidden className="ad-feed-caret" />
+                <ChevronDown aria-hidden className="pba-feed-caret" />
               </Chip>
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content className="ad-scope ad-pop ad-feed-pop" align="start" sideOffset={6}>
-              <p className="ad-feed-pop-status" role="status" aria-live="polite">
+            <Popover.Content className="pba-scope pba-pop pba-feed-pop" align="start" sideOffset={6}>
+              <p className="pba-feed-pop-status" role="status" aria-live="polite">
                 <b>{feed.label === "Live" ? "Feed live" : feed.label}</b>
                 {feed.detail}
               </p>
-              {live.data?.errorMessage ? <p className="ad-hint ad-feed-pop-error">{live.data.errorMessage}</p> : null}
-              <p className="ad-hint">
+              {live.data?.errorMessage ? <p className="pba-hint pba-feed-pop-error">{live.data.errorMessage}</p> : null}
+              <p className="pba-hint">
                 {live.data?.fetchedAt ? `Last successful fetch ${formatAge(live.data.fetchedAt)}.` : "No successful fetch yet."}
                 {settings.data.pollEnabled ? ` Checking every ${settings.data.pollIntervalMs} ms.` : " Polling is stopped."}
               </p>
-              <div className="ad-feed-pop-actions">
+              <div className="pba-feed-pop-actions">
                 <Button
                   variant={settings.data.pollEnabled ? "default" : "primary"}
                   onClick={() => void handleSetPolling(!settings.data!.pollEnabled)}
@@ -1492,7 +1492,7 @@ export function OperationsPage() {
           </Chip>
         ) : null}
         {goLiveIssues.length ? (
-          <a className="ad-btn ad-btn--ghost ad-issues-link" href="#operator-status">
+          <a className="pba-btn pba-btn--ghost pba-issues-link" href="#operator-status">
             <TriangleAlert aria-hidden />
             {goLiveIssues.length === 1 ? "1 issue" : `${goLiveIssues.length} issues`}
           </a>
@@ -1545,7 +1545,7 @@ export function OperationsPage() {
           ]}
         />
         <Button
-          className="ad-onair-btn"
+          className="pba-onair-btn"
           variant={scoreboardVisible ? "default" : "primary"}
           aria-pressed={!scoreboardVisible}
           disabled={togglingScoreboard || !scoreboard.data}
@@ -1553,14 +1553,14 @@ export function OperationsPage() {
           onClick={() => void handleSetScoreboardVisible(!scoreboardVisible)}
         >
           <Dot tone={scoreboardVisible ? "tally" : undefined} flat />
-          <span className="ad-onair-state">{scoreboardVisible ? "On air" : "Hidden"}</span>
-          <span className="ad-onair-action">{scoreboardVisible ? "Hide scoreboard" : "Show scoreboard"}</span>
-          <kbd className="ad-kbd">H</kbd>
+          <span className="pba-onair-state">{scoreboardVisible ? "On air" : "Hidden"}</span>
+          <span className="pba-onair-action">{scoreboardVisible ? "Hide scoreboard" : "Show scoreboard"}</span>
+          <kbd className="pba-kbd">H</kbd>
         </Button>
       </Toolbar>
 
-      <div className="ad-body">
-        <div className="ad-ops2">
+      <div className="pba-body">
+        <div className="pba-ops2">
           <OnAirStrip
             theme={publishedTheme}
             live={live.data}
@@ -1586,24 +1586,24 @@ export function OperationsPage() {
             overlayStatus={overlayState ? { level: overlaySummary.level, label: overlaySummary.chip, onOpen: openOverlayPages } : null}
             rehearsalLabel={rehearsing && rehearsal.data ? `Rehearsal · case ${rehearsal.data.caseIndex + 1}` : null}
           />
-          <div className="ad-ops2-grid">
-            <div className="ad-ops-col">
-              <section className="ad-surface" aria-labelledby="team-resolution-title">
-                <div className="ad-section-head ad-ops-head">
-                  <h2 id="team-resolution-title" className="ad-title">
+          <div className="pba-ops2-grid">
+            <div className="pba-ops-col">
+              <section className="pba-surface" aria-labelledby="team-resolution-title">
+                <div className="pba-section-head pba-ops-head">
+                  <h2 id="team-resolution-title" className="pba-title">
                     Team names on air
                   </h2>
-                  <p className="ad-hint">A pick applies to this feed name only, unless you choose Remember.</p>
+                  <p className="pba-hint">A pick applies to this feed name only, unless you choose Remember.</p>
                 </div>
                 {rehearsing ? (
-                  <p className="ad-callout ad-callout--info ad-rh-callout ad-rh-picks">
+                  <p className="pba-callout pba-callout--info pba-rh-callout pba-rh-picks">
                     Team picks are paused during the rehearsal: these names are test data, and nothing here is saved.
                   </p>
                 ) : null}
                 {live.data ? (
                   // A disabled fieldset turns off every pick, create and remember control while rehearsing.
-                  <fieldset className="ad-resolve-fieldset" disabled={rehearsing}>
-                  <div className="ad-resolve">
+                  <fieldset className="pba-resolve-fieldset" disabled={rehearsing}>
+                  <div className="pba-resolve">
                     <TeamSide
                       side="left"
                       match={live.data.displayLeftTeamMatch}
@@ -1633,18 +1633,18 @@ export function OperationsPage() {
                   </div>
                   </fieldset>
                 ) : (
-                  <p className="ad-hint ad-section">{live.error ?? "Waiting for live data…"}</p>
+                  <p className="pba-hint pba-section">{live.error ?? "Waiting for live data…"}</p>
                 )}
               </section>
 
             {operatorFields.length || operatorText.error ? (
-              <section className="ad-surface" aria-labelledby="operator-text-title">
-                <div className="ad-section">
-                  <div className="ad-section-head">
-                    <h2 id="operator-text-title" className="ad-title">
+              <section className="pba-surface" aria-labelledby="operator-text-title">
+                <div className="pba-section">
+                  <div className="pba-section-head">
+                    <h2 id="operator-text-title" className="pba-title">
                       Operator text
                     </h2>
-                    <p className="ad-hint">
+                    <p className="pba-hint">
                       {operatorFields.length > 1
                         ? `${operatorFields.length} in this theme${pendingTakeIds.length ? ` · ${pendingTakeIds.length === 1 ? "1 draft" : `${pendingTakeIds.length} drafts`} not on air` : ""}`
                         : "Type a draft, then Take it live."}
@@ -1656,8 +1656,8 @@ export function OperationsPage() {
                       </Button>
                     ) : null}
                   </div>
-                  {operatorText.error ? <p className="ad-hint">{operatorText.error}</p> : null}
-                  <div className="ad-og-list">
+                  {operatorText.error ? <p className="pba-hint">{operatorText.error}</p> : null}
+                  <div className="pba-og-list">
                     {operatorFields.map((field) => {
                       const draft = operatorTextDrafts[field.componentId] ?? field.value;
                       const dirty = dirtyOperatorTextIds.has(field.componentId);
@@ -1671,16 +1671,16 @@ export function OperationsPage() {
                         if (!busy && dirty && draft.length <= field.maxLength) void handleTakeOperatorText(field.componentId);
                       };
                       return (
-                        <div key={field.componentId} className="ad-og-row">
-                          <label className="ad-og-label" htmlFor={inputId}>
+                        <div key={field.componentId} className="pba-og-row">
+                          <label className="pba-og-label" htmlFor={inputId}>
                             {field.label}
                             {field.multiline ? <small>Several lines</small> : null}
                           </label>
-                          <div className="ad-og-main">
+                          <div className="pba-og-main">
                             {field.multiline ? (
                               <textarea
                                 id={inputId}
-                                className="ad-textarea"
+                                className="pba-textarea"
                                 rows={2}
                                 maxLength={field.maxLength}
                                 value={draft}
@@ -1689,7 +1689,7 @@ export function OperationsPage() {
                             ) : (
                               <input
                                 id={inputId}
-                                className="ad-input"
+                                className="pba-input"
                                 maxLength={field.maxLength}
                                 value={draft}
                                 onChange={(event) => updateDraft(event.target.value.replace(/[\r\n]+/g, " "))}
@@ -1701,15 +1701,15 @@ export function OperationsPage() {
                                 }}
                               />
                             )}
-                            <div className="ad-og-air" title={field.value}>
+                            <div className="pba-og-air" title={field.value}>
                               <Dot tone="tally" flat />
                               On air: <b>{field.value || "(blank)"}</b>
-                              <span className="ad-og-count">
+                              <span className="pba-og-count">
                                 {draft.length} / {field.maxLength}
                               </span>
                             </div>
                           </div>
-                          <div className="ad-og-actions">
+                          <div className="pba-og-actions">
                             <Chip tone={dirty ? "warning" : field.hasOverride ? "ok" : "neutral"}>{dirty ? "Draft" : field.hasOverride ? "On air" : "Default"}</Chip>
                             <Button variant="ghost" disabled={busy || !field.hasOverride} onClick={() => void handleResetOperatorText(field.componentId)} title="Back to the theme's default text">
                               Reset
@@ -1726,7 +1726,7 @@ export function OperationsPage() {
               </section>
             ) : null}
             </div>
-            <div className="ad-ops-col">
+            <div className="pba-ops-col">
               {showRehearsal ? (
                 <RehearsalPanel
                   status={rehearsal.data}
@@ -1742,32 +1742,32 @@ export function OperationsPage() {
                   onClose={() => setRehearsalOpen(false)}
                 />
               ) : (
-              <section id="operator-status" className="ad-surface" aria-labelledby="checks-title">
-                <div className="ad-section-head ad-ops-head">
-                  <h2 id="checks-title" className="ad-title">
+              <section id="operator-status" className="pba-surface" aria-labelledby="checks-title">
+                <div className="pba-section-head pba-ops-head">
+                  <h2 id="checks-title" className="pba-title">
                     Checks
                   </h2>
-                  <Chip tone={goLiveStatus.variant === "success" ? "ok" : goLiveStatus.variant} className="ad-push">
+                  <Chip tone={goLiveStatus.variant === "success" ? "ok" : goLiveStatus.variant} className="pba-push">
                     {goLiveStatus.label}
                   </Chip>
                 </div>
                 {goLiveIssues.length ? (
-                  <ul className="ad-issues">
+                  <ul className="pba-issues">
                     {goLiveIssues.map((issue) => (
-                      <li key={`${issue.severity}-${issue.title}`} className={`ad-issue is-${issue.severity}`}>
+                      <li key={`${issue.severity}-${issue.title}`} className={`pba-issue is-${issue.severity}`}>
                         {issue.severity === "info" ? <Info aria-hidden /> : <TriangleAlert aria-hidden />}
                         <div>
                           <b>
-                            <span className="ad-sr">{issue.severity === "critical" ? "Critical: " : issue.severity === "warning" ? "Warning: " : "Note: "}</span>
+                            <span className="pba-sr">{issue.severity === "critical" ? "Critical: " : issue.severity === "warning" ? "Warning: " : "Note: "}</span>
                             {issue.title}
                           </b>
-                          {issue.cause !== issue.detail ? <p className="ad-muted">{issue.cause}</p> : null}
-                          <p className="ad-muted ad-break">{issue.detail}</p>
+                          {issue.cause !== issue.detail ? <p className="pba-muted">{issue.cause}</p> : null}
+                          <p className="pba-muted pba-break">{issue.detail}</p>
                           <p>
                             <b>Fix:</b> {issue.fix}
                           </p>
                           {issue.action ? (
-                            <div className="ad-actions">
+                            <div className="pba-actions">
                               <Button size="sm" onClick={issue.action.onClick}>
                                 <Copy aria-hidden />
                                 {issue.action.label}
@@ -1779,41 +1779,41 @@ export function OperationsPage() {
                     ))}
                   </ul>
                 ) : (
-                  <ul className="ad-checks">
+                  <ul className="pba-checks">
                     {readyChecks.map((check) => (
                       <li key={check.label}>
                         <CircleCheck aria-hidden />
                         {check.label}
-                        <span className="ad-hint">{check.detail}</span>
+                        <span className="pba-hint">{check.detail}</span>
                       </li>
                     ))}
                   </ul>
                 )}
               </section>
               )}
-              <section className="ad-surface" aria-label="Setup and diagnostics">
+              <section className="pba-surface" aria-label="Setup and diagnostics">
                 <Disclosure icon={<Cable aria-hidden />} title="vMix setup" summary="URL, host, shortcuts">
                   <FactList
                     items={[
-                      ["vMix live URL", <span className="ad-break">{vmixLiveUrl}</span>],
+                      ["vMix live URL", <span className="pba-break">{vmixLiveUrl}</span>],
                       ["Host address for vMix", runtimeInfo.data?.preferredHost ?? "The address in use now"]
                     ]}
                   />
-                  <div className="ad-actions">
+                  <div className="pba-actions">
                     <Button onClick={() => void handleCopyOverlayUrl(vmixLiveUrl)}>
                       <Copy aria-hidden />
                       Copy live URL
                     </Button>
-                    <a className="ad-btn ad-btn--ghost" href={vmixLiveUrl} target="_blank" rel="noreferrer">
+                    <a className="pba-btn pba-btn--ghost" href={vmixLiveUrl} target="_blank" rel="noreferrer">
                       Open live overlay
                     </a>
                     {vmixPreviewUrl ? (
-                      <a className="ad-btn ad-btn--ghost" href={vmixPreviewUrl} target="_blank" rel="noreferrer">
+                      <a className="pba-btn pba-btn--ghost" href={vmixPreviewUrl} target="_blank" rel="noreferrer">
                         Open preview
                       </a>
                     ) : null}
                     {publishedTheme ? (
-                      <Link className="ad-btn ad-btn--ghost" to={`/admin/themes/${publishedTheme.id}`}>
+                      <Link className="pba-btn pba-btn--ghost" to={`/admin/themes/${publishedTheme.id}`}>
                         Edit theme on air
                       </Link>
                     ) : null}
@@ -1836,7 +1836,7 @@ export function OperationsPage() {
                       ]}
                     />
                   ) : (
-                    <p className="ad-hint">{live.error ?? "Waiting for live data…"}</p>
+                    <p className="pba-hint">{live.error ?? "Waiting for live data…"}</p>
                   )}
                 </Disclosure>
                 <Disclosure
@@ -1867,7 +1867,7 @@ export function OperationsPage() {
                             {publishedTheme ? (
                               <>
                                 {" · "}
-                                <Link className="ad-text-link" to={`/admin/themes/${publishedTheme.id}`}>
+                                <Link className="pba-text-link" to={`/admin/themes/${publishedTheme.id}`}>
                                   Edit theme on air
                                 </Link>
                               </>

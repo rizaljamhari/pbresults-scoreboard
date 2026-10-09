@@ -125,7 +125,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="ad-page ad-scope">
+    <div className="pba-page pba-scope">
       <Toolbar title="Settings">
         {!draft ? null : hasUnsavedChanges ? (
           <Chip tone="warning">Unsaved changes</Chip>
@@ -146,16 +146,16 @@ export function SettingsPage() {
 
       <UnsavedChangesGuard dirty={hasUnsavedChanges} saving={saving} onSave={save} onDiscard={discard} />
 
-      <div className="ad-body" ref={bodyRef}>
+      <div className="pba-body" ref={bodyRef}>
         {!draft ? (
-          <p className="ad-hint" style={{ padding: 20 }}>
+          <p className="pba-hint" style={{ padding: 20 }}>
             Loading settings…
           </p>
         ) : (
-          <div className="ad-settings">
-            <div className="ad-toc-col">
+          <div className="pba-settings">
+            <div className="pba-toc-col">
               <SectionToc sections={SECTIONS} activeSection={activeSection} onJump={jumpTo} label="Settings sections" />
-              <p className="ad-hint ad-toc-note">
+              <p className="pba-hint pba-toc-note">
                 Updates, backups and remote access are on <Link to="/admin/maintenance">Maintenance</Link>.
               </p>
             </div>
@@ -167,8 +167,8 @@ export function SettingsPage() {
               }}
             >
               {externallyChanged ? (
-                <div className="ad-surface" style={{ marginBottom: 20, overflow: "hidden" }}>
-                  <div className="ad-callout ad-callout--warning">
+                <div className="pba-surface" style={{ marginBottom: 20, overflow: "hidden" }}>
+                  <div className="pba-callout pba-callout--warning">
                     <TriangleAlert aria-hidden />
                     <span style={{ flex: 1 }}>These settings were changed somewhere else while you were editing.</span>
                     <Button size="sm" variant="ghost" onClick={() => setExternallyChanged(false)}>
@@ -181,13 +181,13 @@ export function SettingsPage() {
                 </div>
               ) : null}
 
-              <section className="ad-set-group" id="set-feed">
+              <section className="pba-set-group" id="set-feed">
                 <h2>Live feed</h2>
-                <div className="ad-surface">
+                <div className="pba-surface">
                   <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from." htmlFor="set-upstream">
                     <input
                       id="set-upstream"
-                      className="ad-input"
+                      className="pba-input"
                       value={draft.upstreamBaseUrl}
                       onChange={(event) => patch({ upstreamBaseUrl: event.target.value })}
                     />
@@ -197,7 +197,7 @@ export function SettingsPage() {
                     htmlFor="set-poll-interval"
                     hint={
                       intervalError ? (
-                        <span className="ad-inline-warning" role="alert">
+                        <span className="pba-inline-warning" role="alert">
                           <CircleAlert aria-hidden />
                           {intervalError}
                         </span>
@@ -206,10 +206,10 @@ export function SettingsPage() {
                       )
                     }
                   >
-                    <label className="ad-unit">
+                    <label className="pba-unit">
                       <input
                         id="set-poll-interval"
-                        className="ad-input"
+                        className="pba-input"
                         type="number"
                         min={POLL_INTERVAL_MIN_MS}
                         max={POLL_INTERVAL_MAX_MS}
@@ -224,13 +224,13 @@ export function SettingsPage() {
                 </div>
               </section>
 
-              <section className="ad-set-group" id="set-brand">
+              <section className="pba-set-group" id="set-brand">
                 <h2>Branding</h2>
-                <div className="ad-surface">
+                <div className="pba-surface">
                   <SettingRow title="App name" hint="Shown in the sidebar, the browser tab and the Windows console window. Leave empty to use the default." htmlFor="set-brand-name">
                     <input
                       id="set-brand-name"
-                      className="ad-input"
+                      className="pba-input"
                       maxLength={40}
                       placeholder={DEFAULT_APP_NAME}
                       value={draft.brandName}
@@ -264,9 +264,9 @@ export function SettingsPage() {
                 </div>
               </section>
 
-              <section className="ad-set-group" id="set-uploads">
+              <section className="pba-set-group" id="set-uploads">
                 <h2>Uploads</h2>
-                <div className="ad-surface">
+                <div className="pba-surface">
                   <SettingRow title="Remove image backgrounds" hint="Cut out logo backgrounds automatically when you upload." htmlFor="set-remove-bg">
                     <Switch
                       id="set-remove-bg"

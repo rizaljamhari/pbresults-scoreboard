@@ -305,10 +305,10 @@ The world has two compositions. **The editor** (`/admin/themes/:id`) lets the br
 
 ### Scope and code
 
-1. **Admin pages:** `--ad-*` tokens on `:root[data-admin-theme]` with a dark remap under `:root[data-admin-theme="dark"]`, in `src/client/admin.css`. A page opts in with `.ad-scope`; portalled menus carry `.ad-scope ad-pop` themselves. Shared controls live in `src/client/components/admin/kit.tsx` (Button, IconButton, Chip, Dot, Toolbar, SearchField with `useSlashFocus`, Segmented, Switch, Field, SettingRow, Menu, `downloadJson`, `SAVE_SHORTCUT`). Shell: `AppShell.tsx` with `liveSummary.ts`. Pages: `OperationsPage.tsx`, `ThemesPage.tsx`, `TeamsPage.tsx` + `TeamPanel.tsx`, `SettingsPage.tsx`, `SoftwareUpdateRows.tsx`.
+1. **Admin pages:** `--ad-*` tokens on `:root[data-admin-theme]` with a dark remap under `:root[data-admin-theme="dark"]`, in `src/client/admin.css`. A page opts in with `.pba-scope`; portalled menus carry `.pba-scope pba-pop` themselves. Shared controls live in `src/client/components/admin/kit.tsx` (Button, IconButton, Chip, Dot, Toolbar, SearchField with `useSlashFocus`, Segmented, Switch, Field, SettingRow, Menu, `downloadJson`, `SAVE_SHORTCUT`). Shell: `AppShell.tsx` with `liveSummary.ts`. Pages: `OperationsPage.tsx`, `ThemesPage.tsx`, `TeamsPage.tsx` + `TeamPanel.tsx`, `SettingsPage.tsx`, `SoftwareUpdateRows.tsx`.
 2. **Editor:** `--te-*` tokens on `.te-shell` in `src/client/styles.css`, components in `src/client/components/editor/`, `ThemeCanvasEditor.tsx`, `ThemeEditorPage.tsx`. Every colour the two share is defined once: `--te-*` reads `var(--ad-*)` (including in the portalled popovers, menus and tooltips), so only canvas values (dot grid, island shadow, 32px checkerboard) are the editor's own. Add new shared colours to `admin.css`, never as a third set.
 3. **Overlay isolation (hard boundary):** admin theming never reaches `/overlay*` or `OverlayRenderer` output. `<html data-admin-theme>` is set by the pre-paint script in `index.html` (skipped on `/overlay*`) and by `useAdminAppearance` in `src/client/appearance.ts`, which removes it on unmount; it is never set on overlay routes. `pnpm check:overlay-scope` rejects Tailwind utilities in `OverlayPage.tsx` and `OverlayRenderer.tsx` and must keep passing. The Operations "On air" strip renders `OverlayRenderer` directly (transparent, over a backdrop the operator picks); nothing in the admin changes `/overlay/live`. The broadcast look belongs to each event's theme.
-4. **Base layer:** Tailwind and the old md3 component kit are gone. `styles.css` keeps the editor (`.te-*`), the overlay styles and a small base layer of global element rules (`button`, `input`, `label` with the `--md-*` values on `:root`). Those global rules still reach the overlay, whose pieces render as buttons, so change them only with a pixel comparison of `/overlay/live` and every theme preview. Admin and editor surfaces opt out of them through `.ad-scope`, `.ad-pop` and `.te-*`.
+4. **Base layer:** Tailwind and the old md3 component kit are gone. `styles.css` keeps the editor (`.te-*`), the overlay styles and a small base layer of global element rules (`button`, `input`, `label` with the `--md-*` values on `:root`). Those global rules still reach the overlay, whose pieces render as buttons, so change them only with a pixel comparison of `/overlay/live` and every theme preview. Admin and editor surfaces opt out of them through `.pba-scope`, `.pba-pop` and `.te-*`.
 5. **Desktop only:** 1280 to 1600px beside vMix. No phone or tablet layouts; the few width rules below only keep narrow desktop windows usable.
 
 ## Colors
@@ -366,7 +366,7 @@ Dark is a remap of the same properties; the `-dark` tokens above are those value
 - **Meta** (500 to 600, 11.5px, tabular): table headers, nav counts, live-block keys, shortcut hints, editor layer tags and HUD.
 
 ### Named Rules
-**The Tabular Rule.** `.ad-scope` sets `font-variant-numeric: tabular-nums` on everything; the editor sets it on every numeric readout.
+**The Tabular Rule.** `.pba-scope` sets `font-variant-numeric: tabular-nums` on everything; the editor sets it on every numeric readout.
 
 **The Sentence Case Rule.** Labels, headings and table headers are sentence case at normal tracking. No eyebrows, kickers or uppercase labels above titles.
 
@@ -384,7 +384,7 @@ Dark is a remap of the same properties; the `-dark` tokens above are those value
 - **Settings:** a 180px sticky table of contents beside a column up to 720px, groups of setting rows (text left, control right in up to 300px).
 
 ### Tables
-40px rows, 34px sticky headers on the ground band, 10px cell padding, hairline rules, 26px row logos. Selected rows take the soft blue. The table wrapper is a container: below 760px of table width, secondary columns (`.ad-col-2nd`) drop first.
+40px rows, 34px sticky headers on the ground band, 10px cell padding, hairline rules, 26px row logos. Selected rows take the soft blue. The table wrapper is a container: below 760px of table width, secondary columns (`.pba-col-2nd`) drop first.
 
 ### Editor: frame owns the screen
 Full-window fixed shell with the canvas filling it and islands at a 14px inset: identity and status top-left, tools top-centre, Preview and the air action top-right, Properties (260px) left, Layers (232px) right, zoom and history bottom-left, Preview as bottom-centre, help bottom-right. Narrow desktop windows only: below 1280px the "Preview as" label hides; below 1180px that bar lifts above the bottom clusters; below 1100px Layers collapses to a pill.
@@ -464,7 +464,7 @@ Tool islands (4px padding, 34px icon buttons with key letters), Properties and L
 ## Do's and Don'ts
 
 ### Do:
-- **Do** build new admin pages inside `.ad-scope` with the kit in `components/admin/kit.tsx` and `--ad-*` tokens; add any new token with a matching dark value.
+- **Do** build new admin pages inside `.pba-scope` with the kit in `components/admin/kit.tsx` and `--ad-*` tokens; add any new token with a matching dark value.
 - **Do** give every admin page one 52px toolbar with its title, search, filters and one primary action at the right.
 - **Do** edit list items in an inspector side panel (388px) beside the list, not on a separate page.
 - **Do** keep tables at 40px rows with 34px sticky headers and mark droppable columns as secondary.
