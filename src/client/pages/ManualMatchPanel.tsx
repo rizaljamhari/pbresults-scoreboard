@@ -449,7 +449,7 @@ export function ManualMatchPanel({
         <span className="pba-sr" role="status">
           {phase ? `Match ${phase.label.toLowerCase()}` : ""}
         </span>
-        {view ? <span className="pba-hint">Round {view.round}</span> : null}
+        {view ? <span className="pba-hint pba-manual-round">Round {view.round}</span> : null}
         <Button
           variant="ghost"
           size="sm"
@@ -580,7 +580,7 @@ export function ManualMatchPanel({
               <div className="pba-manual-clock">
                 <span className="pba-side-label">
                   Break
-                  {inBreak ? null : <span className="pba-hint">Set and Reset work during a break; presets start one</span>}
+                  {inBreak ? null : <span className="pba-hint pba-manual-label-hint">Set and Reset need a break</span>}
                 </span>
                   <ClockSetter
                     label="Set the break clock"

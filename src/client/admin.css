@@ -3714,3 +3714,16 @@ tr[aria-selected="true"] .pba-row-open {
 .pba-manual-hidden-keys kbd + kbd {
   margin-left: 2px;
 }
+
+/* Sits beside the phase chip; the shared section head would push a hint to the right edge. */
+.pba-ops-head .pba-manual-round {
+  margin-left: 0;
+  text-align: left;
+}
+
+.pba-manual-label-hint {
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
