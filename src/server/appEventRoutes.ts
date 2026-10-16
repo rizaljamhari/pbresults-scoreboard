@@ -5,6 +5,7 @@ import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js"
 import type { OverlayState } from "../shared/overlayHealth.js";
 import type { RehearsalStatus } from "../shared/rehearsal.js";
 import type { ScoreboardState } from "../shared/scoreboard.js";
+import type { ManualMatchView } from "../shared/manualMatch.js";
 import { AppEventHub, formatAppEventFrame } from "./appEventHub.js";
 import type { OverlayRegistry } from "./overlayRegistry.js";
 import { createRemoteFrameFilter } from "./remoteStreamShaping.js";
@@ -22,6 +23,7 @@ type AppEventRouteOptions = {
   /** Count a stream opened through remote access; returns the release to call when it closes. */
   trackRemoteStream?: (sessionId: string, close: () => void) => () => void;
   getScoreboardState?: () => ScoreboardState;
+  getManualMatch?: () => ManualMatchView;
 };
 
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -94,7 +96,7 @@ export function registerAppEventRoutes(app: FastifyInstance, options: AppEventRo
     }
     writeFrame(
       formatAppEventFrame(
-        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.(), options.getRehearsalStatus?.(), options.getScoreboardState?.()),
+        options.hub.getSnapshot(options.getRuntime(), options.getLiveState(), options.getOperatorTextState(), options.getOverlayState?.(), options.getRehearsalStatus?.(), options.getScoreboardState?.(), options.getManualMatch?.()),
         2000
       )
     );

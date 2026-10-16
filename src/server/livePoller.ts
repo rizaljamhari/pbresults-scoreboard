@@ -10,6 +10,12 @@ function extractDisplayNames(raw: unknown) {
   };
 }
 
+/** Polls only while switched on and PBResults is the score source; manual scoring needs no feed. */
+function pollingWanted() {
+  const settings = getSettings();
+  return settings.pollEnabled && settings.liveSource === "pbresults";
+}
+
 type PollState = {
   raw: unknown;
   normalized: NormalizedLiveState;
@@ -37,7 +43,7 @@ class LivePoller {
       return;
     }
     this.started = true;
-    if (!getSettings().pollEnabled) {
+    if (!pollingWanted()) {
       this.setPausedState();
       return;
     }
@@ -58,7 +64,7 @@ class LivePoller {
       return;
     }
 
-    if (!getSettings().pollEnabled) {
+    if (!pollingWanted()) {
       this.runImmediatelyAfterPoll = false;
       if (this.timeoutId) {
         clearTimeout(this.timeoutId);
@@ -84,7 +90,7 @@ class LivePoller {
   }
 
   refreshNow() {
-    if (!this.started) {
+    if (!this.started || getSettings().liveSource === "manual") {
       return;
     }
 
@@ -97,11 +103,11 @@ class LivePoller {
       return;
     }
 
-    if (!getSettings().pollEnabled) {
+    if (!pollingWanted()) {
       this.polling = true;
       void this.poll(true).finally(() => {
         this.polling = false;
-        if (!getSettings().pollEnabled) {
+        if (!pollingWanted()) {
           this.setPausedState();
         }
       });
@@ -127,7 +133,7 @@ class LivePoller {
     if (!this.started) {
       return;
     }
-    if (!getSettings().pollEnabled) {
+    if (!pollingWanted()) {
       this.timeoutId = null;
       return;
     }
@@ -157,7 +163,7 @@ class LivePoller {
         return;
       }
 
-      if (!getSettings().pollEnabled) {
+      if (!pollingWanted()) {
         this.setPausedState();
         return;
       }
@@ -170,8 +176,8 @@ class LivePoller {
   }
 
   private async poll(ignorePollEnabled = false) {
-    const { upstreamBaseUrl, pollEnabled } = getSettings();
-    if (!pollEnabled && !ignorePollEnabled) {
+    const { upstreamBaseUrl } = getSettings();
+    if (!pollingWanted() && !ignorePollEnabled) {
       this.setPausedState();
       return;
     }

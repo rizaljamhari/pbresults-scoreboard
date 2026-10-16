@@ -49,6 +49,7 @@ import { listOperatorTextComponents } from "../shared/themeComponents.js";
 import { analyzeVisibleContent, removeImageBackground } from "./imageProcessing.js";
 import type { BackupPreview } from "../shared/backup.js";
 import { defaultScoreboardState, type ScoreboardState } from "../shared/scoreboard.js";
+import { defaultManualMatchState, type ManualMatchState } from "../shared/manualMatch.js";
 import { runtimeBuild } from "./buildInfo.js";
 import { dataDir, isPathInside, uploadsDir } from "./runtimePaths.js";
 import { assetVersion } from "../shared/assetVersion.js";
@@ -63,7 +64,8 @@ const allowedBuiltinThemeIds = new Set([preferredBuiltinThemeId, "builtin-minima
 const defaultOperationsState: OperationsState = {
   overrides: [],
   operatorTextOverrides: [],
-  scoreboard: { ...defaultScoreboardState }
+  scoreboard: { ...defaultScoreboardState },
+  manualMatch: defaultManualMatchState
 };
 
 type StoredAssetRecord = StoredAsset & { filePath: string };
@@ -560,6 +562,17 @@ export function setScoreboardVisible(visible: boolean): ScoreboardState {
   };
   writeOperationsState({ ...operations, scoreboard });
   return scoreboard;
+}
+
+export function getManualMatchState(): ManualMatchState {
+  return getOperationsState().manualMatch;
+}
+
+/** Saved on each operator action only; running clocks are worked out from their start time, never written per second. */
+export function saveManualMatchState(next: ManualMatchState): ManualMatchState {
+  const operations = getOperationsState();
+  writeOperationsState({ ...operations, manualMatch: next });
+  return getOperationsState().manualMatch;
 }
 
 export function getOperatorTextState(): OperatorTextState {

@@ -185,6 +185,7 @@ export class RehearsalRunner {
     const sourceStatus = frame.sourceStatus ?? "ok";
     return normalizeLiveState(raw, {
       sourceStatus,
+      source: "rehearsal",
       fetchedAt: new Date(this.now()).toISOString(),
       errorMessage: sourceStatus === "error" ? "Rehearsal: feed lost (simulated)" : null,
       teams: this.context?.teams ?? [],

@@ -14,6 +14,7 @@ import type { NormalizedLiveState, OperatorTextState } from "../shared/theme.js"
 import type { OverlayState } from "../shared/overlayHealth.js";
 import type { RehearsalStatus } from "../shared/rehearsal.js";
 import type { ScoreboardState } from "../shared/scoreboard.js";
+import type { ManualMatchView } from "../shared/manualMatch.js";
 
 type AppEventListener = (frame: string) => boolean;
 
@@ -63,7 +64,8 @@ export class AppEventHub {
     operatorTextState?: OperatorTextState,
     overlayState?: OverlayState,
     rehearsal?: RehearsalStatus,
-    scoreboardState?: ScoreboardState
+    scoreboardState?: ScoreboardState,
+    manualMatch?: ManualMatchView
   ): AppEventSnapshot {
     return {
       protocol: 1,
@@ -77,7 +79,8 @@ export class AppEventHub {
       ...(operatorTextState ? { operatorTextState } : {}),
       ...(overlayState ? { overlayState } : {}),
       ...(rehearsal ? { rehearsal } : {}),
-      ...(scoreboardState ? { scoreboardState } : {})
+      ...(scoreboardState ? { scoreboardState } : {}),
+      ...(manualMatch ? { manualMatch } : {})
     };
   }
 
@@ -125,6 +128,10 @@ export class AppEventHub {
 
   publishScoreboardState(state: ScoreboardState): AppRealtimeEvent {
     return this.publishRealtime({ type: "scoreboard.state", state });
+  }
+
+  publishManualMatchState(state: ManualMatchView): AppRealtimeEvent {
+    return this.publishRealtime({ type: "manual.state", state });
   }
 
   hasCapacity(): boolean {
@@ -189,6 +196,7 @@ export class AppEventHub {
       | { type: "rehearsal.state"; state: RehearsalStatus }
       | { type: "overlay.cue"; cue: "entrance"; token: number }
       | { type: "scoreboard.state"; state: ScoreboardState }
+      | { type: "manual.state"; state: ManualMatchView }
   ): AppRealtimeEvent {
     this.sequence += 1;
     const event = {

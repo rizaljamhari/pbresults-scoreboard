@@ -305,7 +305,8 @@ export function AppEventProvider({ children }: { children: ReactNode }) {
       else if (event.type === "rehearsal.state") updateRehearsalStatus(event.state);
       else if (event.type === "overlay.cue") playEntranceCue(event.token);
       else if (event.type === "scoreboard.state") updateScoreboardState(event.state);
-      else handleChanged(event);
+      // The manual scoring panel reads manual.state; nothing else here needs it.
+      else if (event.type !== "manual.state") handleChanged(event);
 
       if (forward && window.parent === window) {
         sendToChildren({ kind: relayEventMessage, event });

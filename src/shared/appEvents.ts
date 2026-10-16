@@ -3,6 +3,7 @@ import { normalizedLiveStateSchema, operatorTextStateSchema } from "./theme.js";
 import { overlayStateSchema } from "./overlayHealth.js";
 import { rehearsalStatusSchema } from "./rehearsal.js";
 import { scoreboardStateSchema } from "./scoreboard.js";
+import { manualMatchViewSchema } from "./manualMatch.js";
 
 export const appResourceDomains = ["settings", "themes", "assets", "teams", "backups", "remoteAccess"] as const;
 export type AppResourceDomain = (typeof appResourceDomains)[number];
@@ -18,7 +19,7 @@ export const appChangedEventTypes = [
 ] as const;
 export type AppChangedEventType = (typeof appChangedEventTypes)[number];
 
-export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state", "rehearsal.state", "overlay.cue", "scoreboard.state"] as const;
+export const appRealtimeEventTypes = ["live.state", "operator-text.state", "overlay.state", "rehearsal.state", "overlay.cue", "scoreboard.state", "manual.state"] as const;
 export type AppRealtimeEventType = (typeof appRealtimeEventTypes)[number];
 
 export const appEventTypeToDomain: Record<AppChangedEventType, AppResourceDomain> = {
@@ -58,7 +59,8 @@ export const appEventSnapshotSchema = appEventCommonSchema.extend({
   operatorTextState: operatorTextStateSchema.optional(),
   overlayState: overlayStateSchema.optional(),
   rehearsal: rehearsalStatusSchema.optional(),
-  scoreboardState: scoreboardStateSchema.optional()
+  scoreboardState: scoreboardStateSchema.optional(),
+  manualMatch: manualMatchViewSchema.optional()
 });
 
 const changedEventFields = {
@@ -103,6 +105,11 @@ export const appRealtimeEventSchema = z.discriminatedUnion("type", [
   appEventCommonSchema.extend({
     type: z.literal("scoreboard.state"),
     state: scoreboardStateSchema
+  }),
+  /** Manual scoring changed: teams, phase or what Undo would reverse. Clocks and scores also reach the overlay as live.state. */
+  appEventCommonSchema.extend({
+    type: z.literal("manual.state"),
+    state: manualMatchViewSchema
   })
 ]);
 

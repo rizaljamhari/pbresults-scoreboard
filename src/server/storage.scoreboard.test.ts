@@ -49,3 +49,19 @@ describe("scoreboard show / hide storage", () => {
     expect(after.overrides).toEqual(before.overrides);
   });
 });
+
+describe("manual match storage", () => {
+  it("loads the default manual match from operations saved before manual scoring existed", () => {
+    fs.mkdirSync(path.join(tempRoot, "data"), { recursive: true });
+    fs.writeFileSync(path.join(tempRoot, "data", "operations.json"), JSON.stringify({ overrides: [], operatorTextOverrides: [] }));
+    expect(storage.getManualMatchState()).toMatchObject({ round: 1, phase: "idle", left: { teamId: null, score: 0 }, history: [] });
+  });
+
+  it("saves the manual match without touching the rest of operations", () => {
+    const visible = storage.setScoreboardVisible(false);
+    const next = { ...storage.getManualMatchState(), round: 4, left: { teamId: null, name: "Guests", score: 2 } };
+    expect(storage.saveManualMatchState(next)).toMatchObject({ round: 4, left: { name: "Guests", score: 2 } });
+    expect(storage.getScoreboardState()).toEqual(visible);
+    expect(storage.getManualMatchState().round).toBe(4);
+  });
+});

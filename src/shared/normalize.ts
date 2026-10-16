@@ -114,6 +114,7 @@ export function normalizeLiveState(
   raw: RawLiveState | null,
   options?: {
     sourceStatus?: "idle" | "ok" | "error" | "paused";
+    source?: NormalizedLiveState["source"];
     fetchedAt?: string | null;
     errorMessage?: string | null;
     previousPeriod?: string | null;
@@ -157,6 +158,7 @@ export function normalizeLiveState(
 
   return {
     sourceStatus: options?.sourceStatus ?? "idle",
+    source: options?.source ?? "pbresults",
     fetchedAt: options?.fetchedAt ?? null,
     errorMessage: options?.errorMessage ?? null,
     state,

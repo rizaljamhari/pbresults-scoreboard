@@ -601,6 +601,7 @@ export function ThemeEditorPage() {
   const previewLive = (() => {
     const baseLive: NormalizedLiveState = live.data ?? {
       sourceStatus: "ok",
+      source: "pbresults",
       fetchedAt: new Date().toISOString(),
       errorMessage: null,
       state: "RUNNING",

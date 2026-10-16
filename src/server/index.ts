@@ -30,6 +30,8 @@ import {
   getOperationsState,
   getOperatorTextState,
   getScoreboardState,
+  getManualMatchState,
+  saveManualMatchState,
   getSettings,
   getTheme,
   getTeamRecord,
@@ -68,6 +70,8 @@ import { LiveGate } from "./liveGate.js";
 import { RehearsalRefusedError, RehearsalRunner } from "./rehearsalRunner.js";
 import { behindThreshold, overlayReportSchema } from "../shared/overlayHealth.js";
 import { scoreboardVisibilityRequestSchema } from "../shared/scoreboard.js";
+import { manualMatchActionSchema } from "../shared/manualMatch.js";
+import { ManualActionError, ManualMatchEngine } from "./manualMatch.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
 import { createFileSecretStore } from "./remoteAccessSecrets.js";
@@ -115,14 +119,21 @@ const remoteAccess = new RemoteAccessService({
   onChange: () => appEventHub.publish("remote-access.changed"),
   log: createLifecycleLog(path.join(logsDir, "remote-access.log"))
 });
-// What the overlay and admin see: the real feed, or rehearsal frames while a rehearsal runs.
-const liveGate = new LiveGate(
-  () => livePoller.getState().normalized,
-  (state) => appEventHub.publishLiveState(state)
-);
+// Manual scoring: the operator runs the match by hand when the event has no PBResults feed.
+const manualMatch = new ManualMatchEngine({
+  load: getManualMatchState,
+  save: saveManualMatchState,
+  getTeams: listTeamRecords,
+  getSettings
+});
+const manualScoring = () => getSettings().liveSource === "manual";
+/** The active score source's state: the PBResults feed or manual scoring. */
+const sourceState = () => (manualScoring() ? manualMatch.getState() : livePoller.getState().normalized);
+// What the overlay and admin see: the active source, or rehearsal frames while a rehearsal runs.
+const liveGate = new LiveGate(sourceState, (state) => appEventHub.publishLiveState(state));
 const rehearsal = new RehearsalRunner({
   gate: liveGate,
-  getFeedState: () => livePoller.getState().normalized,
+  getFeedState: sourceState,
   getContext: () => {
     const publishedId = getSettings().publishedThemeId;
     const theme = publishedId ? getTheme(publishedId) : null;
@@ -131,9 +142,21 @@ const rehearsal = new RehearsalRunner({
   onChange: (status) => appEventHub.publishRehearsalState(status)
 });
 const unsubscribeLiveEventBridge = livePoller.subscribe(({ normalized }) => {
+  if (manualScoring()) return;
   liveGate.feedChanged(normalized);
   rehearsal.onFeed(normalized);
 });
+const unsubscribeManualEventBridge = manualMatch.subscribe((state) => {
+  if (!manualScoring()) return;
+  liveGate.feedChanged(state);
+  rehearsal.onFeed(state);
+});
+/** After the score source may have changed: run the right one and put its state on screen. */
+function reconfigureLiveSource() {
+  livePoller.reconfigure();
+  manualMatch.setActive(manualScoring());
+  liveGate.feedChanged(sourceState());
+}
 const unsubscribeOperatorTextEventBridge = operatorTextRuntime.subscribe((state) => {
   appEventHub.publishOperatorTextState(state);
 });
@@ -146,7 +169,8 @@ const overlayRegistry = new OverlayRegistry({
       publishedThemeId: settings.publishedThemeId,
       publishedThemeUpdatedAt: published?.updatedAt ?? null,
       appVersion: runtimeBuild.info.appVersion,
-      behindThresholdMs: behindThreshold(settings.pollIntervalMs)
+      // Manual scoring publishes every second, like a feed polled each second.
+      behindThresholdMs: behindThreshold(settings.liveSource === "manual" ? 1_000 : settings.pollIntervalMs)
     };
   },
   getServerLiveFetchedAt: () => liveGate.current().fetchedAt,
@@ -209,6 +233,8 @@ async function gracefulShutdown() {
   await remoteAccess.shutdown().catch((error) => app.log.warn({ code: (error as { code?: string }).code }, "Remote access shutdown failed"));
   updateService.stop();
   unsubscribeLiveEventBridge();
+  unsubscribeManualEventBridge();
+  manualMatch.stop();
   unsubscribeOperatorTextEventBridge();
   livePoller.stop();
   await runShutdownBackup();
@@ -254,7 +280,9 @@ function sendBackupFailure(reply: FastifyReply, error: unknown) {
 }
 
 function publishFullRestore() {
-  livePoller.reconfigure();
+  manualMatch.reload();
+  reconfigureLiveSource();
+  appEventHub.publishManualMatchState(manualMatch.getView());
   operatorTextRuntime.emitCurrent();
   appEventHub.publish("settings.changed");
   appEventHub.publish("themes.changed");
@@ -357,6 +385,7 @@ app.addHook("onSend", async (request, reply, payload) => {
 });
 
 livePoller.start();
+manualMatch.setActive(manualScoring());
 runStartupHealthProbe();
 
 app.get("/api/health", async () => getHealthStatus());
@@ -384,7 +413,8 @@ registerAppEventRoutes(app, {
   overlays: overlayRegistry,
   getOverlayState: () => overlayRegistry.getState(),
   getRehearsalStatus: () => rehearsal.getStatus(),
-  getScoreboardState: () => getScoreboardState()
+  getScoreboardState: () => getScoreboardState(),
+  getManualMatch: () => manualMatch.getView()
 });
 
 // Rehearsal: test cases on the real overlay before a show. Refused during a match; never saves anything.
@@ -518,7 +548,7 @@ app.get("/api/settings", async () => getSettings());
 app.put("/api/settings", async (request, reply) => {
   const settings = settingsSchema.parse(request.body);
   const next = updateSettings(settings);
-  livePoller.reconfigure();
+  reconfigureLiveSource();
   updateService.reconfigureAutomaticChecks();
   operatorTextRuntime.emitCurrent();
   appEventHub.publish("settings.changed");
@@ -545,6 +575,25 @@ app.post("/api/live/poll/stop", async () => {
 app.post("/api/live/poll/refresh", async () => {
   livePoller.refreshNow();
   return { ok: true };
+});
+// Manual scoring. Refused during a rehearsal, whose frames hold the screen: an action would change nothing visible.
+app.get("/api/manual", async () => manualMatch.getView());
+app.post("/api/manual/action", async (request, reply) => {
+  if (rehearsal.running) {
+    return reply.code(409).send({ message: "Manual scoring is paused during a rehearsal. Stop the rehearsal first.", code: "REHEARSAL_RUNNING" });
+  }
+  const parsed = manualMatchActionSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ message: "Invalid manual scoring action", issues: parsed.error.issues });
+  }
+  try {
+    const view = manualMatch.apply(parsed.data);
+    appEventHub.publishManualMatchState(view);
+    return view;
+  } catch (error) {
+    if (error instanceof ManualActionError) return reply.code(409).send({ message: error.message });
+    throw error;
+  }
 });
 app.get("/api/operations", async () => getOperationsState());
 app.get("/api/operations/text-fields", async () => getOperatorTextState());

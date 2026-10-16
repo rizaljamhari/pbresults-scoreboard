@@ -3,6 +3,7 @@ import { changeMotionPresetValues, enterOrderValues, motionEasingValues, motionP
 import { defaultFill, fillTypeValues, type FillSettings } from "./fill.js";
 import { randomUuid } from "./randomId.js";
 import { scoreboardStateSchema } from "./scoreboard.js";
+import { manualMatchStateSchema } from "./manualMatch.js";
 
 /** A surface's solid colour or gradient (see `./fill.ts`); solid by default, so `backgroundColor` keeps working. */
 function fillField(defaults: FillSettings = defaultFill) {
@@ -936,6 +937,13 @@ export const settingsSchema = z.object({
   publishedThemeId: z.string().nullable(),
   pollEnabled: z.boolean().default(true),
   pollIntervalMs: z.number().int().min(100).max(10000).default(1000),
+  /** Where match data comes from: the PBResults feed, or the operator scoring by hand. */
+  liveSource: z.enum(["pbresults", "manual"]).default("pbresults"),
+  /** Manual scoring: the game clock's length, and a new break's length. */
+  manualGameClockSeconds: z.number().int().min(1).max(5999).default(600),
+  manualBreakClockSeconds: z.number().int().min(1).max(5999).default(120),
+  /** Manual scoring: how much one timeout adds to the break clock. */
+  manualTimeoutSeconds: z.number().int().min(1).max(3600).default(60),
   autoRemoveBackgroundUploads: z.boolean().default(true),
   /** Operator switch: the overlay cuts instead of animating until it is turned off. */
   reduceMotion: z.boolean().default(false),
@@ -1082,12 +1090,15 @@ export const operationsStateSchema = z.preprocess(
   z.object({
     overrides: z.array(teamResolutionOverrideSchema).default([]),
     operatorTextOverrides: z.array(operatorTextOverrideSchema).default([]),
-    scoreboard: scoreboardStateSchema.default({})
+    scoreboard: scoreboardStateSchema.default({}),
+    manualMatch: manualMatchStateSchema.default({})
   })
 );
 
 export const normalizedLiveStateSchema = z.object({
   sourceStatus: z.enum(["idle", "ok", "error", "paused"]),
+  /** What produced this state. The overlay ignores it; the admin labels manual scoring differently from a feed. */
+  source: z.enum(["pbresults", "manual", "rehearsal"]).default("pbresults"),
   fetchedAt: z.string().nullable(),
   errorMessage: z.string().nullable(),
   state: z.string(),
@@ -1335,6 +1346,10 @@ export const defaultSettings: AppSettings = {
   publishedThemeId: "theme-7ad8adb8-e017-4853-93b1-fb608a750253",
   pollEnabled: true,
   pollIntervalMs: 1000,
+  liveSource: "pbresults",
+  manualGameClockSeconds: 600,
+  manualBreakClockSeconds: 120,
+  manualTimeoutSeconds: 60,
   autoRemoveBackgroundUploads: true,
   reduceMotion: false,
   updateCheckEnabled: true,
