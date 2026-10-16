@@ -226,131 +226,136 @@ export function SettingsPage() {
                       onChange={(liveSource) => patch({ liveSource })}
                     />
                   </SettingRow>
-                  <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from." htmlFor="set-upstream" dim={manualDraft}>
-                    <input
-                      id="set-upstream"
-                      className="pba-input"
-                      value={draft.upstreamBaseUrl}
-                      onChange={(event) => patch({ upstreamBaseUrl: event.target.value })}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Check the feed every"
-                    htmlFor="set-poll-interval"
-                    dim={manualDraft}
-                    hint={
-                      intervalError ? (
-                        <span className="pba-inline-warning" role="alert">
-                          <CircleAlert aria-hidden />
-                          {intervalError}
-                        </span>
-                      ) : (
-                        "Lower is faster; 500 ms suits most events. Start and stop polling from Operations."
-                      )
-                    }
-                  >
-                    <label className="pba-unit">
-                      <input
-                        id="set-poll-interval"
-                        className="pba-input"
-                        type="number"
-                        min={POLL_INTERVAL_MIN_MS}
-                        max={POLL_INTERVAL_MAX_MS}
-                        step={50}
-                        aria-invalid={intervalError ? true : undefined}
-                        value={Number.isNaN(draft.pollIntervalMs) ? "" : draft.pollIntervalMs}
-                        onChange={(event) => patch({ pollIntervalMs: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
-                      />
-                      <span>ms</span>
-                    </label>
-                  </SettingRow>
-                  <SettingRow
-                    title="Game clock length"
-                    htmlFor="set-manualGameClockSeconds"
-                    dim={!manualDraft}
-                    hint={
-                      gameClockError ? (
-                        <span className="pba-inline-warning" role="alert">
-                          <CircleAlert aria-hidden />
-                          {gameClockError}
-                        </span>
-                      ) : (
-                        `What Reset and Next match set the game clock to.${Number.isFinite(draft.manualGameClockSeconds) ? ` Now ${formatSeconds(draft.manualGameClockSeconds)}.` : ""}`
-                      )
-                    }
-                  >
-                    <label className="pba-unit">
-                      <input
-                        id="set-manualGameClockSeconds"
-                        className="pba-input"
-                        type="number"
-                        min={1}
-                        max={5999}
-                        aria-invalid={gameClockError ? true : undefined}
-                        value={Number.isNaN(draft.manualGameClockSeconds) ? "" : draft.manualGameClockSeconds}
-                        onChange={(event) => patch({ manualGameClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
-                      />
-                      <span>s</span>
-                    </label>
-                  </SettingRow>
-                  <SettingRow
-                    title="Break length"
-                    htmlFor="set-manualBreakClockSeconds"
-                    dim={!manualDraft}
-                    hint={
-                      breakClockError ? (
-                        <span className="pba-inline-warning" role="alert">
-                          <CircleAlert aria-hidden />
-                          {breakClockError}
-                        </span>
-                      ) : (
-                        `How long a new break runs.${Number.isFinite(draft.manualBreakClockSeconds) ? ` Now ${formatSeconds(draft.manualBreakClockSeconds)}.` : ""}`
-                      )
-                    }
-                  >
-                    <label className="pba-unit">
-                      <input
-                        id="set-manualBreakClockSeconds"
-                        className="pba-input"
-                        type="number"
-                        min={1}
-                        max={5999}
-                        aria-invalid={breakClockError ? true : undefined}
-                        value={Number.isNaN(draft.manualBreakClockSeconds) ? "" : draft.manualBreakClockSeconds}
-                        onChange={(event) => patch({ manualBreakClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
-                      />
-                      <span>s</span>
-                    </label>
-                  </SettingRow>
-                  <SettingRow
-                    title="Timeout adds"
-                    htmlFor="set-manualTimeoutSeconds"
-                    dim={!manualDraft}
-                    hint={
-                      timeoutError ? (
-                        <span className="pba-inline-warning" role="alert">
-                          <CircleAlert aria-hidden />
-                          {timeoutError}
-                        </span>
-                      ) : (
-                        `Added to the break clock by Timeout; the theme's timeout card shows.${Number.isFinite(draft.manualTimeoutSeconds) ? ` Now ${formatSeconds(draft.manualTimeoutSeconds)}.` : ""}`
-                      )
-                    }
-                  >
-                    <label className="pba-unit">
-                      <input
-                        id="set-manualTimeoutSeconds"
-                        className="pba-input"
-                        type="number"
-                        min={1}
-                        max={3600}
-                        aria-invalid={timeoutError ? true : undefined}
-                        value={Number.isNaN(draft.manualTimeoutSeconds) ? "" : draft.manualTimeoutSeconds}
-                        onChange={(event) => patch({ manualTimeoutSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
-                      />
-                      <span>s</span>
-                    </label>
-                  </SettingRow>
+                  {/* Only the chosen source's settings show; the other's values are kept, unsaved edits included. */}
+                  {manualDraft ? (
+                    <>
+                      <SettingRow
+                        title="Game clock length"
+                        htmlFor="set-manualGameClockSeconds"
+                        hint={
+                          gameClockError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {gameClockError}
+                            </span>
+                          ) : (
+                            `What Reset and Next match set the game clock to.${Number.isFinite(draft.manualGameClockSeconds) ? ` Now ${formatSeconds(draft.manualGameClockSeconds)}.` : ""}`
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-manualGameClockSeconds"
+                            className="pba-input"
+                            type="number"
+                            min={1}
+                            max={5999}
+                            aria-invalid={gameClockError ? true : undefined}
+                            value={Number.isNaN(draft.manualGameClockSeconds) ? "" : draft.manualGameClockSeconds}
+                            onChange={(event) => patch({ manualGameClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>s</span>
+                        </label>
+                      </SettingRow>
+                      <SettingRow
+                        title="Break length"
+                        htmlFor="set-manualBreakClockSeconds"
+                        hint={
+                          breakClockError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {breakClockError}
+                            </span>
+                          ) : (
+                            `How long a new break runs.${Number.isFinite(draft.manualBreakClockSeconds) ? ` Now ${formatSeconds(draft.manualBreakClockSeconds)}.` : ""}`
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-manualBreakClockSeconds"
+                            className="pba-input"
+                            type="number"
+                            min={1}
+                            max={5999}
+                            aria-invalid={breakClockError ? true : undefined}
+                            value={Number.isNaN(draft.manualBreakClockSeconds) ? "" : draft.manualBreakClockSeconds}
+                            onChange={(event) => patch({ manualBreakClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>s</span>
+                        </label>
+                      </SettingRow>
+                      <SettingRow
+                        title="Timeout adds"
+                        htmlFor="set-manualTimeoutSeconds"
+                        hint={
+                          timeoutError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {timeoutError}
+                            </span>
+                          ) : (
+                            `Added to the break clock by Timeout; the theme's timeout card shows.${Number.isFinite(draft.manualTimeoutSeconds) ? ` Now ${formatSeconds(draft.manualTimeoutSeconds)}.` : ""}`
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-manualTimeoutSeconds"
+                            className="pba-input"
+                            type="number"
+                            min={1}
+                            max={3600}
+                            aria-invalid={timeoutError ? true : undefined}
+                            value={Number.isNaN(draft.manualTimeoutSeconds) ? "" : draft.manualTimeoutSeconds}
+                            onChange={(event) => patch({ manualTimeoutSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>s</span>
+                        </label>
+                      </SettingRow>
+                    </>
+                  ) : (
+                    <>
+                      <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from." htmlFor="set-upstream">
+                        <input
+                          id="set-upstream"
+                          className="pba-input"
+                          value={draft.upstreamBaseUrl}
+                          onChange={(event) => patch({ upstreamBaseUrl: event.target.value })}
+                        />
+                      </SettingRow>
+                      <SettingRow
+                        title="Check the feed every"
+                        htmlFor="set-poll-interval"
+                       
+                        hint={
+                          intervalError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {intervalError}
+                            </span>
+                          ) : (
+                            "Lower is faster; 500 ms suits most events. Start and stop polling from Operations."
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-poll-interval"
+                            className="pba-input"
+                            type="number"
+                            min={POLL_INTERVAL_MIN_MS}
+                            max={POLL_INTERVAL_MAX_MS}
+                            step={50}
+                            aria-invalid={intervalError ? true : undefined}
+                            value={Number.isNaN(draft.pollIntervalMs) ? "" : draft.pollIntervalMs}
+                            onChange={(event) => patch({ pollIntervalMs: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>ms</span>
+                        </label>
+                      </SettingRow>
+                    </>
+                  )}
                 </div>
               </section>
 

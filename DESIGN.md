@@ -454,7 +454,7 @@ Header: ground band, 11.5px/600 faint, sortable headers with a 12px arrow. Rows:
 - **Operator text:** hidden when the theme on air has none (Overlay details says so, with a link to the editor). Otherwise rows of label, draft input, on-air line with count, a Draft / On air / Default chip, Reset and Take; "Take all (n)" appears when more than one draft is pending.
 
 ### Settings rows
-Text left (550 title, faint hint), control right; rows split by hairlines inside a surface; dimmed text when the setting is inactive.
+Text left (550 title, faint hint), control right; rows split by hairlines inside a surface; dimmed text when the setting is inactive. Rows that do nothing under a choice made above them are hidden, not dimmed or folded: under Scores, only the chosen score source's rows show (PBResults address and check interval, or the manual clock lengths).
 
 ### Menus, popovers, tooltips
 10px radius, popover shadow, 6px padding, 32px items with 16px icons; highlighted items take the hover wash (soft blue in the editor). Editor tooltips: ink face, light text, 6px radius, 12px/500.
