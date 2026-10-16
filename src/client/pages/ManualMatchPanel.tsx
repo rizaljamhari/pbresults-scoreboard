@@ -15,6 +15,38 @@ import { searchTeams } from "./teamSearch";
 /** Team name slots in themes are sized for the 8 characters the PBResults tablet sends. */
 const NAME_FIT = 8;
 
+/** One-click clock lengths. Game presets set the clock; break presets start a break of that length. */
+const GAME_CLOCK_PRESETS = [180, 300, 480, 600];
+const BREAK_CLOCK_PRESETS = [10, 15, 30];
+
+function presetLabel(seconds: number) {
+  return seconds < 60 ? `${seconds}s` : `${seconds / 60} min`;
+}
+
+function ClockPresets({
+  label,
+  presets,
+  disabled,
+  describe,
+  onPick
+}: {
+  label: string;
+  presets: number[];
+  disabled: boolean;
+  describe: (seconds: number) => string;
+  onPick: (seconds: number) => void;
+}) {
+  return (
+    <div className="pba-manual-row pba-manual-presets" role="group" aria-label={label}>
+      {presets.map((seconds) => (
+        <Button key={seconds} size="sm" variant="ghost" disabled={disabled} title={describe(seconds)} onClick={() => onPick(seconds)}>
+          {presetLabel(seconds)}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 const PHASE_LABEL: Record<ManualMatchView["phase"], { label: string; tone: Tone }> = {
   idle: { label: "Ready", tone: "neutral" },
   game: { label: "Game", tone: "ok" },
@@ -383,6 +415,13 @@ export function ManualMatchPanel({
                 onSet={(seconds) => void run({ type: "setGameClock", seconds })}
                 onReset={() => void run({ type: "resetGameClock" })}
               />
+              <ClockPresets
+                label="Game clock presets"
+                presets={GAME_CLOCK_PRESETS}
+                disabled={disabled}
+                describe={(seconds) => `Set the game clock to ${formatClock(seconds)}`}
+                onPick={(seconds) => void run({ type: "setGameClock", seconds })}
+              />
             </div>
             <div className="pba-manual-clock">
               <div className="pba-side-label">Break</div>
@@ -414,6 +453,13 @@ export function ManualMatchPanel({
                 title={inBreak ? "A higher time shows the theme's timeout card, like Timeout" : "Start a break to set its clock"}
                 onSet={(seconds) => void run({ type: "setBreakClock", seconds })}
                 onReset={() => void run({ type: "resetBreakClock" })}
+              />
+              <ClockPresets
+                label="Break presets"
+                presets={BREAK_CLOCK_PRESETS}
+                disabled={disabled}
+                describe={(seconds) => `Start a ${presetLabel(seconds)} break now`}
+                onPick={(seconds) => void run({ type: "startBreak", seconds })}
               />
             </div>
           </div>

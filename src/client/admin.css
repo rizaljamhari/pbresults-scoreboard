@@ -3648,3 +3648,7 @@ tr[aria-selected="true"] .pba-row-open {
 .pba-btn .pba-kbd {
   margin-left: 2px;
 }
+
+.pba-manual-presets {
+  gap: 4px;
+}
