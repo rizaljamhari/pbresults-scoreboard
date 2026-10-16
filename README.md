@@ -2,7 +2,7 @@
 
 Browser-based scoreboard control, team resolution, and overlay tooling for [PBResults](https://www.paintballresults.com/) live feeds.
 
-This project is built for paintball broadcast workflows where PBResults provides the upstream `/live` data and the overlay is consumed as a browser source in tools like vMix.
+This project is built for paintball broadcast workflows where PBResults provides the upstream `/live` data and the overlay is consumed as a browser source in tools like vMix. Events that don't run PBResults can score by hand instead (see [Running without PBResults](./SETUP.md#running-without-pbresults)).
 
 ## Why this exists
 
@@ -34,7 +34,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
 
 ## What it does
 
-- polls a PBResults `/live` feed
+- polls a PBResults `/live` feed, or lets the operator score the match by hand when an event has no feed
 - normalizes live state for overlays and operator UI
 - provides an operator-first live control page with an on-air preview, team resolution, operator text, and readiness checks
 - lets you build and publish scoreboard themes in a full-window visual editor with snapping, layers, and preview states
@@ -52,6 +52,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
 - `/admin/operations`
   - on-air scoreboard preview and browser-source URL
   - live team resolution and operator text Take controls
+  - in manual scoring: teams, scores, game and break clocks, timeouts, finish, towel and base, Undo, with keyboard shortcuts
   - feed, theme, and team readiness checks
 - `/admin/themes`
   - theme gallery with live previews and Put on air
@@ -59,7 +60,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
 - `/admin/teams`
   - team registry, logos, aliases, live match names, and side-panel editing
 - `/admin/settings`
-  - feed address and check interval, branding, upload preferences (saved together)
+  - score source (PBResults feed or manual), feed address and check interval, manual clock lengths, branding, upload preferences (saved together)
 - `/admin/maintenance`
   - backup and restore, software updates, remote access (each action applies right away)
 - `/overlay/live`
@@ -197,6 +198,8 @@ Versioning convention:
   - architecture, runtime assumptions, team resolution, packaging model
 - [docs/api-reference.md](./docs/api-reference.md)
   - route-by-route API surface and important response shapes
+- [docs/manual-mode-technical-plan.md](./docs/manual-mode-technical-plan.md)
+  - how manual scoring works and how it maps onto the PBResults feed shape
 - [docs/planned-next-features.md](./docs/planned-next-features.md)
   - prioritized operational roadmap for updates, backups, and secure remote configuration
 - [docs/automatic-updates-technical-plan.md](./docs/automatic-updates-technical-plan.md)

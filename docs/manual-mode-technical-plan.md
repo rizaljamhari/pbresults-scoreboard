@@ -1,6 +1,6 @@
 # Manual Scoring: Run the Scoreboard Without PBResults
 
-Status: phases 1–2 (server, admin) implemented · 2026-10-16
+Status: implemented · 2026-10-16
 
 Today the scoreboard only gets match data by polling PBResults `/live` (`src/server/livePoller.ts`). Some events don't run PBResults at all and score everything by hand, so the scoreboard can't be used there. Pausing the poller doesn't help; it only freezes the last feed state.
 

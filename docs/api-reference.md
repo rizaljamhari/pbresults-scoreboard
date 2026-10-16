@@ -45,6 +45,14 @@ type AppSettings = {
   publishedThemeId: string | null;
   pollEnabled: boolean;
   pollIntervalMs: number;
+  /** Where match data comes from. "manual" stops polling and puts the manual match on air. */
+  liveSource: "pbresults" | "manual";
+  /** Manual scoring: what Reset and Next match set the game clock to (1–5999 s, default 600). */
+  manualGameClockSeconds: number;
+  /** Manual scoring: a new break's length (1–5999 s, default 120). */
+  manualBreakClockSeconds: number;
+  /** Manual scoring: what one timeout adds to the break clock (1–3600 s, default 60). */
+  manualTimeoutSeconds: number;
   autoRemoveBackgroundUploads: boolean;
   /** Operator switch: the live overlay cuts instead of animating. */
   reduceMotion: boolean;
@@ -123,6 +131,45 @@ type TeamResolutionOverride = {
 ```ts
 type OperationsState = {
   overrides: TeamResolutionOverride[];
+  operatorTextOverrides: OperatorTextOverride[];
+  scoreboard: ScoreboardState;
+  /** The manual scoring match, kept across restarts. Defaults to an empty match. */
+  manualMatch: ManualMatchState;
+}
+```
+
+### ManualMatchView
+
+What `GET /api/manual`, `POST /api/manual/action` and the `manual.state` event return. The saved `ManualMatchState` is the same plus `history` (up to 30 earlier states for Undo) instead of `undoLabel`.
+
+```ts
+type ManualMatchView = {
+  left: ManualTeam;
+  right: ManualTeam;
+  round: number;
+  /** "finished" stays set through a break after the match, as PBResults sends END during the break. */
+  phase: "idle" | "game" | "break" | "finished";
+  gameClock: ManualClock;
+  breakClock: ManualClock;
+  /** Active until `until`, then the overlay sees no event. */
+  teamEvent: { kind: "towel" | "base"; side: "left" | "right"; until: string } | null;
+  updatedAt: string | null;
+  /** What Undo would reverse, e.g. "Left +1"; null when there is nothing to undo. */
+  undoLabel: string | null;
+}
+
+type ManualTeam = {
+  /** A registry team; its names and logos are used. */
+  teamId: string | null;
+  /** Used when no registry team is chosen. */
+  name: string;
+  score: number;
+}
+
+/** Time left when the clock last started or stopped. Running clocks count down from `runningSince`. */
+type ManualClock = {
+  remainingMs: number;
+  runningSince: string | null;
 }
 ```
 
@@ -185,6 +232,8 @@ This is the most important runtime response in the whole app.
 ```ts
 type NormalizedLiveState = {
   sourceStatus: "idle" | "ok" | "error" | "paused";
+  /** What produced this state. The overlay ignores it; the admin labels manual scoring differently. */
+  source: "pbresults" | "manual" | "rehearsal";
   fetchedAt: string | null;
   errorMessage: string | null;
   state: string;
@@ -231,6 +280,7 @@ Important behavior notes:
 - `displayLeftTeamMatch` and `displayRightTeamMatch` are the key operator-facing match objects.
 - `unresolvedTeamNames` contains the raw live names that still need confirmation.
 - `sourceStatus` tells you whether the polling layer is healthy, not just whether the last payload exists.
+- In manual scoring, `sourceStatus` is always `"ok"`, `fetchedAt` moves at least once a second, `unresolvedTeamNames` is always empty and `secondGame` is `false`.
 
 ## Runtime and update endpoints
 
@@ -280,6 +330,9 @@ Data-bearing real-time messages use:
 
 - `live.state`, containing a validated `NormalizedLiveState`
 - `operator-text.state`, containing a validated `OperatorTextState`
+- `manual.state`, containing a `ManualMatchView` after each manual scoring action (teams, phase, Undo); clocks and scores also reach every client as `live.state`
+
+The snapshot also carries `manualMatch` (a `ManualMatchView`).
 
 One-off cues, not replayed when a client reconnects:
 
@@ -453,6 +506,8 @@ If polling is paused:
 
 This is why the operator UI can still show the last known scoreboard even when upstream is currently failing.
 
+When `liveSource` is `"manual"`, upstream `/live` is not polled at all (`pollEnabled` is left as it was, and the poll start, stop and refresh endpoints change nothing on air). The live state comes from the manual match instead; see [Manual scoring endpoints](#manual-scoring-endpoints).
+
 ### `GET /api/live`
 
 Returns:
@@ -470,6 +525,8 @@ Returns:
 
 Type:
 - `unknown`
+
+In manual scoring this is still the last PBResults payload, not the manual match.
 
 Used mainly for:
 - diagnostics
@@ -569,6 +626,7 @@ Returns:
 Effect:
 - updates local settings JSON
 - reconfigures live polling
+- when `liveSource` changes, switches what is on air at once: PBResults feed or the manual match (the Settings page asks first)
 
 ## Operations endpoints
 
@@ -649,6 +707,73 @@ Returns:
 Important:
 - override clearing works by normalized `rawInputName`
 - `:side` is kept in the route shape, but the server does not use it as the override identity
+
+## Manual scoring endpoints
+
+Manual scoring runs the match from Operations when the event has no PBResults feed. The server turns the manual match into the same raw shape PBResults sends (`mainGame`, `gameTimer`, `breakTimer`, `state`, `period`, `round`) and normalizes it like the feed, so themes, moment cards and rehearsal behave exactly as with PBResults. The match is saved in `operations.json` on each action, never per clock tick.
+
+How the manual match maps to the feed:
+
+| Manual | Upstream equivalent |
+| --- | --- |
+| left / right team and score | `mainGame[0]` / `mainGame[1]` |
+| game clock running / stopped | `state: "RUNNING"` / `"STOPPED"`, `gameTimer.state` 2 / 0 |
+| phase `break` | `period: "BREAK"`, `breakTimer` |
+| phase `finished` | `state: "END"`, `period: "BREAK"` (game finished and winner cards) |
+| towel left / right | `TOWEL1` / `TOWEL2` |
+| base left / right | `BASE2` / `BASE1` (the card shows on the chosen side) |
+
+Clocks show whole seconds rounded up, as a countdown does, and stop at 0:00. The game clock reaching 0:00 does not finish the match.
+
+### `GET /api/manual`
+
+Returns:
+- `ManualMatchView`
+
+Works whichever source is active, so the match can be set up before switching to manual.
+
+### `POST /api/manual/action`
+
+Request body: one action.
+
+```ts
+type ManualMatchAction =
+  | { type: "setTeam"; side: "left" | "right"; teamId: string | null; name?: string } // teamId null uses `name` (max 40)
+  | { type: "adjustScore"; side: "left" | "right"; delta: number } // -9..9; never below 0
+  | { type: "setScore"; side: "left" | "right"; value: number } // 0..999
+  | { type: "startGameClock" } // also ends a break
+  | { type: "stopGameClock" }
+  | { type: "setGameClock"; seconds: number } // 0..5999; keeps running if it was
+  | { type: "resetGameClock" } // to manualGameClockSeconds, stopped
+  | { type: "startBreak"; seconds?: number } // without seconds: resumes a paused break, or starts one of manualBreakClockSeconds
+  | { type: "addBreakTime"; seconds: number } // 1..3600; a timeout. Outside a break it starts one of that length
+  | { type: "stopBreak" } // pauses the break clock
+  | { type: "finishMatch" }
+  | { type: "teamEvent"; kind: "towel" | "base"; side: "left" | "right" } // clears itself after 4 s
+  | { type: "nextMatch" } // scores 0, round + 1, game clock reset; teams kept
+  | { type: "undo" };
+```
+
+Returns:
+- the new `ManualMatchView`
+
+Errors:
+- `400` with `issues` for an action that does not match the schema
+- `409` with `code: "REHEARSAL_RUNNING"` while a rehearsal runs
+- `409` when the action cannot apply, e.g. starting a clock at 0:00 or Undo with nothing to undo
+
+An action that changes nothing (stopping a stopped clock, scoring below 0) returns the current match without adding an Undo step.
+
+Effect:
+- saves the match, publishes `manual.state`, and, when manual scoring is the active source, publishes the new `live.state` at once
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/api/manual/action \
+  -H 'content-type: application/json' \
+  -d '{"type":"adjustScore","side":"left","delta":1}'
+```
 
 ## App backup endpoints
 
