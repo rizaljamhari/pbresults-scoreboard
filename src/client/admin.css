@@ -3593,10 +3593,6 @@ tr[aria-selected="true"] .pba-row-open {
   color: var(--ad-faint);
 }
 
-.pba-manual-keys {
-  margin-left: auto;
-}
-
 .pba-manual-clocks {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3717,4 +3713,30 @@ tr[aria-selected="true"] .pba-row-open {
   .pba-manual-legend {
     display: none;
   }
+}
+
+.pba-manual-note {
+  margin: -4px 0 0;
+  overflow: hidden;
+  color: var(--ad-faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pba-manual-legend.is-paused {
+  opacity: 0.45;
+}
+
+.pba-manual-note {
+  margin: -4px 0 0;
+  overflow: hidden;
+  color: var(--ad-faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pba-manual-legend.is-paused {
+  opacity: 0.45;
 }

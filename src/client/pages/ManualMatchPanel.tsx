@@ -4,11 +4,11 @@ import { ChevronDown, Flag, Minus, Pause, Play, Plus, RotateCcw, SkipForward, Sl
 import { formatClock } from "../../shared/normalize";
 import type { ManualClock, ManualMatchAction, ManualMatchView, ManualSide } from "../../shared/manualMatch";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../../shared/theme";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 import { confirmAction, modalPromptOpen } from "../confirm";
 import { useManualMatch, useNow } from "../hooks";
 import { showToast } from "../toast";
-import { Button, Chip, type Tone } from "../components/admin/kit";
+import { Button, Chip, Dot } from "../components/admin/kit";
 import { MANUAL_SHORTCUTS, isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 import { searchTeams } from "./teamSearch";
 
@@ -47,12 +47,18 @@ function ClockPresets({
   );
 }
 
-const PHASE_LABEL: Record<ManualMatchView["phase"], { label: string; tone: Tone }> = {
-  idle: { label: "Ready", tone: "neutral" },
-  game: { label: "Game", tone: "ok" },
-  break: { label: "Break", tone: "warning" },
-  finished: { label: "Finished", tone: "neutral" }
-};
+/** What the match is doing right now, in the operator's words. "Game" alone would hide whether play is running. */
+function phaseStatus(phase: ManualMatchView["phase"], gameRunning: boolean): { label: string; playing: boolean } {
+  if (phase === "finished") return { label: "Finished", playing: false };
+  if (phase === "break") return { label: "Break", playing: false };
+  if (gameRunning) return { label: "Playing", playing: true };
+  return { label: phase === "idle" ? "Ready" : "Stopped", playing: false };
+}
+
+function shortDuration(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  return seconds % 60 === 0 ? `${seconds / 60} min` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 function remainingSeconds(clock: ManualClock, now: number) {
   const elapsed = clock.runningSince ? Math.max(0, now - Date.parse(clock.runningSince)) : 0;
@@ -183,6 +189,7 @@ function ManualTeamSide({
   const logo = logoFor(team);
   const keys = side === "left" ? ["Q", "A"] : ["P", "L"];
   const missingTeam = Boolean(entry.teamId) && !team;
+  const teamLabel = name || (side === "left" ? "Left team" : "Right team");
 
   return (
     <div className="pba-team-side pba-manual-side">
@@ -216,24 +223,35 @@ function ManualTeamSide({
             {name || "No team yet"}
           </div>
           <div className="pba-feed-name">
-            {missingTeam ? "That team was removed from Teams" : team ? team.canonicalName : entry.name ? "Typed name, no logo" : "Choose a team to show its name and logo"}
+            {missingTeam
+              ? "That team was removed from Teams"
+              : team
+                ? logo
+                  ? team.canonicalName
+                  : `${team.canonicalName} · no logo yet`
+                : entry.name
+                  ? "Typed name, no logo"
+                  : "Choose a team to show its name and logo"}
           </div>
         </div>
       </div>
-      <div className="pba-manual-score" role="group" aria-label={`${side === "left" ? "Left" : "Right"} score`}>
-        <Button aria-label={`${side} score down`} title={`Score down (${keys[1]})`} disabled={disabled || entry.score === 0} onClick={() => onAction({ type: "adjustScore", side, delta: -1 })}>
+      <div className="pba-manual-score" role="group" aria-label={`${teamLabel} score`}>
+        <Button aria-label={`${teamLabel} score down`} title={`Take a point back (${keys[1]})`} disabled={disabled || entry.score === 0} onClick={() => onAction({ type: "adjustScore", side, delta: -1 })}>
           <Minus aria-hidden />
+          <kbd className="pba-kbd" aria-hidden>
+            {keys[1]}
+          </kbd>
         </Button>
-        <output className="pba-manual-figure" aria-live="polite">
+        <output className="pba-manual-figure" aria-live="polite" aria-label={`${teamLabel} score`}>
           {entry.score}
         </output>
-        <Button aria-label={`${side} score up`} title={`Score up (${keys[0]})`} disabled={disabled} onClick={() => onAction({ type: "adjustScore", side, delta: 1 })}>
+        <Button aria-label={`${teamLabel} score up`} title={`Point to ${teamLabel}; stops the game clock (${keys[0]})`} disabled={disabled} onClick={() => onAction({ type: "adjustScore", side, delta: 1 })}>
           <Plus aria-hidden />
+          <kbd className="pba-kbd" aria-hidden>
+            {keys[0]}
+          </kbd>
         </Button>
-        <span className="pba-hint pba-manual-keys">
-          <kbd className="pba-kbd">{keys[0]}</kbd> <kbd className="pba-kbd">{keys[1]}</kbd>
-        </span>
-        <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
+        <Button className="pba-push" size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
           Towel
         </Button>
         <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "base", side })} title="Shows the theme's base card on this side">
@@ -354,7 +372,13 @@ export function ManualMatchPanel({
       try {
         manual.setData?.(await api.manualAction(action));
       } catch (error) {
-        showToast({ kind: "error", message: error instanceof Error ? error.message : "That action did not go through." });
+        showToast({
+          kind: "error",
+          message:
+            error instanceof ApiError
+              ? error.message
+              : "Couldn't reach the scoreboard server, so nothing changed on air. Check the app is still running."
+        });
       }
     });
     return queueRef.current;
@@ -393,8 +417,21 @@ export function ManualMatchPanel({
     if (ok) void run({ type: "nextMatch" });
   }
 
-  const phase = view ? PHASE_LABEL[view.phase] : null;
-  const timeoutLabel = formatClock(settings.manualTimeoutSeconds).replace(/^0/, "");
+  const phase = view ? phaseStatus(view.phase, gameRunning) : null;
+  const timeoutLabel = shortDuration(settings.manualTimeoutSeconds);
+  const gameNote =
+    view?.phase === "finished" ? "Match finished" : gameRunning ? "Running" : gameSeconds === 0 ? "At 0:00: set or reset it in Adjust clocks" : "Stopped";
+  const breakNote = !inBreak
+    ? "No break running"
+    : breakRunning
+      ? view?.phase === "break" && settings.manualAutoStartGameClock
+        ? gameSeconds > 0
+          ? "Game clock starts at 0:00"
+          : "Game clock is at 0:00, so it won't start"
+        : "Running"
+      : breakSeconds > 0
+        ? "Paused"
+        : "Break over";
 
   return (
     <section className="pba-surface" aria-labelledby="manual-scoring-title">
@@ -402,7 +439,16 @@ export function ManualMatchPanel({
         <h2 id="manual-scoring-title" className="pba-title">
           Manual scoring
         </h2>
-        {phase ? <Chip tone={phase.tone}>{phase.label}</Chip> : null}
+        {phase ? (
+          <Chip>
+            {phase.playing ? <Dot tone="live" flat /> : null}
+            {phase.label}
+          </Chip>
+        ) : null}
+        {/* Announces phase changes to screen readers; the chip above is the visible version. */}
+        <span className="pba-sr" role="status">
+          {phase ? `Match ${phase.label.toLowerCase()}` : ""}
+        </span>
         {view ? <span className="pba-hint">Round {view.round}</span> : null}
         <Button
           variant="ghost"
@@ -431,14 +477,19 @@ export function ManualMatchPanel({
             <div className="pba-manual-clock">
               <div className="pba-manual-clock-head">
                 <span className="pba-side-label">Game clock</span>
-                <output className={`pba-manual-figure${gameRunning ? " is-running" : ""}`}>{formatClock(gameSeconds)}</output>
+                <output className={`pba-manual-figure${gameRunning ? " is-running" : ""}`} aria-label="Game clock">
+                  {formatClock(gameSeconds)}
+                </output>
               </div>
+              <p className="pba-manual-note">{gameNote}</p>
               {/* A fixed two-column grid: changing a button's label never moves anything below it. */}
               <div className="pba-manual-actions">
                 <Button disabled={disabled || (!gameRunning && gameSeconds === 0)} onClick={() => void act({ type: gameRunning ? "stopGameClock" : "startGameClock" })}>
                   {gameRunning ? <Pause aria-hidden /> : <Play aria-hidden />}
                   {gameRunning ? "Stop" : "Start"}
-                  <kbd className="pba-kbd">Space</kbd>
+                  <kbd className="pba-kbd" aria-hidden>
+                    Space
+                  </kbd>
                 </Button>
               </div>
 
@@ -446,8 +497,11 @@ export function ManualMatchPanel({
             <div className="pba-manual-clock">
               <div className="pba-manual-clock-head">
                 <span className="pba-side-label">Break</span>
-                <output className={`pba-manual-figure${breakRunning ? " is-running" : ""}${inBreak ? "" : " is-idle"}`}>{formatClock(breakSeconds)}</output>
+                <output className={`pba-manual-figure${breakRunning ? " is-running" : ""}${inBreak ? "" : " is-idle"}`} aria-label="Break clock">
+                  {inBreak ? formatClock(breakSeconds) : "—"}
+                </output>
               </div>
+              <p className="pba-manual-note">{breakNote}</p>
               <div className="pba-manual-actions">
                 {breakRunning ? (
                   <Button disabled={disabled} onClick={() => void run({ type: "stopBreak" })}>
@@ -458,13 +512,17 @@ export function ManualMatchPanel({
                   <Button disabled={disabled} onClick={() => void run({ type: "startBreak" })} title={inBreak && breakSeconds > 0 ? "Resume the break" : `Start a ${formatClock(settings.manualBreakClockSeconds)} break`}>
                     <Play aria-hidden />
                     {inBreak && breakSeconds > 0 ? "Resume" : "Start break"}
-                    <kbd className="pba-kbd">B</kbd>
+                    <kbd className="pba-kbd" aria-hidden>
+                    B
+                  </kbd>
                   </Button>
                 )}
                 <Button disabled={disabled} onClick={() => void run({ type: "addBreakTime", seconds: settings.manualTimeoutSeconds })} title="Adds time to the break clock; the theme's timeout card shows">
                   <Timer aria-hidden />
                   Timeout +{timeoutLabel}
-                  <kbd className="pba-kbd">T</kbd>
+                  <kbd className="pba-kbd" aria-hidden>
+                    T
+                  </kbd>
                 </Button>
               </div>
 
@@ -478,7 +536,9 @@ export function ManualMatchPanel({
             >
               <Flag aria-hidden />
               Finish match
-              <kbd className="pba-kbd">F</kbd>
+              <kbd className="pba-kbd" aria-hidden>
+                F
+              </kbd>
             </Button>
             {/* Once the match is finished, Next match is the obvious next step. */}
             <Button variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
@@ -513,7 +573,10 @@ export function ManualMatchPanel({
                   />
               </div>
               <div className="pba-manual-clock">
-                <span className="pba-side-label">Break</span>
+                <span className="pba-side-label">
+                  Break
+                  {inBreak ? null : <span className="pba-hint">Set and Reset work during a break; presets start one</span>}
+                </span>
                   <ClockSetter
                     label="Set the break clock"
                     resetTo={settings.manualBreakClockSeconds}
@@ -533,7 +596,7 @@ export function ManualMatchPanel({
               </div>
             </div>
           </details>
-          <div className="pba-manual-legend pba-hint" aria-label="Keyboard shortcuts">
+          <div className={`pba-manual-legend pba-hint${rehearsing ? " is-paused" : ""}`} aria-label="Keyboard shortcuts">
             {MANUAL_SHORTCUTS.map((shortcut) => (
               <span key={shortcut.label}>
                 {shortcut.keys.map((key) => (
