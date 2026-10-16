@@ -408,9 +408,12 @@ export function ManualMatchPanel({
           </div>
           <div className="pba-manual-clocks">
             <div className="pba-manual-clock">
-              <div className="pba-side-label">Game clock</div>
-              <div className="pba-manual-row">
+              <div className="pba-manual-clock-head">
+                <span className="pba-side-label">Game clock</span>
                 <output className={`pba-manual-figure${gameRunning ? " is-running" : ""}`}>{formatClock(gameSeconds)}</output>
+              </div>
+              {/* A fixed two-column grid: changing a button's label never moves anything below it. */}
+              <div className="pba-manual-actions">
                 <Button disabled={disabled || (!gameRunning && gameSeconds === 0)} onClick={() => void act({ type: gameRunning ? "stopGameClock" : "startGameClock" })}>
                   {gameRunning ? <Pause aria-hidden /> : <Play aria-hidden />}
                   {gameRunning ? "Stop" : "Start"}
@@ -433,9 +436,11 @@ export function ManualMatchPanel({
               />
             </div>
             <div className="pba-manual-clock">
-              <div className="pba-side-label">Break</div>
-              <div className="pba-manual-row">
+              <div className="pba-manual-clock-head">
+                <span className="pba-side-label">Break</span>
                 <output className={`pba-manual-figure${breakRunning ? " is-running" : ""}${inBreak ? "" : " is-idle"}`}>{formatClock(breakSeconds)}</output>
+              </div>
+              <div className="pba-manual-actions">
                 {breakRunning ? (
                   <Button disabled={disabled} onClick={() => void run({ type: "stopBreak" })}>
                     <Pause aria-hidden />

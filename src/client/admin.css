@@ -3617,7 +3617,7 @@ tr[aria-selected="true"] .pba-row-open {
 
 .pba-manual-clock .pba-manual-figure {
   min-width: 5ch;
-  text-align: left;
+  text-align: right;
 }
 
 .pba-manual-clock-input {
@@ -3651,4 +3651,24 @@ tr[aria-selected="true"] .pba-row-open {
 
 .pba-manual-presets {
   gap: 4px;
+}
+
+.pba-manual-clock-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pba-manual-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pba-manual-actions > .pba-btn {
+  min-width: 0;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
 }
