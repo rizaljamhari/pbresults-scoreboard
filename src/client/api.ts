@@ -23,6 +23,7 @@ import type { BackupConfigInput, BackupPreview, BackupStatus } from "../shared/b
 import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
 import type { ScoreboardState } from "../shared/scoreboard";
+import type { ManualMatchAction, ManualMatchView } from "../shared/manualMatch";
 import type { AiProviderId, AiSettingsUpdate, AiSettingsView, ThemeEditRequest, ThemeEditResponse } from "../shared/aiAssistant";
 import { REMOTE_ACCESS_CONFIRMATIONS, type LocalRemoteAccessStatus, type RemoteAccessStatus } from "../shared/remoteAccess";
 
@@ -130,6 +131,14 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ visible })
     }).then(handle<ScoreboardState>),
+  getManualMatch: (signal?: AbortSignal) => fetch("/api/manual", { signal }).then(handle<ManualMatchView>),
+  /** One manual scoring action: a score, a clock, a break, an event or Undo. */
+  manualAction: (action: ManualMatchAction) =>
+    fetch("/api/manual/action", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(action)
+    }).then(handle<ManualMatchView>),
   startLivePolling: () =>
     fetch("/api/live/poll/start", {
       method: "POST"

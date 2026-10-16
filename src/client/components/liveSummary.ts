@@ -41,11 +41,13 @@ export function liveSummary(
     return { tone: "critical", feedTone: "critical", feedLabel: "Unreachable", stateLabel: "Live feed unreachable" };
   }
 
+  // Manual scoring has no feed to pause or fall behind: the operator is the source.
+  const manual = live.source === "manual";
   const age = secondsAgo(live.fetchedAt, now);
   const staleAfter = Math.max(5, Math.round(((settings?.pollIntervalMs ?? 1000) * 5) / 1000));
-  const paused = live.sourceStatus === "paused";
-  const stale = !paused && age !== null && age > staleAfter;
-  const feedLabel = paused ? "Paused" : age === null ? "Live" : age <= 1 ? "Live · just now" : `Live · ${age}s ago`;
+  const paused = !manual && live.sourceStatus === "paused";
+  const stale = !manual && !paused && age !== null && age > staleAfter;
+  const feedLabel = manual ? "Manual scoring" : paused ? "Paused" : age === null ? "Live" : age <= 1 ? "Live · just now" : `Live · ${age}s ago`;
   const feedTone = paused || stale ? "warning" : "live";
 
   // A lost overlay means viewers may see a frozen scoreboard: second only to the feed being unreachable.

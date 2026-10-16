@@ -28,6 +28,15 @@ describe("liveSummary", () => {
     });
   });
 
+  it("labels manual scoring and never calls it stale", () => {
+    expect(liveSummary(live({ source: "manual", fetchedAt: "2026-09-30T09:59:00.000Z" }), defaultSettings, theme, now)).toMatchObject({
+      tone: "ok",
+      feedTone: "live",
+      feedLabel: "Manual scoring",
+      stateLabel: "All checks clear"
+    });
+  });
+
   it("flags a missing theme on air", () => {
     expect(liveSummary(live(), defaultSettings, null, now)).toMatchObject({ tone: "critical", stateLabel: "No theme on air" });
   });

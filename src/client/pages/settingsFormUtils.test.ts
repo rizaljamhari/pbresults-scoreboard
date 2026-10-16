@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySettingsDraft, areSettingsEqual, createSettingsDraft, pollIntervalError } from "./settingsFormUtils";
+import { applySettingsDraft, areSettingsEqual, createSettingsDraft, durationError, pollIntervalError } from "./settingsFormUtils";
 import type { AppSettings } from "../../shared/theme";
 
 const sample: AppSettings = {
@@ -24,8 +24,12 @@ const sample: AppSettings = {
 describe("settingsFormUtils", () => {
   it("drafts only the fields the Settings page edits", () => {
     expect(createSettingsDraft(sample)).toEqual({
+      liveSource: "pbresults",
       upstreamBaseUrl: "http://127.0.0.1:5000",
       pollIntervalMs: 1000,
+      manualGameClockSeconds: 600,
+      manualBreakClockSeconds: 120,
+      manualTimeoutSeconds: 60,
       autoRemoveBackgroundUploads: true,
       brandName: "",
       brandLogoAssetId: null,
@@ -40,6 +44,8 @@ describe("settingsFormUtils", () => {
     expect(areSettingsEqual(sample, { ...sample, brandName: "Media Crew" })).toBe(false);
     expect(areSettingsEqual(sample, { ...sample, brandLogoAssetId: "asset-1" })).toBe(false);
     expect(areSettingsEqual(sample, { ...sample, brandPoweredBy: false })).toBe(false);
+    expect(areSettingsEqual(sample, { ...sample, liveSource: "manual" })).toBe(false);
+    expect(areSettingsEqual(sample, { ...sample, manualTimeoutSeconds: 90 })).toBe(false);
     const changedElsewhere: AppSettings = { ...sample, publishedThemeId: "theme-2", pollEnabled: false, updateAutoDownload: true };
     expect(areSettingsEqual(sample, changedElsewhere)).toBe(true);
   });
@@ -48,6 +54,13 @@ describe("settingsFormUtils", () => {
     const latest = { ...sample, publishedThemeId: "theme-2", pollEnabled: false };
     const saved = applySettingsDraft(latest, { ...createSettingsDraft(sample), brandName: "Media Crew" });
     expect(saved).toEqual({ ...latest, brandName: "Media Crew" });
+  });
+
+  it("checks manual scoring lengths", () => {
+    expect(durationError(600, 5999)).toBeNull();
+    expect(durationError(0, 5999)).not.toBeNull();
+    expect(durationError(6000, 5999)).not.toBeNull();
+    expect(durationError(Number.NaN, 3600)).not.toBeNull();
   });
 
   it("checks the feed interval range", () => {

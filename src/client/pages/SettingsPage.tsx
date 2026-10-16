@@ -5,7 +5,7 @@ import { api } from "../api";
 import { useAssets, useSettings } from "../hooks";
 import { showToast } from "../toast";
 import { DEFAULT_APP_NAME } from "../../shared/theme";
-import { Button, Chip, Grow, SettingRow, Switch, Toolbar } from "../components/admin/kit";
+import { Button, Chip, Grow, Segmented, SettingRow, Switch, Toolbar } from "../components/admin/kit";
 import { AssetLibraryPicker } from "../components/AssetLibraryPicker";
 import { SectionToc, useSectionNav } from "../components/SectionNav";
 import { UnsavedChangesGuard } from "../components/UnsavedChangesGuard";
@@ -15,6 +15,7 @@ import {
   applySettingsDraft,
   areSettingsEqual,
   createSettingsDraft,
+  durationError,
   pollIntervalError,
   type SettingsDraft
 } from "./settingsFormUtils";
@@ -22,10 +23,14 @@ import { modalPromptOpen } from "../confirm";
 import { confirmAction } from "../confirm";
 
 const SECTIONS = [
-  { id: "set-feed", label: "Live feed" },
+  { id: "set-feed", label: "Scores" },
   { id: "set-brand", label: "Branding" },
   { id: "set-uploads", label: "Uploads" }
 ] as const;
+
+function formatSeconds(total: number) {
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
 
 /** Preferences saved together with one Save. Actions that run at once live on Maintenance. */
 export function SettingsPage() {
@@ -39,8 +44,14 @@ export function SettingsPage() {
   const { activeSection, jumpTo } = useSectionNav(SECTIONS, bodyRef, draft !== null);
 
   const hasUnsavedChanges = Boolean(settings.data && draft && !areSettingsEqual(draft, settings.data));
-  const intervalError = draft ? pollIntervalError(draft.pollIntervalMs) : null;
-  const canSave = hasUnsavedChanges && !saving && !intervalError;
+  const manualDraft = draft?.liveSource === "manual";
+  // Only the active source's fields can block a save.
+  const intervalError = draft && !manualDraft ? pollIntervalError(draft.pollIntervalMs) : null;
+  const gameClockError = draft && manualDraft ? durationError(draft.manualGameClockSeconds, 5999) : null;
+  const breakClockError = draft && manualDraft ? durationError(draft.manualBreakClockSeconds, 5999) : null;
+  const timeoutError = draft && manualDraft ? durationError(draft.manualTimeoutSeconds, 3600) : null;
+  const fieldError = intervalError ?? gameClockError ?? breakClockError ?? timeoutError;
+  const canSave = hasUnsavedChanges && !saving && !fieldError;
 
   useEffect(() => {
     if (!settings.data) return;
@@ -63,7 +74,20 @@ export function SettingsPage() {
   }, [settings.data]);
 
   async function save(): Promise<boolean> {
-    if (!draft || intervalError) return false;
+    if (!draft || fieldError) return false;
+    if (settings.data && draft.liveSource !== settings.data.liveSource) {
+      // Switching source changes what is on air at once.
+      const toManual = draft.liveSource === "manual";
+      const confirmed = await confirmAction({
+        title: toManual ? "Switch to manual scoring?" : "Switch back to the PBResults feed?",
+        message: toManual
+          ? "The overlay stops following PBResults and shows the manual match from Operations straight away."
+          : "The overlay shows the PBResults feed straight away. The manual match is kept for when you switch back.",
+        confirmLabel: toManual ? "Use manual scoring" : "Use the PBResults feed",
+        tone: "danger"
+      });
+      if (!confirmed) return false;
+    }
     setSaving(true);
     try {
       const next = await api.updateSettings(applySettingsDraft(await api.getSettings(), draft));
@@ -182,9 +206,27 @@ export function SettingsPage() {
               ) : null}
 
               <section className="pba-set-group" id="set-feed">
-                <h2>Live feed</h2>
+                <h2>Scores</h2>
                 <div className="pba-surface">
-                  <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from." htmlFor="set-upstream">
+                  <SettingRow
+                    title="Score source"
+                    hint={
+                      manualDraft
+                        ? "The operator scores the match on Operations. Use this when the event does not run PBResults."
+                        : "Scores, clocks and team names come from the PBResults feed."
+                    }
+                  >
+                    <Segmented
+                      label="Score source"
+                      value={draft.liveSource}
+                      options={[
+                        { value: "pbresults", label: "PBResults feed" },
+                        { value: "manual", label: "Manual" }
+                      ]}
+                      onChange={(liveSource) => patch({ liveSource })}
+                    />
+                  </SettingRow>
+                  <SettingRow title="PBResults address" hint="Where the scoreboard reads /live from." htmlFor="set-upstream" dim={manualDraft}>
                     <input
                       id="set-upstream"
                       className="pba-input"
@@ -195,6 +237,7 @@ export function SettingsPage() {
                   <SettingRow
                     title="Check the feed every"
                     htmlFor="set-poll-interval"
+                    dim={manualDraft}
                     hint={
                       intervalError ? (
                         <span className="pba-inline-warning" role="alert">
@@ -219,6 +262,93 @@ export function SettingsPage() {
                         onChange={(event) => patch({ pollIntervalMs: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
                       />
                       <span>ms</span>
+                    </label>
+                  </SettingRow>
+                  <SettingRow
+                    title="Game clock length"
+                    htmlFor="set-manualGameClockSeconds"
+                    dim={!manualDraft}
+                    hint={
+                      gameClockError ? (
+                        <span className="pba-inline-warning" role="alert">
+                          <CircleAlert aria-hidden />
+                          {gameClockError}
+                        </span>
+                      ) : (
+                        `What Reset and Next match set the game clock to.${Number.isFinite(draft.manualGameClockSeconds) ? ` Now ${formatSeconds(draft.manualGameClockSeconds)}.` : ""}`
+                      )
+                    }
+                  >
+                    <label className="pba-unit">
+                      <input
+                        id="set-manualGameClockSeconds"
+                        className="pba-input"
+                        type="number"
+                        min={1}
+                        max={5999}
+                        aria-invalid={gameClockError ? true : undefined}
+                        value={Number.isNaN(draft.manualGameClockSeconds) ? "" : draft.manualGameClockSeconds}
+                        onChange={(event) => patch({ manualGameClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                      />
+                      <span>s</span>
+                    </label>
+                  </SettingRow>
+                  <SettingRow
+                    title="Break length"
+                    htmlFor="set-manualBreakClockSeconds"
+                    dim={!manualDraft}
+                    hint={
+                      breakClockError ? (
+                        <span className="pba-inline-warning" role="alert">
+                          <CircleAlert aria-hidden />
+                          {breakClockError}
+                        </span>
+                      ) : (
+                        `How long a new break runs.${Number.isFinite(draft.manualBreakClockSeconds) ? ` Now ${formatSeconds(draft.manualBreakClockSeconds)}.` : ""}`
+                      )
+                    }
+                  >
+                    <label className="pba-unit">
+                      <input
+                        id="set-manualBreakClockSeconds"
+                        className="pba-input"
+                        type="number"
+                        min={1}
+                        max={5999}
+                        aria-invalid={breakClockError ? true : undefined}
+                        value={Number.isNaN(draft.manualBreakClockSeconds) ? "" : draft.manualBreakClockSeconds}
+                        onChange={(event) => patch({ manualBreakClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                      />
+                      <span>s</span>
+                    </label>
+                  </SettingRow>
+                  <SettingRow
+                    title="Timeout adds"
+                    htmlFor="set-manualTimeoutSeconds"
+                    dim={!manualDraft}
+                    hint={
+                      timeoutError ? (
+                        <span className="pba-inline-warning" role="alert">
+                          <CircleAlert aria-hidden />
+                          {timeoutError}
+                        </span>
+                      ) : (
+                        `Added to the break clock by Timeout; the theme's timeout card shows.${Number.isFinite(draft.manualTimeoutSeconds) ? ` Now ${formatSeconds(draft.manualTimeoutSeconds)}.` : ""}`
+                      )
+                    }
+                  >
+                    <label className="pba-unit">
+                      <input
+                        id="set-manualTimeoutSeconds"
+                        className="pba-input"
+                        type="number"
+                        min={1}
+                        max={3600}
+                        aria-invalid={timeoutError ? true : undefined}
+                        value={Number.isNaN(draft.manualTimeoutSeconds) ? "" : draft.manualTimeoutSeconds}
+                        onChange={(event) => patch({ manualTimeoutSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                      />
+                      <span>s</span>
                     </label>
                   </SettingRow>
                 </div>

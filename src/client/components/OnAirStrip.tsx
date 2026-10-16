@@ -201,7 +201,7 @@ export function OnAirStrip({
       </div>
 
       <div className="pba-strip-feed">
-        <span className="pba-strip-feed-k">Feed</span>
+        <span className="pba-strip-feed-k">{live?.source === "manual" ? "Manual" : "Feed"}</span>
         {live && live.sourceStatus !== "ok" ? (
           <Chip tone={live.sourceStatus === "error" ? "critical" : "warning"}>
             <Dot tone={live.sourceStatus === "error" ? "critical" : "warning"} flat />

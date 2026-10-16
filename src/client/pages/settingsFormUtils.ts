@@ -2,8 +2,12 @@ import type { AppSettings } from "../../shared/theme";
 
 /** The settings the Settings page edits. Everything else is changed elsewhere and must never be saved from here. */
 export const settingsFormFields = [
+  "liveSource",
   "upstreamBaseUrl",
   "pollIntervalMs",
+  "manualGameClockSeconds",
+  "manualBreakClockSeconds",
+  "manualTimeoutSeconds",
   "autoRemoveBackgroundUploads",
   "brandName",
   "brandLogoAssetId",
@@ -23,6 +27,14 @@ export function createSettingsDraft(source: SettingsDraft): SettingsDraft {
 /** The draft on top of the latest saved settings, so a save never undoes a change made on another page. */
 export function applySettingsDraft(latest: AppSettings, draft: SettingsDraft): AppSettings {
   return { ...latest, ...createSettingsDraft(draft) };
+}
+
+/** Manual scoring lengths, in seconds. Null when the value is usable. */
+export function durationError(value: number, max: number): string | null {
+  if (!Number.isInteger(value) || value < 1 || value > max) {
+    return `Use a whole number of seconds from 1 to ${max}.`;
+  }
+  return null;
 }
 
 export const POLL_INTERVAL_MIN_MS = 100;

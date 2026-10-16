@@ -28,7 +28,7 @@ import {
   Waves
 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
-import { generateTeamAliases, normalizeTeamName } from "../../shared/teamMatching";
+import { normalizeTeamName } from "../../shared/teamMatching";
 import type { AppSettings, NormalizedLiveState, TeamMatchResult, TeamRecord, ThemeDefinition } from "../../shared/theme";
 import { ApiError, api } from "../api";
 import { useAssets, useLiveState, useNow, useOperatorTextState, useOverlayState, useRehearsal, useRuntimeInfo, useScoreboardState, useSettings, useTeams, useThemes } from "../hooks";
@@ -41,6 +41,8 @@ import { Button, Chip, Dot, Grow, Menu, Toolbar, type Tone } from "../components
 import { OnAirStrip, type StripMarker } from "../components/OnAirStrip";
 import { sideNeedsPick, useTeamPickAlert } from "../teamPickAlert";
 import { confirmAction, modalPromptOpen } from "../confirm";
+import { searchTeams } from "./teamSearch";
+import { ManualMatchPanel } from "./ManualMatchPanel";
 
 type WarningItem = {
   severity: "critical" | "warning" | "info";
@@ -183,6 +185,9 @@ function groupIssuesByCause(issues: GoLiveIssue[]) {
 function describeFeed(live: NormalizedLiveState | null, settings: AppSettings) {
   if (!live) {
     return { label: "Connecting", variant: "info" as const, detail: "Waiting for the first live state." };
+  }
+  if (settings.liveSource === "manual") {
+    return { label: "Manual scoring", variant: "success" as const, detail: "Scores and clocks come from this page, not a feed." };
   }
   const age = live.fetchedAt ? formatAge(live.fetchedAt).toLowerCase() : null;
   if (!settings.pollEnabled || live.sourceStatus === "paused") {
@@ -380,8 +385,10 @@ function buildWarnings(
   rightLogo: LogoResolution
 ) {
   const warnings: WarningItem[] = [];
+  // Manual scoring has no feed to reach or keep fresh, and its teams are chosen on this page.
+  const manual = settings.liveSource === "manual";
 
-  if (!settings.pollEnabled) {
+  if (!settings.pollEnabled && !manual) {
     warnings.push({
       severity: "warning",
       title: "Polling is stopped",
@@ -406,7 +413,7 @@ function buildWarnings(
     return warnings;
   }
 
-  if (live.sourceStatus === "error") {
+  if (live.sourceStatus === "error" && !manual) {
     warnings.push({
       severity: "critical",
       title: "Live feed unreachable",
@@ -414,7 +421,7 @@ function buildWarnings(
     });
   }
 
-  if (live.sourceStatus === "idle") {
+  if (live.sourceStatus === "idle" && !manual) {
     warnings.push({
       severity: "warning",
       title: "No data from the feed yet",
@@ -422,7 +429,7 @@ function buildWarnings(
     });
   }
 
-  if (live.displayLeftTeamMatch.status !== "matched" && live.displayLeftTeamMatch.inputName.trim()) {
+  if (!manual && live.displayLeftTeamMatch.status !== "matched" && live.displayLeftTeamMatch.inputName.trim()) {
     warnings.push({
       severity: live.displayLeftTeamMatch.status === "uncertain" ? "warning" : "critical",
       title: "Left team needs confirmation",
@@ -430,7 +437,7 @@ function buildWarnings(
     });
   }
 
-  if (live.displayRightTeamMatch.status !== "matched" && live.displayRightTeamMatch.inputName.trim()) {
+  if (!manual && live.displayRightTeamMatch.status !== "matched" && live.displayRightTeamMatch.inputName.trim()) {
     warnings.push({
       severity: live.displayRightTeamMatch.status === "uncertain" ? "warning" : "critical",
       title: "Right team needs confirmation",
@@ -463,7 +470,7 @@ function buildWarnings(
   }
 
   const staleThresholdMs = Math.max(settings.pollIntervalMs * 4, 5000);
-  if (live.fetchedAt && Date.now() - Date.parse(live.fetchedAt) > staleThresholdMs && live.sourceStatus !== "paused") {
+  if (!manual && live.fetchedAt && Date.now() - Date.parse(live.fetchedAt) > staleThresholdMs && live.sourceStatus !== "paused") {
     warnings.push({
       severity: "warning",
       title: "Feed data is out of date",
@@ -472,50 +479,6 @@ function buildWarnings(
   }
 
   return warnings;
-}
-
-type TeamSearchResult = {
-  team: TeamRecord;
-  via: string | null;
-};
-
-// Ranks active teams against the typed query: name prefix, then alias/live-name prefix, then substring.
-function searchTeams(teams: TeamRecord[], query: string, limit = 6): TeamSearchResult[] {
-  const needle = normalizeTeamName(query);
-  if (!needle) {
-    return [];
-  }
-
-  const ranked: Array<TeamSearchResult & { rank: number }> = [];
-  for (const team of teams) {
-    if (!team.active) {
-      continue;
-    }
-    const name = normalizeTeamName(team.canonicalName);
-    if (name.startsWith(needle)) {
-      ranked.push({ team, via: null, rank: 0 });
-      continue;
-    }
-    const aliases = generateTeamAliases(team);
-    const aliasPrefix = aliases.find((alias) => normalizeTeamName(alias).startsWith(needle));
-    if (aliasPrefix) {
-      ranked.push({ team, via: aliasPrefix, rank: 1 });
-      continue;
-    }
-    if (name.includes(needle)) {
-      ranked.push({ team, via: null, rank: 2 });
-      continue;
-    }
-    const aliasContains = aliases.find((alias) => normalizeTeamName(alias).includes(needle));
-    if (aliasContains) {
-      ranked.push({ team, via: aliasContains, rank: 3 });
-    }
-  }
-
-  return ranked
-    .sort((a, b) => a.rank - b.rank || a.team.canonicalName.localeCompare(b.team.canonicalName))
-    .slice(0, limit)
-    .map(({ team, via }) => ({ team, via }));
 }
 
 function describeResolution(match: TeamMatchResult, rememberedLiveName: boolean) {
@@ -1003,6 +966,21 @@ export function OperationsPage() {
       return [];
     }
 
+    if (settings.data.liveSource === "manual") {
+      return [
+        {
+          label: "Published theme ready",
+          ok: Boolean(publishedTheme),
+          detail: publishedTheme ? publishedTheme.name : "Choose a published theme."
+        },
+        {
+          label: "Logo coverage",
+          ok: leftLogo.key !== "missing" && rightLogo.key !== "missing",
+          detail: `Left: ${leftLogo.label}. Right: ${rightLogo.label}.`
+        }
+      ];
+    }
+
     return [
       {
         label: "Upstream reachable",
@@ -1414,8 +1392,9 @@ export function OperationsPage() {
     operatorText.data && publishedTheme && operatorText.data.themeId === publishedTheme.id
       ? Object.fromEntries(operatorText.data.fields.map((field) => [field.componentId, field.value]))
       : {};
+  const manualMode = settings.data.liveSource === "manual";
   const stripMarkers: StripMarker[] = [];
-  if (live.data) {
+  if (live.data && !manualMode) {
     for (const [side, match] of [
       ["left", live.data.displayLeftTeamMatch],
       ["right", live.data.displayRightTeamMatch]
@@ -1429,10 +1408,14 @@ export function OperationsPage() {
     }
   }
   const readyChecks: Array<{ label: string; detail: string }> = [
-    { label: "Feed reachable", detail: live.data?.fetchedAt ? formatAge(live.data.fetchedAt) : "—" },
-    { label: "Polling on", detail: `every ${settings.data.pollIntervalMs} ms` },
-    { label: "Theme on air", detail: publishedTheme?.name ?? "—" },
-    { label: "Both teams matched", detail: live.data?.displayLeftTeamMatch.inputName ? "left and right" : "waiting for names" },
+    ...(manualMode
+      ? [{ label: "Manual scoring", detail: "scores come from this page" }, { label: "Theme on air", detail: publishedTheme?.name ?? "—" }]
+      : [
+          { label: "Feed reachable", detail: live.data?.fetchedAt ? formatAge(live.data.fetchedAt) : "—" },
+          { label: "Polling on", detail: `every ${settings.data.pollIntervalMs} ms` },
+          { label: "Theme on air", detail: publishedTheme?.name ?? "—" },
+          { label: "Both teams matched", detail: live.data?.displayLeftTeamMatch.inputName ? "left and right" : "waiting for names" }
+        ]),
     { label: "Team logos", detail: leftLogo.key === "registry" && rightLogo.key === "registry" ? "from Teams" : "fallback in use" },
     { label: "Live overlay connected", detail: overlaySummary.code === "connected" ? overlaySummary.label.toLowerCase() : overlaySummary.label }
   ];
@@ -1463,6 +1446,12 @@ export function OperationsPage() {
                 <b>{feed.label === "Live" ? "Feed live" : feed.label}</b>
                 {feed.detail}
               </p>
+              {manualMode ? (
+                <p className="pba-hint">
+                  PBResults is not polled. To use the feed again, change the score source in <Link to="/admin/settings">Settings</Link>.
+                </p>
+              ) : (
+              <>
               {live.data?.errorMessage ? <p className="pba-hint pba-feed-pop-error">{live.data.errorMessage}</p> : null}
               <p className="pba-hint">
                 {live.data?.fetchedAt ? `Last successful fetch ${formatAge(live.data.fetchedAt)}.` : "No successful fetch yet."}
@@ -1482,6 +1471,8 @@ export function OperationsPage() {
                   {refreshing ? "Refreshing…" : "Refresh now"}
                 </Button>
               </div>
+              </>
+              )}
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
@@ -1588,6 +1579,9 @@ export function OperationsPage() {
           />
           <div className="pba-ops2-grid">
             <div className="pba-ops-col">
+              {manualMode ? (
+                <ManualMatchPanel live={live.data} settings={settings.data} teams={teams.data} logoFor={logoFor} rehearsing={rehearsing} />
+              ) : (
               <section className="pba-surface" aria-labelledby="team-resolution-title">
                 <div className="pba-section-head pba-ops-head">
                   <h2 id="team-resolution-title" className="pba-title">
@@ -1636,6 +1630,7 @@ export function OperationsPage() {
                   <p className="pba-hint pba-section">{live.error ?? "Waiting for live data…"}</p>
                 )}
               </section>
+              )}
 
             {operatorFields.length || operatorText.error ? (
               <section className="pba-surface" aria-labelledby="operator-text-title">
@@ -1819,7 +1814,7 @@ export function OperationsPage() {
                     ) : null}
                   </div>
                 </Disclosure>
-                <Disclosure icon={<Database aria-hidden />} title="Feed data" summary="What the feed sends">
+                <Disclosure icon={<Database aria-hidden />} title={manualMode ? "Match data" : "Feed data"} summary={manualMode ? "What goes on air" : "What the feed sends"}>
                   {live.data ? (
                     <FactList
                       items={[

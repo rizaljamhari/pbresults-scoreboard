@@ -3566,3 +3566,85 @@ tr[aria-selected="true"] .pba-row-open {
   min-height: 120px;
   font-size: 64px;
 }
+
+/* Manual scoring panel on Operations: same team halves as Team names on air, plus scores, clocks and match actions. */
+.pba-manual-score,
+.pba-manual-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pba-manual-figure {
+  min-width: 2ch;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.pba-manual-figure.is-running {
+  color: var(--ad-ok);
+}
+
+.pba-manual-figure.is-idle {
+  color: var(--ad-faint);
+}
+
+.pba-manual-keys {
+  margin-left: auto;
+}
+
+.pba-manual-clocks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-clock {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.pba-manual-clock + .pba-manual-clock {
+  border-left: 1px solid var(--ad-line);
+}
+
+.pba-manual-clock .pba-manual-figure {
+  min-width: 5ch;
+  text-align: left;
+}
+
+.pba-manual-clock-input {
+  width: 72px;
+}
+
+.pba-manual-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-legend kbd + kbd {
+  margin-left: 3px;
+}
+
+.pba-btn .pba-kbd {
+  margin-left: 2px;
+}

@@ -12,7 +12,8 @@ export function sideNeedsPick(match: TeamMatchResult) {
 
 function pendingKeys(live: NormalizedLiveState | null | undefined) {
   const keys = new Set<string>();
-  if (!live) return keys;
+  // Manual scoring: the operator chose the teams on this page, so there is nothing to pick.
+  if (!live || live.source === "manual") return keys;
   for (const [side, match] of [
     ["left", live.displayLeftTeamMatch],
     ["right", live.displayRightTeamMatch]
