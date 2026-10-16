@@ -1,17 +1,5 @@
 import { MANUAL_MAX_CLOCK_SECONDS, type ManualMatchAction, type ManualMatchView } from "../../shared/manualMatch";
 
-/** The manual scoring keys, as the legend under the panel shows them. */
-export const MANUAL_SHORTCUTS: ReadonlyArray<{ keys: string[]; label: string }> = [
-  { keys: ["Space"], label: "Start / stop clock" },
-  { keys: ["Q", "A"], label: "Left + / −" },
-  { keys: ["P", "L"], label: "Right + / −" },
-  { keys: ["B"], label: "Break" },
-  { keys: ["T"], label: "Timeout" },
-  { keys: ["F"], label: "Finish (asks first)" },
-  { keys: ["Shift", "F"], label: "Finish now" },
-  { keys: ["Ctrl", "Z"], label: "Undo" }
-];
-
 type KeyInput = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "repeat">;
 
 /** Typing in a field must never score a point. */

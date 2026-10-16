@@ -9,7 +9,7 @@ import { confirmAction, modalPromptOpen } from "../confirm";
 import { useManualMatch, useNow } from "../hooks";
 import { showToast } from "../toast";
 import { Button, Chip, Dot } from "../components/admin/kit";
-import { MANUAL_SHORTCUTS, isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
+import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 import { searchTeams } from "./teamSearch";
 
 /** Team name slots in themes are sized for the 8 characters the PBResults tablet sends. */
@@ -545,6 +545,11 @@ export function ManualMatchPanel({
               <SkipForward aria-hidden />
               Next match
             </Button>
+            {/* The only keys not printed on a button. */}
+            <span className="pba-hint pba-push pba-manual-hidden-keys">
+              <kbd className="pba-kbd">Shift</kbd> <kbd className="pba-kbd">F</kbd> finish now · <kbd className="pba-kbd">Ctrl</kbd>{" "}
+              <kbd className="pba-kbd">Z</kbd> undo
+            </span>
           </div>
           {/* Corrections, not live controls: kept closed so the live controls fit on a laptop screen. */}
           <details className="pba-disclose pba-manual-adjust" open={adjustOpen} onToggle={(event) => setAdjustOpen(event.currentTarget.open)}>
@@ -596,18 +601,6 @@ export function ManualMatchPanel({
               </div>
             </div>
           </details>
-          <div className={`pba-manual-legend pba-hint${rehearsing ? " is-paused" : ""}`} aria-label="Keyboard shortcuts">
-            {MANUAL_SHORTCUTS.map((shortcut) => (
-              <span key={shortcut.label}>
-                {shortcut.keys.map((key) => (
-                  <kbd key={key} className="pba-kbd">
-                    {key}
-                  </kbd>
-                ))}{" "}
-                {shortcut.label}
-              </span>
-            ))}
-          </div>
         </>
       )}
     </section>

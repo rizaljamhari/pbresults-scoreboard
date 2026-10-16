@@ -3629,18 +3629,6 @@ tr[aria-selected="true"] .pba-row-open {
   border-top: 1px solid var(--ad-line);
 }
 
-.pba-manual-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 10px 16px 14px;
-  border-top: 1px solid var(--ad-line);
-}
-
-.pba-manual-legend kbd + kbd {
-  margin-left: 3px;
-}
-
 .pba-btn .pba-kbd {
   margin-left: 2px;
 }
@@ -3708,11 +3696,6 @@ tr[aria-selected="true"] .pba-row-open {
   .pba-manual-match {
     padding: 8px 16px;
   }
-
-  /* The keys stay printed on their buttons; the full list returns on taller screens. */
-  .pba-manual-legend {
-    display: none;
-  }
 }
 
 .pba-manual-note {
@@ -3724,19 +3707,10 @@ tr[aria-selected="true"] .pba-row-open {
   white-space: nowrap;
 }
 
-.pba-manual-legend.is-paused {
-  opacity: 0.45;
-}
-
-.pba-manual-note {
-  margin: -4px 0 0;
-  overflow: hidden;
-  color: var(--ad-faint);
-  font-size: 12px;
-  text-overflow: ellipsis;
+.pba-manual-hidden-keys {
   white-space: nowrap;
 }
 
-.pba-manual-legend.is-paused {
-  opacity: 0.45;
+.pba-manual-hidden-keys kbd + kbd {
+  margin-left: 2px;
 }
