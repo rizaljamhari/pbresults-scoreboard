@@ -212,6 +212,57 @@ function ManualTeamSide({
   );
 }
 
+/** Set a clock to a typed time, or Reset it to its length from Settings. */
+function ClockSetter({
+  label,
+  resetTo,
+  disabled,
+  title,
+  onSet,
+  onReset
+}: {
+  label: string;
+  resetTo: number;
+  disabled: boolean;
+  title?: string;
+  onSet: (seconds: number) => void;
+  onReset: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  return (
+    <form
+      className="pba-manual-row"
+      title={title}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const seconds = parseClockInput(draft);
+        if (seconds === null) {
+          showToast({ kind: "error", message: "Type the clock as minutes and seconds, like 7:30." });
+          return;
+        }
+        setDraft("");
+        onSet(seconds);
+      }}
+    >
+      <input
+        className="pba-input pba-manual-clock-input"
+        aria-label={label}
+        placeholder="m:ss"
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <Button type="submit" size="sm" disabled={disabled || !draft.trim()}>
+        Set
+      </Button>
+      <Button size="sm" variant="ghost" disabled={disabled} onClick={onReset} title={`Back to ${formatClock(resetTo)}`}>
+        <RotateCcw aria-hidden />
+        Reset
+      </Button>
+    </form>
+  );
+}
+
 /**
  * Manual scoring: the operator runs the match from here when the event has no PBResults feed. Every action goes to the
  * server, which puts it on air; the panel shows what the server holds.
@@ -232,7 +283,6 @@ export function ManualMatchPanel({
   const manual = useManualMatch();
   const view = manual.data;
   const now = useNow(250);
-  const [clockDraft, setClockDraft] = useState("");
   const disabled = rehearsing || !view;
   // Actions go out one at a time, in the order pressed, so a quick double tap scores twice and never out of order.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -271,16 +321,6 @@ export function ManualMatchPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  function setClock() {
-    const seconds = parseClockInput(clockDraft);
-    if (seconds === null) {
-      showToast({ kind: "error", message: "Type the clock as minutes and seconds, like 7:30." });
-      return;
-    }
-    setClockDraft("");
-    void run({ type: "setGameClock", seconds });
-  }
 
   async function nextMatch() {
     const ok = await confirmAction({
@@ -336,29 +376,13 @@ export function ManualMatchPanel({
                   <kbd className="pba-kbd">Space</kbd>
                 </Button>
               </div>
-              <form
-                className="pba-manual-row"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setClock();
-                }}
-              >
-                <input
-                  className="pba-input pba-manual-clock-input"
-                  aria-label="Set the game clock"
-                  placeholder="m:ss"
-                  value={clockDraft}
-                  disabled={disabled}
-                  onChange={(event) => setClockDraft(event.target.value)}
-                />
-                <Button type="submit" size="sm" disabled={disabled || !clockDraft.trim()}>
-                  Set
-                </Button>
-                <Button size="sm" variant="ghost" disabled={disabled} onClick={() => void run({ type: "resetGameClock" })} title={`Back to ${formatClock(settings.manualGameClockSeconds)}`}>
-                  <RotateCcw aria-hidden />
-                  Reset
-                </Button>
-              </form>
+              <ClockSetter
+                label="Set the game clock"
+                resetTo={settings.manualGameClockSeconds}
+                disabled={disabled}
+                onSet={(seconds) => void run({ type: "setGameClock", seconds })}
+                onReset={() => void run({ type: "resetGameClock" })}
+              />
             </div>
             <div className="pba-manual-clock">
               <div className="pba-side-label">Break</div>
@@ -376,14 +400,21 @@ export function ManualMatchPanel({
                     <kbd className="pba-kbd">B</kbd>
                   </Button>
                 )}
-              </div>
-              <div className="pba-manual-row">
-                <Button size="sm" disabled={disabled} onClick={() => void run({ type: "addBreakTime", seconds: settings.manualTimeoutSeconds })} title="Adds time to the break clock; the theme's timeout card shows">
+                <Button disabled={disabled} onClick={() => void run({ type: "addBreakTime", seconds: settings.manualTimeoutSeconds })} title="Adds time to the break clock; the theme's timeout card shows">
                   <Timer aria-hidden />
                   Timeout +{timeoutLabel}
                   <kbd className="pba-kbd">T</kbd>
                 </Button>
               </div>
+              <ClockSetter
+                label="Set the break clock"
+                resetTo={settings.manualBreakClockSeconds}
+                disabled={disabled || !inBreak}
+                // Raising the break clock reads to the overlay like a timeout.
+                title={inBreak ? "A higher time shows the theme's timeout card, like Timeout" : "Start a break to set its clock"}
+                onSet={(seconds) => void run({ type: "setBreakClock", seconds })}
+                onReset={() => void run({ type: "resetBreakClock" })}
+              />
             </div>
           </div>
           <div className="pba-manual-match">

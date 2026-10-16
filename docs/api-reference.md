@@ -748,6 +748,8 @@ type ManualMatchAction =
   | { type: "startBreak"; seconds?: number } // without seconds: resumes a paused break, or starts one of manualBreakClockSeconds
   | { type: "addBreakTime"; seconds: number } // 1..3600; a timeout. Outside a break it starts one of that length
   | { type: "stopBreak" } // pauses the break clock
+  | { type: "setBreakClock"; seconds: number } // 0..5999; during a break only; keeps running if it was
+  | { type: "resetBreakClock" } // during a break only: to manualBreakClockSeconds, paused
   | { type: "finishMatch" }
   | { type: "teamEvent"; kind: "towel" | "base"; side: "left" | "right" } // clears itself after 4 s
   | { type: "nextMatch" } // scores 0, round + 1, game clock reset; teams kept
@@ -760,7 +762,9 @@ Returns:
 Errors:
 - `400` with `issues` for an action that does not match the schema
 - `409` with `code: "REHEARSAL_RUNNING"` while a rehearsal runs
-- `409` when the action cannot apply, e.g. starting a clock at 0:00 or Undo with nothing to undo
+- `409` when the action cannot apply, e.g. starting a clock at 0:00, setting the break clock outside a break, or Undo with nothing to undo
+
+Raising the break clock (Set, Reset or Timeout) is what the overlay reads as a timeout, so the theme's timeout card shows.
 
 An action that changes nothing (stopping a stopped clock, scoring below 0) returns the current match without adding an Undo step.
 

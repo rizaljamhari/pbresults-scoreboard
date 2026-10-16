@@ -49,7 +49,7 @@ During the event, Operations shows a **Manual scoring** panel in place of Team n
 - **Teams:** Choose team on each side, then search the team registry, or type a name that isn't in it. A registry team brings its scoreboard name and logo; a typed name shows as typed, with no logo. Team name slots in most themes are sized for 8 characters.
 - **Score:** − and + on each side.
 - **Game clock:** Start/Stop, Set (type `7:30`, or `10` for 10 minutes) and Reset.
-- **Break:** Start break, Pause/Resume, and Timeout, which adds time to the break clock and shows the theme's timeout card. A timeout during play stops the clock and starts a break of that length.
+- **Break:** Start break, Pause/Resume, and Timeout, which adds time to the break clock and shows the theme's timeout card. A timeout during play stops the clock and starts a break of that length. During a break, Set and Reset correct the break clock like the game clock's; setting it higher also shows the timeout card.
 - **Finish match** shows the game finished and winner cards. **Next match** puts both scores to 0, moves the round on and resets the clock; the teams stay until you change them.
 - **Towel** and **Base** show the theme's event card on that side for about 4 seconds.
 - **Undo** reverses the last action, clocks included.

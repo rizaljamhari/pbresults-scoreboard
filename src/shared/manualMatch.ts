@@ -74,6 +74,10 @@ export const manualMatchActionSchema = z.discriminatedUnion("type", [
   /** A timeout: the break clock jumps up, which is what the overlay's timeout card watches for. */
   z.object({ type: z.literal("addBreakTime"), seconds: z.number().int().min(1).max(3600) }),
   z.object({ type: z.literal("stopBreak") }),
+  /** Corrects the break clock during a break; keeps it running if it was. */
+  z.object({ type: z.literal("setBreakClock"), seconds: clockSeconds }),
+  /** Back to the break length, paused. */
+  z.object({ type: z.literal("resetBreakClock") }),
   z.object({ type: z.literal("finishMatch") }),
   z.object({ type: z.literal("teamEvent"), kind: z.enum(["towel", "base"]), side }),
   z.object({ type: z.literal("nextMatch") }),

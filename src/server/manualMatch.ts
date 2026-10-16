@@ -149,6 +149,16 @@ function nextCore(
     case "stopBreak":
       if (!clockRunning(state.breakClock, now)) return null;
       return { next: { ...state, breakClock: stopped(state.breakClock, now) }, label: "Pause break" };
+    case "setBreakClock":
+    case "resetBreakClock": {
+      if (state.phase !== "break" && state.phase !== "finished") throw new ManualActionError("Start a break first.");
+      if (action.type === "resetBreakClock") {
+        return { next: { ...state, breakClock: { remainingMs: settings.manualBreakClockSeconds * 1000, runningSince: null } }, label: "Reset break" };
+      }
+      const remainingMs = action.seconds * 1000;
+      const breakClock = clockRunning(state.breakClock, now) ? started(remainingMs, now) : { remainingMs, runningSince: null };
+      return { next: { ...state, breakClock }, label: `Break ${formatSeconds(action.seconds)}` };
+    }
     case "finishMatch":
       if (state.phase === "finished") return null;
       return { next: { ...state, phase: "finished", gameClock: stopped(state.gameClock, now), teamEvent: null }, label: "Finish match" };

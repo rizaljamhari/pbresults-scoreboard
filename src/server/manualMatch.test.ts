@@ -126,6 +126,22 @@ describe("manual match actions", () => {
     expect(resumed.history.at(-1)?.label).toBe("Resume break");
   });
 
+  it("sets and resets the break clock during a break only", () => {
+    expect(() => applyManualAction(defaultManualMatchState, { type: "setBreakClock", seconds: 30 }, T0, settings)).toThrow("Start a break first.");
+    const running = run([
+      [T0, { type: "startBreak", seconds: 60 }],
+      [T0 + 10_000, { type: "setBreakClock", seconds: 90 }]
+    ]);
+    // Still running, now from 1:30.
+    expect(clockSeconds(running.breakClock, T0 + 20_000)).toBe(80);
+    const reset = applyManualAction(running, { type: "resetBreakClock" }, T0 + 20_000, settings);
+    expect(reset.breakClock).toEqual({ remainingMs: 120_000, runningSince: null });
+    expect(reset.history.at(-1)?.label).toBe("Reset break");
+    // Paused at the break length: B resumes it from there.
+    const resumed = applyManualAction(reset, { type: "startBreak" }, T0 + 30_000, settings);
+    expect(clockSeconds(resumed.breakClock, T0 + 40_000)).toBe(110);
+  });
+
   it("finishing sends END in BREAK, which fires the game-finished and winner cards, and stays finished through the break", () => {
     const state = run([
       [T0, { type: "startGameClock" }],

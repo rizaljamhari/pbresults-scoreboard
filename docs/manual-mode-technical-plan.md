@@ -89,7 +89,7 @@ Each action is one function. It saves the previous state to `history` (for Undo)
 - `setTeam(side, { teamId } | { name })`
 - `adjustScore(side, +1 | -1)`, `setScore(side, value)`
 - `startGameClock`, `stopGameClock`, `setGameClock(seconds)`, `resetGameClock`
-- `startBreak(seconds?)`, `addBreakTime(seconds)`, `stopBreak`. A jump up in the break clock is what the overlay already treats as a timeout (`useTimeoutToken`), so "+1:00 timeout" fires the theme's timeout card with no overlay change.
+- `startBreak(seconds?)`, `addBreakTime(seconds)`, `stopBreak`, and during a break `setBreakClock(seconds)` and `resetBreakClock`. A jump up in the break clock is what the overlay already treats as a timeout (`useTimeoutToken`), so "+1:00 timeout" fires the theme's timeout card with no overlay change.
 - `finishMatch`: stops the game clock, phase `finished`.
 - `teamEvent(kind, side)`: sets the event and clears it after about 4 seconds, like a feed event passing.
 - `nextMatch`: scores to 0, round + 1, clocks reset, phase `idle`; teams kept so the operator only changes the ones that differ.
