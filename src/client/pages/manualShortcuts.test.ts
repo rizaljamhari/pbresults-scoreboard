@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTypingTarget, manualShortcutAction, parseClockInput } from "./manualShortcuts";
+import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 
 const key = (value: string, extra: Partial<KeyboardEvent> = {}) => ({ key: value, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, ...extra });
 const context = { gameClockRunning: false, timeoutSeconds: 60 };
@@ -54,5 +54,19 @@ describe("parseClockInput", () => {
     expect(parseClockInput("7:75")).toBeNull();
     expect(parseClockInput("abc")).toBeNull();
     expect(parseClockInput("100:00")).toBeNull();
+  });
+});
+
+describe("manualActionConfirmation", () => {
+  it("always asks before finishing", () => {
+    expect(manualActionConfirmation({ type: "finishMatch" }, "game")?.confirmLabel).toBe("Finish match");
+  });
+
+  it("asks before changing or restarting a finished match, and not otherwise", () => {
+    expect(manualActionConfirmation({ type: "adjustScore", side: "left", delta: 1 }, "finished")?.confirmLabel).toBe("Change score");
+    expect(manualActionConfirmation({ type: "startGameClock" }, "finished")?.confirmLabel).toBe("Restart play");
+    expect(manualActionConfirmation({ type: "adjustScore", side: "left", delta: 1 }, "game")).toBeNull();
+    expect(manualActionConfirmation({ type: "startBreak" }, "finished")).toBeNull();
+    expect(manualActionConfirmation({ type: "nextMatch" }, "finished")).toBeNull();
   });
 });

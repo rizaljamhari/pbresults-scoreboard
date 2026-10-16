@@ -9,7 +9,7 @@ import { confirmAction, modalPromptOpen } from "../confirm";
 import { useManualMatch, useNow } from "../hooks";
 import { showToast } from "../toast";
 import { Button, Chip, type Tone } from "../components/admin/kit";
-import { MANUAL_SHORTCUTS, isTypingTarget, manualShortcutAction, parseClockInput } from "./manualShortcuts";
+import { MANUAL_SHORTCUTS, isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 import { searchTeams } from "./teamSearch";
 
 /** Team name slots in themes are sized for the 8 characters the PBResults tablet sends. */
@@ -174,6 +174,8 @@ function ManualTeamSide({
   onAction: (action: ManualMatchAction) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // A finished match has no point being played: towel and base cards would make no sense on air.
+  const finished = view.phase === "finished";
   const entry = view[side];
   const team = entry.teamId ? teams.find((record) => record.id === entry.teamId) ?? null : null;
   const onAir = live?.source === "manual" ? (side === "left" ? live.displayLeftTeam : live.displayRightTeam) : null;
@@ -233,10 +235,10 @@ function ManualTeamSide({
         </span>
       </div>
       <div className="pba-team-actions">
-        <Button size="sm" disabled={disabled} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
+        <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
           Towel
         </Button>
-        <Button size="sm" disabled={disabled} onClick={() => onAction({ type: "teamEvent", kind: "base", side })} title="Shows the theme's base card on this side">
+        <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "base", side })} title="Shows the theme's base card on this side">
           Base
         </Button>
       </div>
@@ -337,6 +339,13 @@ export function ManualMatchPanel({
     return queueRef.current;
   }
 
+  /** Runs an action, first asking when it would finish the match or reopen a finished one. */
+  async function act(action: ManualMatchAction, options: { skipConfirm?: boolean } = {}) {
+    const question = view && !options.skipConfirm ? manualActionConfirmation(action, view.phase) : null;
+    if (question && !(await confirmAction(question))) return;
+    void run(action);
+  }
+
   // Keyboard shortcuts work anywhere on the page, except while typing or in a dialog.
   const shortcutRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
   shortcutRef.current = (event: KeyboardEvent) => {
@@ -346,7 +355,7 @@ export function ManualMatchPanel({
     event.preventDefault();
     // Space on a focused button would also press it when the key comes up.
     if (event.key === " " && event.target instanceof HTMLElement && event.target.tagName === "BUTTON") event.target.blur();
-    void run(action);
+    void act(action, { skipConfirm: action.type === "finishMatch" && event.shiftKey });
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => shortcutRef.current(event);
@@ -394,15 +403,15 @@ export function ManualMatchPanel({
       ) : (
         <>
           <div className="pba-resolve">
-            <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void run(action)} />
-            <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void run(action)} />
+            <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void act(action)} />
+            <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void act(action)} />
           </div>
           <div className="pba-manual-clocks">
             <div className="pba-manual-clock">
               <div className="pba-side-label">Game clock</div>
               <div className="pba-manual-row">
                 <output className={`pba-manual-figure${gameRunning ? " is-running" : ""}`}>{formatClock(gameSeconds)}</output>
-                <Button disabled={disabled || (!gameRunning && gameSeconds === 0)} onClick={() => void run({ type: gameRunning ? "stopGameClock" : "startGameClock" })}>
+                <Button disabled={disabled || (!gameRunning && gameSeconds === 0)} onClick={() => void act({ type: gameRunning ? "stopGameClock" : "startGameClock" })}>
                   {gameRunning ? <Pause aria-hidden /> : <Play aria-hidden />}
                   {gameRunning ? "Stop" : "Start"}
                   <kbd className="pba-kbd">Space</kbd>
@@ -464,12 +473,17 @@ export function ManualMatchPanel({
             </div>
           </div>
           <div className="pba-manual-match">
-            <Button disabled={disabled || view.phase === "finished"} onClick={() => void run({ type: "finishMatch" })} title="Ends the match: the theme's game finished and winner cards show">
+            <Button
+              disabled={disabled || view.phase === "finished"}
+              onClick={(event) => void act({ type: "finishMatch" }, { skipConfirm: event.shiftKey })}
+              title="Ends the match: the theme's game finished and winner cards show. Asks first; Shift skips the question."
+            >
               <Flag aria-hidden />
               Finish match
               <kbd className="pba-kbd">F</kbd>
             </Button>
-            <Button variant="ghost" disabled={disabled} onClick={() => void nextMatch()}>
+            {/* Once the match is finished, Next match is the obvious next step. */}
+            <Button variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
               <SkipForward aria-hidden />
               Next match
             </Button>

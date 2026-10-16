@@ -1,4 +1,4 @@
-import { MANUAL_MAX_CLOCK_SECONDS, type ManualMatchAction } from "../../shared/manualMatch";
+import { MANUAL_MAX_CLOCK_SECONDS, type ManualMatchAction, type ManualMatchView } from "../../shared/manualMatch";
 
 /** The manual scoring keys, as the legend under the panel shows them. */
 export const MANUAL_SHORTCUTS: ReadonlyArray<{ keys: string[]; label: string }> = [
@@ -7,7 +7,8 @@ export const MANUAL_SHORTCUTS: ReadonlyArray<{ keys: string[]; label: string }> 
   { keys: ["P", "L"], label: "Right + / −" },
   { keys: ["B"], label: "Break" },
   { keys: ["T"], label: "Timeout" },
-  { keys: ["F"], label: "Finish" },
+  { keys: ["F"], label: "Finish (asks first)" },
+  { keys: ["Shift", "F"], label: "Finish now" },
   { keys: ["Ctrl", "Z"], label: "Undo" }
 ];
 
@@ -48,6 +49,38 @@ export function manualShortcutAction(event: KeyInput, context: { gameClockRunnin
     default:
       return null;
   }
+}
+
+export type ManualConfirmation = { title: string; message: string; confirmLabel: string };
+
+/**
+ * The question an action needs before it goes on air, or null when it can go straight away. Finishing puts the winner
+ * on air, and changing a finished match reopens it, so both ask; Shift+F is the deliberate way to finish without asking.
+ */
+export function manualActionConfirmation(action: ManualMatchAction, phase: ManualMatchView["phase"]): ManualConfirmation | null {
+  if (action.type === "finishMatch") {
+    return {
+      title: "Finish the match?",
+      message: "The game finished and winner cards go on air now. Undo takes it back.",
+      confirmLabel: "Finish match"
+    };
+  }
+  if (phase !== "finished") return null;
+  if (action.type === "adjustScore" || action.type === "setScore") {
+    return {
+      title: "Change the final score?",
+      message: "This match is finished. The new score goes on air straight away.",
+      confirmLabel: "Change score"
+    };
+  }
+  if (action.type === "startGameClock") {
+    return {
+      title: "Restart play?",
+      message: "This match is finished. Starting the clock puts it back in play.",
+      confirmLabel: "Restart play"
+    };
+  }
+  return null;
 }
 
 /** Reads a clock the operator typed: "7:30", "7.30" or whole minutes ("10"). Null when it is not a time. */
