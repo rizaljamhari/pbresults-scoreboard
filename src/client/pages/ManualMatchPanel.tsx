@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Flag, Minus, Pause, Play, Plus, RotateCcw, SkipForward, Timer, Undo2 } from "lucide-react";
+import { ChevronDown, Flag, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type { ManualClock, ManualMatchAction, ManualMatchView, ManualSide } from "../../shared/manualMatch";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../../shared/theme";
@@ -233,8 +233,6 @@ function ManualTeamSide({
         <span className="pba-hint pba-manual-keys">
           <kbd className="pba-kbd">{keys[0]}</kbd> <kbd className="pba-kbd">{keys[1]}</kbd>
         </span>
-      </div>
-      <div className="pba-team-actions">
         <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
           Towel
         </Button>
@@ -244,6 +242,24 @@ function ManualTeamSide({
       </div>
     </div>
   );
+}
+
+const ADJUST_OPEN_KEY = "pbresults.admin.manualAdjustOpen";
+
+function readAdjustOpen() {
+  try {
+    return window.localStorage.getItem(ADJUST_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveAdjustOpen(open: boolean) {
+  try {
+    window.localStorage.setItem(ADJUST_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // Remembering it is a convenience only.
+  }
 }
 
 /** Set a clock to a typed time, or Reset it to its length from Settings. */
@@ -321,6 +337,11 @@ export function ManualMatchPanel({
   // Actions go out one at a time, in the order pressed, so a quick double tap scores twice and never out of order.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const manualLive = live?.source === "manual" ? live : null;
+  const [adjustOpen, setAdjustOpenState] = useState(readAdjustOpen);
+  const setAdjustOpen = (open: boolean) => {
+    setAdjustOpenState(open);
+    saveAdjustOpen(open);
+  };
 
   const gameSeconds = manualLive ? manualLive.gameTimer.value : view ? remainingSeconds(view.gameClock, now) : 0;
   const gameRunning = manualLive ? manualLive.gameTimer.state === 2 : view ? clockRunning(view.gameClock, now) : false;
@@ -420,20 +441,7 @@ export function ManualMatchPanel({
                   <kbd className="pba-kbd">Space</kbd>
                 </Button>
               </div>
-              <ClockSetter
-                label="Set the game clock"
-                resetTo={settings.manualGameClockSeconds}
-                disabled={disabled}
-                onSet={(seconds) => void run({ type: "setGameClock", seconds })}
-                onReset={() => void run({ type: "resetGameClock" })}
-              />
-              <ClockPresets
-                label="Game clock presets"
-                presets={GAME_CLOCK_PRESETS}
-                disabled={disabled}
-                describe={(seconds) => `Set the game clock to ${formatClock(seconds)}`}
-                onPick={(seconds) => void run({ type: "setGameClock", seconds })}
-              />
+
             </div>
             <div className="pba-manual-clock">
               <div className="pba-manual-clock-head">
@@ -459,22 +467,7 @@ export function ManualMatchPanel({
                   <kbd className="pba-kbd">T</kbd>
                 </Button>
               </div>
-              <ClockSetter
-                label="Set the break clock"
-                resetTo={settings.manualBreakClockSeconds}
-                disabled={disabled || !inBreak}
-                // Raising the break clock reads to the overlay like a timeout.
-                title={inBreak ? "A higher time shows the theme's timeout card, like Timeout" : "Start a break to set its clock"}
-                onSet={(seconds) => void run({ type: "setBreakClock", seconds })}
-                onReset={() => void run({ type: "resetBreakClock" })}
-              />
-              <ClockPresets
-                label="Break presets"
-                presets={BREAK_CLOCK_PRESETS}
-                disabled={disabled}
-                describe={(seconds) => `Start a ${presetLabel(seconds)} break now`}
-                onPick={(seconds) => void run({ type: "startBreak", seconds })}
-              />
+
             </div>
           </div>
           <div className="pba-manual-match">
@@ -493,6 +486,53 @@ export function ManualMatchPanel({
               Next match
             </Button>
           </div>
+          {/* Corrections, not live controls: kept closed so the live controls fit on a laptop screen. */}
+          <details className="pba-disclose pba-manual-adjust" open={adjustOpen} onToggle={(event) => setAdjustOpen(event.currentTarget.open)}>
+            <summary>
+              <SlidersHorizontal aria-hidden />
+              <b>Adjust clocks</b>
+              <span className="pba-muted">Set a time, reset, presets</span>
+              <ChevronDown className="pba-disclose-chevron" aria-hidden />
+            </summary>
+            <div className="pba-manual-adjust-body">
+              <div className="pba-manual-clock">
+                <span className="pba-side-label">Game clock</span>
+                  <ClockSetter
+                    label="Set the game clock"
+                    resetTo={settings.manualGameClockSeconds}
+                    disabled={disabled}
+                    onSet={(seconds) => void run({ type: "setGameClock", seconds })}
+                    onReset={() => void run({ type: "resetGameClock" })}
+                  />
+                  <ClockPresets
+                    label="Game clock presets"
+                    presets={GAME_CLOCK_PRESETS}
+                    disabled={disabled}
+                    describe={(seconds) => `Set the game clock to ${formatClock(seconds)}`}
+                    onPick={(seconds) => void run({ type: "setGameClock", seconds })}
+                  />
+              </div>
+              <div className="pba-manual-clock">
+                <span className="pba-side-label">Break</span>
+                  <ClockSetter
+                    label="Set the break clock"
+                    resetTo={settings.manualBreakClockSeconds}
+                    disabled={disabled || !inBreak}
+                    // Raising the break clock reads to the overlay like a timeout.
+                    title={inBreak ? "A higher time shows the theme's timeout card, like Timeout" : "Start a break to set its clock"}
+                    onSet={(seconds) => void run({ type: "setBreakClock", seconds })}
+                    onReset={() => void run({ type: "resetBreakClock" })}
+                  />
+                  <ClockPresets
+                    label="Break presets"
+                    presets={BREAK_CLOCK_PRESETS}
+                    disabled={disabled}
+                    describe={(seconds) => `Start a ${presetLabel(seconds)} break now`}
+                    onPick={(seconds) => void run({ type: "startBreak", seconds })}
+                  />
+              </div>
+            </div>
+          </details>
           <div className="pba-manual-legend pba-hint" aria-label="Keyboard shortcuts">
             {MANUAL_SHORTCUTS.map((shortcut) => (
               <span key={shortcut.label}>

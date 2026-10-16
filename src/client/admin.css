@@ -3672,3 +3672,49 @@ tr[aria-selected="true"] .pba-row-open {
   overflow: hidden;
   white-space: nowrap;
 }
+
+.pba-manual-adjust {
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-adjust-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-adjust-body > .pba-manual-clock + .pba-manual-clock {
+  border-left: 1px solid var(--ad-line);
+}
+
+/* Short laptop screens (1366 × 768 with browser chrome): keep the live controls above the fold. */
+@media (max-height: 820px) {
+  .pba-manual-side {
+    gap: 8px;
+    padding: 10px 16px 12px;
+  }
+
+  .pba-manual-side .pba-team-logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pba-manual-side .pba-team-logo img {
+    max-width: 28px;
+    max-height: 28px;
+  }
+
+  .pba-manual-clock {
+    gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .pba-manual-match {
+    padding: 8px 16px;
+  }
+
+  /* The keys stay printed on their buttons; the full list returns on taller screens. */
+  .pba-manual-legend {
+    display: none;
+  }
+}
