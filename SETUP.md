@@ -68,7 +68,8 @@ The controls:
 - **Break:** Start break, Pause/Resume, and Timeout, which adds time to the break clock and shows the theme's timeout card. A timeout during play stops the clock and starts a break of that length. During a break, Set and Reset correct the break clock like the game clock's; setting it higher also shows the timeout card. The 10s, 15s and 30s presets start a break of that length straight away, during play or a break.
 - **Finish match** asks first, then shows the game finished and winner cards (Shift+F finishes without asking). Once finished, Towel and Base are off, and changing the score or restarting the clock asks first. **Next match** puts both scores to 0, moves the round on and resets the clock; the teams stay until you change them.
 - **Towel** and **Base** show the theme's event card on that side for about 4 seconds and stop the game clock. They don't change the score: add the point with + (or Q / P) as well.
-- When a break between points counts down to 0:00, the game clock starts by itself. Turn this off in Settings (**Start the clock when a break ends**) if points often start late. It never happens after Finish match.
+- When a break between points counts down to 0:00, the game clock starts by itself. If points start late, turn off **Start the clock when a break ends**, either in Settings or in the panel under **Adjust clocks**. Both places change the same setting. It never happens after Finish match.
+- **Adjust clocks** also shows the event's default lengths (game, break, timeout) with a link to change them in Settings.
 - **Undo** reverses the last action, clocks included.
 
 Keyboard shortcuts work anywhere on Operations except while typing in a field:

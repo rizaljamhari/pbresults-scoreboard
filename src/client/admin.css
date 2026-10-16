@@ -3732,3 +3732,25 @@ tr[aria-selected="true"] .pba-row-open {
 .pba-manual-off {
   visibility: hidden;
 }
+
+.pba-manual-defaults {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-defaults .pba-hint {
+  margin: 0;
+}
+
+.pba-manual-autostart {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}

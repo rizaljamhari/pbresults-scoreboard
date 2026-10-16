@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown, Flag, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
@@ -8,7 +9,7 @@ import { ApiError, api } from "../api";
 import { confirmAction, modalPromptOpen } from "../confirm";
 import { useManualMatch, useNow } from "../hooks";
 import { showToast } from "../toast";
-import { Button, Chip, Dot, Segmented } from "../components/admin/kit";
+import { Button, Chip, Dot, Segmented, Switch } from "../components/admin/kit";
 import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 import { searchTeams } from "./teamSearch";
 import { controlAllowed, controlForAction, guidedBlockMessage, manualMoment, type ManualControl, type ManualControlMode } from "./manualGuide";
@@ -456,6 +457,27 @@ export function ManualMatchPanel({
     if (ok) void run({ type: "nextMatch" });
   }
 
+  // A mid-match call (points starting late), so it is switchable here as well as in Settings. Same shared setting.
+  const [autoStartDraft, setAutoStartDraft] = useState<boolean | null>(null);
+  const [savingAutoStart, setSavingAutoStart] = useState(false);
+  const autoStart = autoStartDraft ?? settings.manualAutoStartGameClock;
+  useEffect(() => setAutoStartDraft(null), [settings.manualAutoStartGameClock]);
+
+  async function handleAutoStart(checked: boolean) {
+    setAutoStartDraft(checked);
+    setSavingAutoStart(true);
+    try {
+      // On top of the latest saved settings, so this never undoes a change made elsewhere.
+      const latest = await api.getSettings();
+      await api.updateSettings({ ...latest, manualAutoStartGameClock: checked });
+    } catch (error) {
+      setAutoStartDraft(null);
+      showToast({ kind: "error", message: error instanceof Error ? error.message : "Couldn't save that setting." });
+    } finally {
+      setSavingAutoStart(false);
+    }
+  }
+
   const phase = view ? phaseStatus(view.phase, gameRunning) : null;
   const timeoutLabel = shortDuration(settings.manualTimeoutSeconds);
   const gameNote =
@@ -463,7 +485,7 @@ export function ManualMatchPanel({
   const breakNote = !inBreak
     ? "No break running"
     : breakRunning
-      ? view?.phase === "break" && settings.manualAutoStartGameClock
+      ? view?.phase === "break" && autoStart
         ? gameSeconds > 0
           ? "Game clock starts at 0:00"
           : "Game clock is at 0:00, so it won't start"
@@ -652,6 +674,23 @@ export function ManualMatchPanel({
                     onPick={(seconds) => void run({ type: "startBreak", seconds })}
                   />
               </div>
+            </div>
+            {/* Event rules live in Settings; the panel shows them so Reset and Start break are never a guess. */}
+            <div className="pba-manual-defaults">
+              <p className="pba-hint">
+                Defaults: game {formatClock(settings.manualGameClockSeconds)} · break {formatClock(settings.manualBreakClockSeconds)} · timeout +{timeoutLabel}
+                {" · "}
+                <Link to="/admin/settings#set-feed">Change in Settings</Link>
+              </p>
+              <label className="pba-manual-autostart">
+                <Switch
+                  label="Start the clock when a break ends"
+                  checked={autoStart}
+                  disabled={savingAutoStart}
+                  onChange={(checked) => void handleAutoStart(checked)}
+                />
+                <span>Start the clock when a break ends</span>
+              </label>
             </div>
           </details>
         </>
