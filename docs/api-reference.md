@@ -53,6 +53,8 @@ type AppSettings = {
   manualBreakClockSeconds: number;
   /** Manual scoring: what one timeout adds to the break clock (1–3600 s, default 60). */
   manualTimeoutSeconds: number;
+  /** Manual scoring: the game clock starts when a break between points reaches 0:00 (default true). */
+  manualAutoStartGameClock: boolean;
   autoRemoveBackgroundUploads: boolean;
   /** Operator switch: the live overlay cuts instead of animating. */
   reduceMotion: boolean;
@@ -725,6 +727,8 @@ How the manual match maps to the feed:
 
 Clocks show whole seconds rounded up, as a countdown does, and stop at 0:00. The game clock reaching 0:00 does not finish the match.
 
+When `manualAutoStartGameClock` is on and a running break between points (phase `break`, not `finished`) reaches 0:00, the server starts the game clock from that moment, as one Undo step labelled "Clock started after break", and publishes `manual.state` and `live.state`. A break noticed more than a second after it ended (after a restart) starts the clock from the moment it is noticed.
+
 ### `GET /api/manual`
 
 Returns:
@@ -739,8 +743,8 @@ Request body: one action.
 ```ts
 type ManualMatchAction =
   | { type: "setTeam"; side: "left" | "right"; teamId: string | null; name?: string } // teamId null uses `name` (max 40)
-  | { type: "adjustScore"; side: "left" | "right"; delta: number } // -9..9; never below 0
-  | { type: "setScore"; side: "left" | "right"; value: number } // 0..999
+  | { type: "adjustScore"; side: "left" | "right"; delta: number } // -9..9; never below 0; a point (delta > 0) stops the game clock
+  | { type: "setScore"; side: "left" | "right"; value: number } // 0..999; a correction, the clock is left alone
   | { type: "startGameClock" } // also ends a break
   | { type: "stopGameClock" }
   | { type: "setGameClock"; seconds: number } // 0..5999; keeps running if it was
@@ -751,7 +755,7 @@ type ManualMatchAction =
   | { type: "setBreakClock"; seconds: number } // 0..5999; during a break only; keeps running if it was
   | { type: "resetBreakClock" } // during a break only: to manualBreakClockSeconds, paused
   | { type: "finishMatch" }
-  | { type: "teamEvent"; kind: "towel" | "base"; side: "left" | "right" } // clears itself after 4 s
+  | { type: "teamEvent"; kind: "towel" | "base"; side: "left" | "right" } // stops the game clock; clears itself after 4 s; score unchanged
   | { type: "nextMatch" } // scores 0, round + 1, game clock reset; teams kept
   | { type: "undo" };
 ```

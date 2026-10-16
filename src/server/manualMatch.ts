@@ -11,7 +11,10 @@ import {
 } from "../shared/manualMatch.js";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../shared/theme.js";
 
-type ManualSettings = Pick<AppSettings, "manualGameClockSeconds" | "manualBreakClockSeconds">;
+type ManualSettings = Pick<AppSettings, "manualGameClockSeconds" | "manualBreakClockSeconds" | "manualAutoStartGameClock">;
+
+/** How late a break's end may be noticed and still start the game clock from the moment it ended. */
+const AUTO_START_GRACE_MS = 1_000;
 
 export class ManualActionError extends Error {}
 
@@ -73,6 +76,29 @@ export function applyManualAction(state: ManualMatchState, action: ManualMatchAc
   };
 }
 
+/**
+ * A break between points that ran down to 0:00 starts the game clock, when that is switched on. Returns the next
+ * state, with an Undo step, or null when nothing should happen. Never after a finished match: the next match is not
+ * set up yet.
+ */
+export function autoStartAfterBreak(state: ManualMatchState, now: number, settings: ManualSettings): ManualMatchState | null {
+  const { breakClock, gameClock } = state;
+  if (!settings.manualAutoStartGameClock || state.phase !== "break" || !breakClock.runningSince) return null;
+  if (clockRemainingMs(breakClock, now) > 0 || clockRunning(gameClock, now) || gameClock.remainingMs === 0) return null;
+  const endedAt = Date.parse(breakClock.runningSince) + breakClock.remainingMs;
+  // Normally the clock starts from the break's last moment; noticed much later (after a restart), from now.
+  const startAt = now - endedAt <= AUTO_START_GRACE_MS ? endedAt : now;
+  return {
+    ...core(state),
+    phase: "game",
+    gameClock: started(gameClock.remainingMs, startAt),
+    breakClock: { remainingMs: 0, runningSince: null },
+    teamEvent: null,
+    updatedAt: new Date(now).toISOString(),
+    history: [...state.history, { label: "Clock started after break", state: core(state) }].slice(-MANUAL_HISTORY_LIMIT)
+  };
+}
+
 function nextCore(
   state: ManualMatchCore,
   action: Exclude<ManualMatchAction, { type: "undo" }>,
@@ -88,7 +114,12 @@ function nextCore(
       const score = Math.max(0, state[action.side].score + action.delta);
       if (score === state[action.side].score) return null;
       return {
-        next: { ...state, [action.side]: { ...state[action.side], score } },
+        next: {
+          ...state,
+          [action.side]: { ...state[action.side], score },
+          // A point ends the point being played; taking one back is a correction and leaves the clock alone.
+          gameClock: action.delta > 0 ? stopped(state.gameClock, now) : state.gameClock
+        },
         label: `${sideLabel(action.side)} ${action.delta > 0 ? "+" : ""}${action.delta}`
       };
     }
@@ -164,7 +195,12 @@ function nextCore(
       return { next: { ...state, phase: "finished", gameClock: stopped(state.gameClock, now), teamEvent: null }, label: "Finish match" };
     case "teamEvent":
       return {
-        next: { ...state, teamEvent: { kind: action.kind, side: action.side, until: new Date(now + MANUAL_TEAM_EVENT_MS).toISOString() } },
+        // A towel or a base hit ends the point: the game clock stops.
+        next: {
+          ...state,
+          gameClock: stopped(state.gameClock, now),
+          teamEvent: { kind: action.kind, side: action.side, until: new Date(now + MANUAL_TEAM_EVENT_MS).toISOString() }
+        },
         label: `${action.kind === "towel" ? "Towel" : "Base"} ${action.side}`
       };
     case "nextMatch":
@@ -246,6 +282,8 @@ type ManualMatchEngineOptions = {
   save: (state: ManualMatchState) => ManualMatchState;
   getTeams: () => TeamRecord[];
   getSettings: () => ManualSettings;
+  /** The match changed without an operator action, e.g. the game clock started when a break ended. */
+  onMatchChange?: (view: ManualMatchView) => void;
   now?: () => number;
   tickMs?: number;
   /** A live state goes out at least this often while active, like a feed poll, so overlays never look behind. */
@@ -332,6 +370,12 @@ export class ManualMatchEngine {
 
   private tick(force = false) {
     const now = this.now();
+    const autoStarted = autoStartAfterBreak(this.state, now, this.options.getSettings());
+    if (autoStarted) {
+      this.state = this.options.save(autoStarted);
+      this.options.onMatchChange?.(manualMatchView(this.state));
+      force = true;
+    }
     const heartbeatDue = now - this.lastPublishedAt >= this.heartbeatMs;
     if (heartbeatDue) this.teams = this.options.getTeams();
     const live = manualToLiveState(this.state, this.teams, now);

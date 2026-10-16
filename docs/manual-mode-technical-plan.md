@@ -93,6 +93,7 @@ Each action is one function. It saves the previous state to `history` (for Undo)
 - `finishMatch`: stops the game clock, phase `finished`.
 - `teamEvent(kind, side)`: sets the event and clears it after about 4 seconds, like a feed event passing.
 - `nextMatch`: scores to 0, round + 1, clocks reset, phase `idle`; teams kept so the operator only changes the ones that differ.
+- Chains: a point (score +) and towel/base stop the game clock; towel/base never change the score. With `manualAutoStartGameClock` on (default), a break between points reaching 0:00 starts the game clock from that moment, as its own Undo step; never after Finish match.
 - `undo`: restores the last snapshot (clocks included).
 
 Reused: `normalizeLiveState` and `formatClock` (`src/shared/normalize.ts`), `listTeamRecords` (`src/server/storage.ts`), and the rehearsal raw-builder pattern.

@@ -944,6 +944,8 @@ export const settingsSchema = z.object({
   manualBreakClockSeconds: z.number().int().min(1).max(5999).default(120),
   /** Manual scoring: how much one timeout adds to the break clock. */
   manualTimeoutSeconds: z.number().int().min(1).max(3600).default(60),
+  /** Manual scoring: the game clock starts by itself when a break between points reaches 0:00. */
+  manualAutoStartGameClock: z.boolean().default(true),
   autoRemoveBackgroundUploads: z.boolean().default(true),
   /** Operator switch: the overlay cuts instead of animating until it is turned off. */
   reduceMotion: z.boolean().default(false),
@@ -1350,6 +1352,7 @@ export const defaultSettings: AppSettings = {
   manualGameClockSeconds: 600,
   manualBreakClockSeconds: 120,
   manualTimeoutSeconds: 60,
+  manualAutoStartGameClock: true,
   autoRemoveBackgroundUploads: true,
   reduceMotion: false,
   updateCheckEnabled: true,

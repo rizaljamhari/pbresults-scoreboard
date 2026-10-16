@@ -313,6 +313,18 @@ export function SettingsPage() {
                           <span>s</span>
                         </label>
                       </SettingRow>
+                      <SettingRow
+                        title="Start the clock when a break ends"
+                        hint="When a break between points reaches 0:00, the game clock starts. Not after Finish match. Turn off if points often start late."
+                        htmlFor="set-manual-autostart"
+                      >
+                        <Switch
+                          id="set-manual-autostart"
+                          label="Start the clock when a break ends"
+                          checked={draft.manualAutoStartGameClock}
+                          onChange={(manualAutoStartGameClock) => patch({ manualAutoStartGameClock })}
+                        />
+                      </SettingRow>
                     </>
                   ) : (
                     <>

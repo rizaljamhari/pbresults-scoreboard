@@ -124,7 +124,8 @@ const manualMatch = new ManualMatchEngine({
   load: getManualMatchState,
   save: saveManualMatchState,
   getTeams: listTeamRecords,
-  getSettings
+  getSettings,
+  onMatchChange: (view) => appEventHub.publishManualMatchState(view)
 });
 const manualScoring = () => getSettings().liveSource === "manual";
 /** The active score source's state: the PBResults feed or manual scoring. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultManualMatchState, type ManualMatchAction, type ManualMatchState } from "../shared/manualMatch";
 import type { NormalizedLiveState, TeamRecord } from "../shared/theme";
-import { ManualActionError, ManualMatchEngine, applyManualAction, clockSeconds, manualToLiveState, manualToRaw } from "./manualMatch";
+import { ManualActionError, ManualMatchEngine, applyManualAction, autoStartAfterBreak, clockSeconds, manualToLiveState, manualToRaw } from "./manualMatch";
 
 function team(id: string, name: string): TeamRecord {
   return {
@@ -21,7 +21,7 @@ function team(id: string, name: string): TeamRecord {
 }
 
 const teams = [team("kuda", "Kuda"), team("saus", "Sausage")];
-const settings = { manualGameClockSeconds: 600, manualBreakClockSeconds: 120 };
+const settings = { manualGameClockSeconds: 600, manualBreakClockSeconds: 120, manualAutoStartGameClock: true };
 const T0 = Date.parse("2026-10-16T10:00:00.000Z");
 
 function run(actions: Array<[number, ManualMatchAction]>, start: ManualMatchState = defaultManualMatchState) {
@@ -176,6 +176,64 @@ describe("manual match actions", () => {
   });
 });
 
+describe("chained actions", () => {
+  it("a point stops the game clock; taking one back does not", () => {
+    const scored = run([
+      [T0, { type: "startGameClock" }],
+      [T0 + 30_000, { type: "adjustScore", side: "left", delta: 1 }]
+    ]);
+    expect(scored.gameClock).toEqual({ remainingMs: 570_000, runningSince: null });
+
+    const corrected = run([
+      [T0, { type: "adjustScore", side: "left", delta: 1 }],
+      [T0, { type: "startGameClock" }],
+      [T0 + 10_000, { type: "adjustScore", side: "left", delta: -1 }]
+    ]);
+    expect(corrected.gameClock.runningSince).not.toBeNull();
+  });
+
+  it("towel and base stop the game clock and leave the score alone", () => {
+    for (const kind of ["towel", "base"] as const) {
+      const state = run([
+        [T0, { type: "startGameClock" }],
+        [T0 + 20_000, { type: "teamEvent", kind, side: "right" }]
+      ]);
+      expect(state.gameClock).toEqual({ remainingMs: 580_000, runningSince: null });
+      expect([state.left.score, state.right.score]).toEqual([0, 0]);
+    }
+  });
+
+  it("starts the game clock from the moment a break between points ends, as one Undo step", () => {
+    const inBreak = run([[T0, { type: "startBreak", seconds: 60 }]]);
+    expect(autoStartAfterBreak(inBreak, T0 + 59_000, settings)).toBeNull();
+    const started = autoStartAfterBreak(inBreak, T0 + 60_250, settings);
+    expect(started).toMatchObject({ phase: "game", breakClock: { remainingMs: 0, runningSince: null } });
+    expect(started?.gameClock.runningSince).toBe(new Date(T0 + 60_000).toISOString());
+    expect(clockSeconds(started!.gameClock, T0 + 70_000)).toBe(590);
+    expect(started?.history.at(-1)?.label).toBe("Clock started after break");
+    const undone = applyManualAction(started!, { type: "undo" }, T0 + 61_000, settings);
+    expect(undone.phase).toBe("break");
+  });
+
+  it("does not start the clock when switched off, after a finished match, or for a paused break", () => {
+    const inBreak = run([[T0, { type: "startBreak", seconds: 60 }]]);
+    expect(autoStartAfterBreak(inBreak, T0 + 61_000, { ...settings, manualAutoStartGameClock: false })).toBeNull();
+    const finished = run([
+      [T0, { type: "finishMatch" }],
+      [T0, { type: "startBreak", seconds: 60 }]
+    ]);
+    expect(autoStartAfterBreak(finished, T0 + 61_000, settings)).toBeNull();
+    const paused = applyManualAction(inBreak, { type: "stopBreak" }, T0 + 30_000, settings);
+    expect(autoStartAfterBreak(paused, T0 + 120_000, settings)).toBeNull();
+  });
+
+  it("noticed long after the break ended (a restart), starts from now rather than the past", () => {
+    const inBreak = run([[T0, { type: "startBreak", seconds: 60 }]]);
+    const started = autoStartAfterBreak(inBreak, T0 + 300_000, settings);
+    expect(started?.gameClock.runningSince).toBe(new Date(T0 + 300_000).toISOString());
+  });
+});
+
 describe("manual match as live state", () => {
   it("resolves chosen registry teams by hand, with their scoreboard names", () => {
     const state = run([
@@ -239,6 +297,25 @@ describe("ManualMatchEngine", () => {
     advance(800);
     expect(published).toHaveLength(count + 1);
     expect(published.at(-1)?.gameTimer.value).toBe(599);
+  });
+
+  it("starts the clock on its own when the break ends, and reports the change", () => {
+    let saved = run([[T0, { type: "startBreak", seconds: 2 }]]);
+    let now = T0;
+    const changes: string[] = [];
+    const instance = new ManualMatchEngine({
+      load: () => saved,
+      save: (next) => (saved = next),
+      getTeams: () => teams,
+      getSettings: () => settings,
+      onMatchChange: (view) => changes.push(view.phase),
+      now: () => now
+    });
+    now = T0 + 2_100;
+    (instance as unknown as { tick: () => void }).tick();
+    expect(changes).toEqual(["game"]);
+    expect(saved.phase).toBe("game");
+    expect(instance.getState()).toMatchObject({ state: "RUNNING", period: "GAME" });
   });
 
   it("restores a running clock from the saved start time after a restart", () => {
