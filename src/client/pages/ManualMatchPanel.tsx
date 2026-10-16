@@ -8,9 +8,10 @@ import { ApiError, api } from "../api";
 import { confirmAction, modalPromptOpen } from "../confirm";
 import { useManualMatch, useNow } from "../hooks";
 import { showToast } from "../toast";
-import { Button, Chip, Dot } from "../components/admin/kit";
+import { Button, Chip, Dot, Segmented } from "../components/admin/kit";
 import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
 import { searchTeams } from "./teamSearch";
+import { controlAllowed, controlForAction, guidedBlockMessage, manualMoment, type ManualControl, type ManualControlMode } from "./manualGuide";
 
 /** Team name slots in themes are sized for the 8 characters the PBResults tablet sends. */
 const NAME_FIT = 8;
@@ -169,6 +170,7 @@ function ManualTeamSide({
   teams,
   logoFor,
   disabled,
+  slot,
   onAction
 }: {
   side: ManualSide;
@@ -177,6 +179,8 @@ function ManualTeamSide({
   teams: TeamRecord[];
   logoFor: (team: Pick<TeamRecord, "logoAssetId" | "alternateLogoAssetId"> | null | undefined) => string | undefined;
   disabled: boolean;
+  /** Class for a control's slot: hidden (space kept) when Guided does not offer it now. */
+  slot: (control: ManualControl) => string | undefined;
   onAction: (action: ManualMatchAction) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -236,7 +240,7 @@ function ManualTeamSide({
         </div>
       </div>
       <div className="pba-manual-score" role="group" aria-label={`${teamLabel} score`}>
-        <Button aria-label={`${teamLabel} score down`} title={`Take a point back (${keys[1]})`} disabled={disabled || entry.score === 0} onClick={() => onAction({ type: "adjustScore", side, delta: -1 })}>
+        <Button className={slot("scoreDown")} aria-label={`${teamLabel} score down`} title={`Take a point back (${keys[1]})`} disabled={disabled || entry.score === 0} onClick={() => onAction({ type: "adjustScore", side, delta: -1 })}>
           <Minus aria-hidden />
           <kbd className="pba-kbd" aria-hidden>
             {keys[1]}
@@ -245,21 +249,40 @@ function ManualTeamSide({
         <output className="pba-manual-figure" aria-live="polite" aria-label={`${teamLabel} score`}>
           {entry.score}
         </output>
-        <Button aria-label={`${teamLabel} score up`} title={`Point to ${teamLabel}; stops the game clock (${keys[0]})`} disabled={disabled} onClick={() => onAction({ type: "adjustScore", side, delta: 1 })}>
+        <Button className={slot("scoreUp")} aria-label={`${teamLabel} score up`} title={`Point to ${teamLabel}; stops the game clock (${keys[0]})`} disabled={disabled} onClick={() => onAction({ type: "adjustScore", side, delta: 1 })}>
           <Plus aria-hidden />
           <kbd className="pba-kbd" aria-hidden>
             {keys[0]}
           </kbd>
         </Button>
-        <Button className="pba-push" size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
+        <Button className={`pba-push ${slot("towelBase") ?? ""}`} size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "towel", side })} title="Shows the theme's towel card on this side">
           Towel
         </Button>
-        <Button size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "base", side })} title="Shows the theme's base card on this side">
+        <Button className={slot("towelBase")} size="sm" disabled={disabled || finished} onClick={() => onAction({ type: "teamEvent", kind: "base", side })} title="Shows the theme's base card on this side">
           Base
         </Button>
       </div>
     </div>
   );
+}
+
+const CONTROL_MODE_KEY = "pbresults.admin.manualControlMode";
+
+/** Per computer: the onsite operator can stay Guided while remote staff use Full. */
+function readControlMode(): ManualControlMode {
+  try {
+    return window.localStorage.getItem(CONTROL_MODE_KEY) === "full" ? "full" : "guided";
+  } catch {
+    return "guided";
+  }
+}
+
+function saveControlMode(mode: ManualControlMode) {
+  try {
+    window.localStorage.setItem(CONTROL_MODE_KEY, mode);
+  } catch {
+    // Remembering it is a convenience only.
+  }
 }
 
 const ADJUST_OPEN_KEY = "pbresults.admin.manualAdjustOpen";
@@ -366,6 +389,17 @@ export function ManualMatchPanel({
   const breakSeconds = manualLive ? manualLive.breakTimer.value : view ? remainingSeconds(view.breakClock, now) : 0;
   const breakRunning = manualLive ? manualLive.breakTimer.state === 2 : view ? clockRunning(view.breakClock, now) : false;
   const inBreak = view?.phase === "break" || view?.phase === "finished";
+  const breakResumable = inBreak && !breakRunning && breakSeconds > 0;
+  const [mode, setModeState] = useState<ManualControlMode>(readControlMode);
+  const setMode = (next: ManualControlMode) => {
+    setModeState(next);
+    saveControlMode(next);
+  };
+  const moment = view ? manualMoment(view.phase, gameRunning) : "ready";
+  const can = (control: ManualControl) => controlAllowed(control, moment, mode);
+  // Hidden with its space kept, so switching moments never moves a button under the pointer.
+  const slot = (control: ManualControl) => (can(control) ? undefined : "pba-manual-off");
+  const breakControl: ManualControl = breakRunning ? "pauseBreak" : breakResumable ? "resumeBreak" : "startBreak";
 
   function run(action: ManualMatchAction) {
     queueRef.current = queueRef.current.then(async () => {
@@ -398,6 +432,11 @@ export function ManualMatchPanel({
     const action = manualShortcutAction(event, { gameClockRunning: gameRunning, timeoutSeconds: settings.manualTimeoutSeconds });
     if (!action) return;
     event.preventDefault();
+    const control = controlForAction(action, { breakResumable });
+    if (control && !can(control)) {
+      showToast({ kind: "info", message: guidedBlockMessage(moment), durationMs: 2500 });
+      return;
+    }
     // Space on a focused button would also press it when the key comes up.
     if (event.key === " " && event.target instanceof HTMLElement && event.target.tagName === "BUTTON") event.target.blur();
     void act(action, { skipConfirm: action.type === "finishMatch" && event.shiftKey });
@@ -450,10 +489,19 @@ export function ManualMatchPanel({
           {phase ? `Match ${phase.label.toLowerCase()}` : ""}
         </span>
         {view ? <span className="pba-hint pba-manual-round">Round {view.round}</span> : null}
+        <Segmented
+          label="Panel controls"
+          className="pba-push"
+          value={mode}
+          options={[
+            { value: "guided", label: "Guided", title: "Show only what makes sense right now" },
+            { value: "full", label: "Full", title: "Show every control" }
+          ]}
+          onChange={setMode}
+        />
         <Button
           variant="ghost"
           size="sm"
-          className="pba-push"
           disabled={disabled || !view?.undoLabel}
           onClick={() => void run({ type: "undo" })}
           title="Undo the last action (Ctrl+Z)"
@@ -470,8 +518,8 @@ export function ManualMatchPanel({
       ) : (
         <>
           <div className="pba-resolve">
-            <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void act(action)} />
-            <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} onAction={(action) => void act(action)} />
+            <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />
+            <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />
           </div>
           <div className="pba-manual-clocks">
             <div className="pba-manual-clock">
@@ -484,7 +532,11 @@ export function ManualMatchPanel({
               <p className="pba-manual-note">{gameNote}</p>
               {/* A fixed two-column grid: changing a button's label never moves anything below it. */}
               <div className="pba-manual-actions">
-                <Button disabled={disabled || (!gameRunning && gameSeconds === 0)} onClick={() => void act({ type: gameRunning ? "stopGameClock" : "startGameClock" })}>
+                <Button
+                  className={slot(gameRunning ? "stopClock" : "startClock")}
+                  disabled={disabled || (!gameRunning && gameSeconds === 0)}
+                  onClick={() => void act({ type: gameRunning ? "stopGameClock" : "startGameClock" })}
+                >
                   {gameRunning ? <Pause aria-hidden /> : <Play aria-hidden />}
                   {gameRunning ? "Stop" : "Start"}
                   <kbd className="pba-kbd" aria-hidden>
@@ -504,12 +556,12 @@ export function ManualMatchPanel({
               <p className="pba-manual-note">{breakNote}</p>
               <div className="pba-manual-actions">
                 {breakRunning ? (
-                  <Button disabled={disabled} onClick={() => void run({ type: "stopBreak" })}>
+                  <Button className={slot(breakControl)} disabled={disabled} onClick={() => void run({ type: "stopBreak" })}>
                     <Pause aria-hidden />
                     Pause
                   </Button>
                 ) : (
-                  <Button disabled={disabled} onClick={() => void run({ type: "startBreak" })} title={inBreak && breakSeconds > 0 ? "Resume the break" : `Start a ${formatClock(settings.manualBreakClockSeconds)} break`}>
+                  <Button className={slot(breakControl)} disabled={disabled} onClick={() => void run({ type: "startBreak" })} title={inBreak && breakSeconds > 0 ? "Resume the break" : `Start a ${formatClock(settings.manualBreakClockSeconds)} break`}>
                     <Play aria-hidden />
                     {inBreak && breakSeconds > 0 ? "Resume" : "Start break"}
                     <kbd className="pba-kbd" aria-hidden>
@@ -517,7 +569,7 @@ export function ManualMatchPanel({
                   </kbd>
                   </Button>
                 )}
-                <Button disabled={disabled} onClick={() => void run({ type: "addBreakTime", seconds: settings.manualTimeoutSeconds })} title="Adds time to the break clock; the theme's timeout card shows">
+                <Button className={slot("timeout")} disabled={disabled} onClick={() => void run({ type: "addBreakTime", seconds: settings.manualTimeoutSeconds })} title="Adds time to the break clock; the theme's timeout card shows">
                   <Timer aria-hidden />
                   Timeout +{timeoutLabel}
                   <kbd className="pba-kbd" aria-hidden>
@@ -530,6 +582,7 @@ export function ManualMatchPanel({
           </div>
           <div className="pba-manual-match">
             <Button
+              className={slot("finish")}
               disabled={disabled || view.phase === "finished"}
               onClick={(event) => void act({ type: "finishMatch" }, { skipConfirm: event.shiftKey })}
               title="Ends the match: the theme's game finished and winner cards show. Asks first; Shift skips the question."
@@ -541,7 +594,7 @@ export function ManualMatchPanel({
               </kbd>
             </Button>
             {/* Once the match is finished, Next match is the obvious next step. */}
-            <Button variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
+            <Button className={slot("next")} variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
               <SkipForward aria-hidden />
               Next match
             </Button>

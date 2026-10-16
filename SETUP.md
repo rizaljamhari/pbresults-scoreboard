@@ -44,7 +44,23 @@ To switch it on:
 2. Check the lengths below it: **Game clock length** (what Reset and Next match set the clock to), **Break length** and **Timeout adds**. All are in seconds.
 3. Save and confirm. The overlay switches straight away and PBResults is no longer polled.
 
-During the event, Operations shows a **Manual scoring** panel in place of Team names on air:
+During the event, Operations shows a **Manual scoring** panel in place of Team names on air.
+
+The **Guided / Full** switch in the panel header picks how much it shows. It is remembered on each computer, so the onsite operator can stay on Guided while remote staff use Full.
+
+- **Guided** (the default) shows only what makes sense right now:
+  - Before the first point: Start, and Start break for a countdown.
+  - During play: the point buttons (+), Towel, Base, Stop and Finish match.
+  - Between points: Start, Start break, Timeout and Finish match.
+  - During a break: Pause or Resume, Timeout, Start (ends the break early) and Finish match.
+  - After the match: Next match, and a break between matches.
+  - Change team, Undo and Adjust clocks are always there. To take a point back, use Undo.
+  - Hidden buttons keep their place, so nothing moves. A shortcut key for a hidden control does nothing and says why.
+- **Full** shows every control, including − to take a point back.
+
+Both modes keep the same automatic behaviour: a point, towel or base stops the clock, and a break ending starts it.
+
+The controls:
 
 - **Teams:** Choose team on each side, then search the team registry, or type a name that isn't in it. A registry team brings its scoreboard name and logo; a typed name shows as typed, with no logo. Team name slots in most themes are sized for 8 characters.
 - **Score:** − and + on each side. A point (+) stops the game clock; − is a correction and leaves it running.

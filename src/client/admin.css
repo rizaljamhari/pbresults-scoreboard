@@ -3727,3 +3727,8 @@ tr[aria-selected="true"] .pba-row-open {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Guided mode: a control not offered right now keeps its space, so nothing moves when the moment changes. */
+.pba-manual-off {
+  visibility: hidden;
+}
