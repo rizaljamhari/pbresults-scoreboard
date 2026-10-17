@@ -3,6 +3,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown, Monitor, RectangleHorizontal } from "lucide-react";
 import type { NormalizedLiveState, StoredAsset, ThemeDefinition } from "../../shared/theme";
 import { OverlayRenderer } from "./OverlayRenderer";
+import type { ScoreboardPhase } from "./scoreboardTransition";
 import { ScaledCanvasFrame } from "./ScaledCanvasFrame";
 import { Button, Chip, Dot, Grow } from "./admin/kit";
 import { scoreboardBand, teamSideRect } from "../pages/operationsStrip";
@@ -47,6 +48,15 @@ const FEED_STATUS: Record<NormalizedLiveState["sourceStatus"], string> = {
  * compared. "Scoreboard" crops to the band the theme actually occupies so names, scores and operator text are
  * readable; "Full frame" shows the whole 1920 × 1080.
  */
+/**
+ * While the scoreboard is hidden, the strip shows a faint copy so the operator can still check changes before showing
+ * it. It appears only once the theme's hide has finished playing, and goes the moment Show is pressed, so the strip
+ * plays the same transitions vMix does.
+ */
+export function stripGhostShown(scoreboardVisible: boolean, phase: ScoreboardPhase | null) {
+  return !scoreboardVisible && phase === "hidden";
+}
+
 export function OnAirStrip({
   theme,
   live,
@@ -82,6 +92,8 @@ export function OnAirStrip({
   const [backdrop, setBackdrop] = useState<Backdrop>(readBackdrop);
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageWidth, setStageWidth] = useState(0);
+  const [scoreboardPhase, setScoreboardPhase] = useState<ScoreboardPhase | null>(null);
+  const ghost = Boolean(theme) && stripGhostShown(scoreboardVisible, scoreboardPhase);
 
   useEffect(() => {
     try {
@@ -110,6 +122,29 @@ export function OnAirStrip({
   }, [view, Boolean(theme)]);
 
   const band = theme ? scoreboardBand(theme) : null;
+
+  /** What vMix shows, plus the faint copy while hidden. Both stay mounted on Show/Hide so transitions play in full. */
+  const renderScoreboard = (activeTheme: ThemeDefinition) => (
+    <div className="pba-strip-layers">
+      <OverlayRenderer
+        theme={activeTheme}
+        live={live}
+        assets={assets}
+        operatorTextValues={operatorTextValues}
+        reduceMotion={reduceMotion}
+        entranceToken={entranceToken}
+        scoreboardVisible={scoreboardVisible}
+        onScoreboardPhase={setScoreboardPhase}
+        applyPlacement
+        transparentBackground
+      />
+      {ghost ? (
+        <div className="pba-strip-ghost">
+          <OverlayRenderer theme={activeTheme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} applyPlacement transparentBackground />
+        </div>
+      ) : null}
+    </div>
+  );
   const scale = band && stageWidth ? Math.min(stageWidth / band.width, MAX_BAND_HEIGHT / band.height) : 0;
 
   return (
@@ -126,6 +161,7 @@ export function OnAirStrip({
             <Chip tone="critical">No theme on air</Chip>
           </h2>
         )}
+        {theme && !scoreboardVisible ? <Chip>Scoreboard hidden</Chip> : null}
         {rehearsalLabel ? (
           <Chip tone="rehearsal">
             <Dot tone="rehearsal" flat />
@@ -163,7 +199,7 @@ export function OnAirStrip({
                 }}
                 aria-hidden
               >
-                <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} applyPlacement transparentBackground />
+                {renderScoreboard(theme)}
               </div>
               {markers.map((marker) => {
                 const rect = teamSideRect(theme, marker.side);
@@ -188,14 +224,15 @@ export function OnAirStrip({
         ) : (
           <div className="pba-strip-frame">
             <ScaledCanvasFrame width={theme.canvas.width} height={theme.canvas.height} className="pba-strip-frame-box" innerClassName="pba-strip-frame-stage" mode="width">
-              <OverlayRenderer theme={theme} live={live} assets={assets} operatorTextValues={operatorTextValues} reduceMotion={reduceMotion} entranceToken={entranceToken} scoreboardVisible={scoreboardVisible} applyPlacement transparentBackground />
+              {renderScoreboard(theme)}
             </ScaledCanvasFrame>
           </div>
         )}
         {theme && !scoreboardVisible ? (
           // An empty preview should never look like a fault.
-          <p className="pba-strip-hidden" role="status">
-            Scoreboard hidden · press <kbd className="pba-kbd">H</kbd> to show
+          // Over the faint copy it moves to a corner, so it never covers the scores and clock being checked.
+          <p className={`pba-strip-hidden${ghost ? " is-corner" : ""}`} role="status">
+            Hidden from viewers · press <kbd className="pba-kbd">H</kbd> to show
           </p>
         ) : null}
       </div>

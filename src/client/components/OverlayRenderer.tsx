@@ -22,7 +22,7 @@ import { FitText } from "./FitText";
 import { useThemeFonts } from "./themeFonts";
 import { themeFontFaces } from "../../shared/fonts";
 import { useTimeoutToken } from "./momentTriggers";
-import { TransitionBand, useScoreboardTransition } from "./scoreboardTransition";
+import { TransitionBand, useScoreboardTransition, type ScoreboardPhase } from "./scoreboardTransition";
 import { movesWithPlacement, placeRect, placementTransform } from "../../shared/placement";
 
 type OverlayRendererProps = {
@@ -53,6 +53,8 @@ type OverlayRendererProps = {
    * On air view. Left out, the design shows as built (the editor's Design view, theme thumbnails).
    */
   applyPlacement?: boolean;
+  /** Reports the Show / Hide phase as it changes, e.g. so Operations knows when a hide has finished playing. */
+  onScoreboardPhase?: (phase: ScoreboardPhase) => void;
 };
 
 type FramedPiece = Pick<ThemeDefinition["components"]["homeName"], "visible" | "opacity" | "enterMotion" | "exitMotion" | "x" | "width" | "zIndex">;
@@ -645,7 +647,8 @@ export function OverlayRenderer({
   replayChange = null,
   entranceToken = null,
   scoreboardVisible = true,
-  applyPlacement = false
+  applyPlacement = false,
+  onScoreboardPhase
 }: OverlayRendererProps) {
   const overlayGeneral = theme.teamEventOverlay.general;
   const fontFaces = useMemo(() => themeFontFaces(theme, assets), [theme.fonts, assets]);
@@ -992,6 +995,11 @@ export function OverlayRenderer({
     stageRef,
     bandRef
   });
+  const onScoreboardPhaseRef = useRef(onScoreboardPhase);
+  onScoreboardPhaseRef.current = onScoreboardPhase;
+  useEffect(() => {
+    onScoreboardPhaseRef.current?.(scoreboardPhase);
+  }, [scoreboardPhase]);
   // A ref, not effect cleanup: settling from "building" into "shown" must not cut the intro short.
   const centreLineIntroTimerRef = useRef<number | null>(null);
   useEffect(() => {

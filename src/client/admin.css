@@ -3754,3 +3754,37 @@ tr[aria-selected="true"] .pba-row-open {
   font-size: 12.5px;
   cursor: pointer;
 }
+
+/* While the scoreboard is hidden, a faint copy shows what would go on air, so changes can be checked first. */
+/* Fills the canvas-sized box it sits in (band and full-frame views), so both copies draw at full size. */
+.pba-strip-layers {
+  position: absolute;
+  inset: 0;
+}
+
+.pba-strip-ghost {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  pointer-events: none;
+  animation: pba-strip-ghost-in 200ms ease-out;
+}
+
+@keyframes pba-strip-ghost-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pba-strip-ghost {
+    animation: none;
+  }
+}
+
+.pba-strip-hidden.is-corner {
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  transform: none;
+}
