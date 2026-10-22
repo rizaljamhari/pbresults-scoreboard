@@ -308,6 +308,19 @@ function resolveComponentOffset(component: Pick<ThemeDefinition["components"]["h
   } satisfies CSSProperties;
 }
 
+/**
+ * For content layered absolutely over its slot (team switch, value change): fills the slot, moved by the offset.
+ * A plain `inset: 0` would drop the offset, so the text jumps while the animation plays.
+ */
+function resolveLayeredOffset(component: Pick<ThemeDefinition["components"]["homeName"], "offsetX" | "offsetY">) {
+  return {
+    left: component.offsetX,
+    right: -component.offsetX,
+    top: component.offsetY,
+    bottom: -component.offsetY
+  } satisfies CSSProperties;
+}
+
 function resolveTextContent(theme: ThemeDefinition, componentId: ComponentId, live: NormalizedLiveState | null): string | null {
   if (!live) {
     return componentId === "breakTime" ? theme.centerSecondary.gameText || "Center Secondary" : componentId;
@@ -1361,7 +1374,7 @@ export function OverlayRenderer({
                         filter: imageFilter,
                         animation: teamSwitchSwap?.out,
                         position: "absolute",
-                        inset: 0,
+                        ...resolveLayeredOffset(component),
                         zIndex: 2,
                         transformOrigin: "center center",
                         willChange: "transform, opacity",
@@ -1387,7 +1400,7 @@ export function OverlayRenderer({
                         filter: imageFilter,
                         animation: teamSwitchSwap?.in,
                         position: "absolute",
-                        inset: 0,
+                        ...resolveLayeredOffset(component),
                         zIndex: 3,
                         transformOrigin: "center center",
                         willChange: "transform, opacity",
@@ -1535,7 +1548,7 @@ export function OverlayRenderer({
                       ...textLook(component),
                       animation: teamSwitchSwap?.out,
                       position: "absolute",
-                      inset: 0,
+                      ...resolveLayeredOffset(component),
                       zIndex: 2,
                       transformOrigin: "center center",
                       willChange: "transform, opacity",
@@ -1560,7 +1573,7 @@ export function OverlayRenderer({
                       ...textLook(component),
                       animation: teamSwitchSwap?.in,
                       position: "absolute",
-                      inset: 0,
+                      ...resolveLayeredOffset(component),
                       zIndex: 3,
                       transformOrigin: "center center",
                       willChange: "transform, opacity",
@@ -1576,7 +1589,7 @@ export function OverlayRenderer({
                     <span
                       key={`${valueChange.key}:out`}
                       className="component-content text-content"
-                      style={{ ...mainTextStyle, position: "absolute", inset: 0, animation: valueChange.motion.out ?? undefined }}
+                      style={{ ...mainTextStyle, position: "absolute", ...resolveLayeredOffset(component), animation: valueChange.motion.out ?? undefined }}
                     >
                       <FitText settings={component}>{valueChange.previous}</FitText>
                     </span>
@@ -1721,7 +1734,7 @@ export function OverlayRenderer({
                 <span
                   key={`${valueChange.key}:out`}
                   className="component-content text-content"
-                  style={{ ...freeTextStyle, position: "absolute", inset: 0, animation: valueChange.motion.out ?? undefined }}
+                  style={{ ...freeTextStyle, position: "absolute", ...resolveLayeredOffset(component), animation: valueChange.motion.out ?? undefined }}
                 >
                   <FitText settings={component} multiline={component.multiline} textAlign={component.textAlign}>
                     {valueChange.previous}
