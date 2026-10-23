@@ -256,15 +256,14 @@ describe("match lists", () => {
   });
 
   it("every set starts with a full clock, never the time left from the set before", () => {
-    const lists = (seriesOrder: Record<string, "turns" | "backToBack">) => ({
+    const lists = (order: "turns" | "backToBack") => ({
       ...matchLists,
       lists: [
         {
           ...matchLists.lists[0],
-          seriesOrder,
           games: [
-            { ...scheduled("q1", 63, side("Kuda", "kuda"), side("Sausage", "saus"), 3), stage: "Quarter 1" },
-            { ...scheduled("q2", 64, side("Sausage", "saus"), side("Kuda", "kuda"), 3), stage: "Quarter 2" }
+            { ...scheduled("q1", 63, side("Kuda", "kuda"), side("Sausage", "saus"), 3), stage: "Quarter 1", turnGroup: order === "turns" ? null : "" },
+            { ...scheduled("q2", 64, side("Sausage", "saus"), side("Kuda", "kuda"), 3), stage: "Quarter 2", turnGroup: order === "turns" ? null : "" }
           ]
         }
       ]
@@ -282,7 +281,7 @@ describe("match lists", () => {
     const fullClock = { remainingMs: 600_000, runningSince: null };
 
     for (const order of ["turns", "backToBack"] as const) {
-      const list = lists({ quarter: order });
+      const list = lists(order);
       let state = applyManualAction(defaultManualMatchState, { type: "loadScheduledGame", listId: "day1", gameKey: "q1" }, T0, clockSettings, list);
       expect(state.gameClock).toEqual(fullClock);
       state = playSet(state, list, T0, 1, 0);
@@ -292,7 +291,7 @@ describe("match lists", () => {
     }
 
     // Overtime and one-on-one start from their own full lengths too.
-    const list = lists({ quarter: "backToBack" });
+    const list = lists("backToBack");
     let state = applyManualAction(defaultManualMatchState, { type: "loadScheduledGame", listId: "day1", gameKey: "q1" }, T0, clockSettings, list);
     state = playSet(state, list, T0, 1, 0);
     state = playSet(state, list, T0 + 300_000, 0, 1);

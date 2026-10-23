@@ -14,6 +14,7 @@ import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseCl
 import { TeamPicker } from "../components/TeamPicker";
 import {
   gameTitle,
+  listDivisions,
   planNextMatch,
   sideStatus,
   seriesDecided,
@@ -110,8 +111,18 @@ function gameGaps(game: ScheduledGame, teams: TeamRecord[]) {
   return { placeholder: statuses.includes("placeholder"), unlinked: statuses.includes("unlinked") };
 }
 
+/** "Game 23" reads "game 23" mid-sentence; a division name ("Rookie 23") keeps its capital. */
+function inSentence(title: string) {
+  return title.replace(/^Game /, "game ");
+}
+
 /** What Next match will do, for its question and the schedule strip. */
-function describePlan(plan: NextMatchPlan, teams: TeamRecord[], settings: Pick<AppSettings, "manualOvertimeClockSeconds" | "manualOneOnOneClockSeconds">) {
+function describePlan(
+  plan: NextMatchPlan,
+  teams: TeamRecord[],
+  settings: Pick<AppSettings, "manualOvertimeClockSeconds" | "manualOneOnOneClockSeconds">,
+  divided: boolean
+) {
   if (plan.kind === "tiebreak") {
     const label = tiebreakLabel(plan.tiebreak);
     const seconds = plan.tiebreak === "overtime" ? settings.manualOvertimeClockSeconds : settings.manualOneOnOneClockSeconds;
@@ -142,13 +153,13 @@ function describePlan(plan: NextMatchPlan, teams: TeamRecord[], settings: Pick<A
     const teamsText = gameTeams(plan.game, teams);
     const gaps = gameGaps(plan.game, teams);
     const warning = gaps.placeholder
-      ? ` ${gameTitle(plan.game)} teams aren't set yet; fill them on the Matches page.`
+      ? ` ${gameTitle(plan.game, divided)} teams aren't set yet; fill them on the Matches page.`
       : gaps.unlinked
         ? " A team isn't linked to the team list, so it shows without a logo."
         : "";
     return {
-      short: `${gameTitle(plan.game)}${seriesText}: ${teamsText}`,
-      message: `Loads ${gameTitle(plan.game).toLowerCase()}${seriesText}: ${teamsText}.${warning}`
+      short: `${gameTitle(plan.game, divided)}${seriesText}: ${teamsText}`,
+      message: `Loads ${inSentence(gameTitle(plan.game, divided))}${seriesText}: ${teamsText}.${warning}`
     };
   }
   return { short: "End of the list", message: "That was the last game in the list. Scores go back to 0, the round moves on and the teams stay." };
@@ -172,9 +183,10 @@ function ScheduleStrip({
 }) {
   const [open, setOpen] = useState(false);
   const schedule = view.schedule?.listId === list.id ? view.schedule : null;
+  const divided = listDivisions(list).length > 1;
   const current = schedule ? list.games.find((game) => game.id === schedule.gameKey) ?? null : null;
   const plan = planNextMatch(schedule, list, view.left.score, view.right.score);
-  const next = describePlan(plan, teams, settings);
+  const next = describePlan(plan, teams, settings, divided);
   const nextGaps = plan.kind === "game" ? gameGaps(plan.game, teams) : null;
   const games = list.games.filter((game) => game.kind === "game");
 
@@ -187,7 +199,7 @@ function ScheduleStrip({
         </b>
         {current ? (
           <span>
-            {gameTitle(current)}
+            {gameTitle(current, divided)}
             {current.time ? ` · ${current.time}` : ""}
             {current.stage ? ` · ${current.stage}` : ""}
             {schedule && current.bestOf > 1
@@ -239,7 +251,9 @@ function ScheduleStrip({
                     onLoad(game);
                   }}
                 >
-                  <span className="pba-num">{game.gameId}</span>
+                  <span className="pba-num" title={gameTitle(game, divided)}>
+                    {divided && game.division ? `${game.division.trim().slice(0, 1).toUpperCase()}${game.gameId}` : game.gameId}
+                  </span>
                   <span className="pba-faint">{game.time}</span>
                   <span title={gameTeams(game, teams)}>{gameTeams(game, teams)}</span>
                   <span className="pba-faint">{seriesNote(game, view.schedule?.listId === list.id ? view.schedule.series : {})}</span>
@@ -472,6 +486,7 @@ export function ManualMatchPanel({
   const view = manual.data;
   const matchLists = useMatchLists();
   const activeList = matchLists.data?.lists.find((list) => list.id === matchLists.data?.activeListId) ?? null;
+  const divided = activeList ? listDivisions(activeList).length > 1 : false;
   const now = useNow(250);
   const disabled = rehearsing || !view;
   // Actions go out one at a time, in the order pressed, so a quick double tap scores twice and never out of order.
@@ -551,7 +566,7 @@ export function ManualMatchPanel({
     const ok = await confirmAction({
       title: "Start the next match?",
       message: plan
-        ? `${describePlan(plan, teams, settings).message}${plan.kind === "tiebreak" || plan.kind === "series" ? "" : " The game clock resets."}`
+        ? `${describePlan(plan, teams, settings, divided).message}${plan.kind === "tiebreak" || plan.kind === "series" ? "" : " The game clock resets."}`
         : "Scores go back to 0, the round moves on and the game clock resets. The teams stay until you change them.",
       confirmLabel: "Next match"
     });
@@ -560,9 +575,9 @@ export function ManualMatchPanel({
 
   async function loadGame(list: MatchList, game: ScheduledGame) {
     const ok = await confirmAction({
-      title: `Load ${gameTitle(game).toLowerCase()}?`,
+      title: `Load ${inSentence(gameTitle(game, divided))}?`,
       message: `${gameTeams(game, teams)}. Scores go back to 0 and the game clock resets.`,
-      confirmLabel: `Load ${gameTitle(game).toLowerCase()}`
+      confirmLabel: `Load ${inSentence(gameTitle(game, divided))}`
     });
     if (ok) void run({ type: "loadScheduledGame", listId: list.id, gameKey: game.id });
   }

@@ -28,21 +28,23 @@ export const scheduledGameSchema = z.object({
   home: scheduledSideSchema.default({}),
   away: scheduledSideSchema.default({}),
   bestOf: z.union([z.literal(1), z.literal(3), z.literal(5)]).default(1),
-  notes: z.string().max(200).default("")
+  notes: z.string().max(200).default(""),
+  /**
+   * The games this one takes turns with: a group name set on the Matches page, "" for its own turn (a series plays
+   * back to back), or null for the automatic group (best-of series by division and stage; single games on their own).
+   */
+  turnGroup: z.string().max(60).nullable().default(null)
 });
 
-export const seriesOrderValues = ["turns", "backToBack"] as const;
-export type SeriesOrder = (typeof seriesOrderValues)[number];
+/** A game's turn group when it plays on its own. */
+export const OWN_TURN = "";
 
 export const matchListSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).max(80),
   sourceFileName: z.string().nullable().default(null),
-  /**
-   * How each stage's best-of series are played, by series group (see seriesGroup). Missing means taking turns: game 1
-   * of every series in the stage, then game 2 of those still open, and so on.
-   */
-  seriesOrder: z.record(z.enum(seriesOrderValues)).default({}),
+  /** Turn groups whose games play back to back (each to its end, in schedule order) instead of taking turns. */
+  backToBackGroups: z.array(z.string().max(60)).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
   games: z.array(scheduledGameSchema).max(500).default([])
@@ -161,40 +163,75 @@ export function bestOfFromNotes(notes: string): MatchBestOf {
 }
 
 
-export function gameTitle(game: ScheduledGame) {
-  return game.gameId === null ? game.stage || "Break" : `Game ${game.gameId}`;
+/** "Game 23", or "Rookie 23" in a list with more than one division, where game numbers repeat per division. */
+export function gameTitle(game: ScheduledGame, divided = false) {
+  if (game.gameId === null) return game.stage || "Break";
+  return divided && game.division.trim() ? `${game.division.trim()} ${game.gameId}` : `Game ${game.gameId}`;
 }
 
-/**
- * The stage a best-of series belongs to, for taking turns: the stage name without its number ("Quarter 2" is
- * "quarter"). The 3rd place game and the final are played as a pair, so they share one group.
- */
-export function seriesGroup(game: ScheduledGame): string {
-  const stage = game.stage.trim().toLowerCase().replace(/\s*\d+$/, "");
-  if (/^(3rd|third|bronze)\b|^(grand\s+)?final$/.test(stage)) return "finals";
-  return stage || "series";
-}
-
-/** A series group as the operator reads it: "Quarter", "Semi", "3rd place & Final". */
-export function seriesGroupLabel(group: string, games: ScheduledGame[]): string {
-  if (group === "finals") return "3rd place & Final";
-  const stage = games.find((game) => seriesGroup(game) === group)?.stage.replace(/\s*\d+$/, "").trim();
+/** "Quarter 2" → "Quarter"; the 3rd place game and the final share "3rd place & Final", as they are played as a pair. */
+function stageFamily(game: ScheduledGame): string {
+  const stage = game.stage.trim().replace(/\s*\d+$/, "");
+  if (/^(3rd|third|bronze)\b|^(grand\s+)?final$/i.test(stage)) return "3rd place & Final";
   return stage || "Series";
 }
 
-/** The best-of series groups in a list, in schedule order, with their games. */
-export function seriesGroups(list: MatchList): Array<{ group: string; label: string; games: ScheduledGame[] }> {
-  const groups = new Map<string, ScheduledGame[]>();
-  for (const game of list.games) {
-    if (game.kind !== "game" || game.bestOf <= 1) continue;
-    const key = seriesGroup(game);
-    groups.set(key, [...(groups.get(key) ?? []), game]);
-  }
-  return [...groups].map(([group, games]) => ({ group, label: seriesGroupLabel(group, games), games }));
+/** The divisions a list's games belong to ("Mechanical", "Rookie"), in schedule order. */
+export function listDivisions(list: MatchList): string[] {
+  return [...new Set(list.games.filter((game) => game.kind === "game" && game.division.trim()).map((game) => game.division.trim()))];
 }
 
-export function seriesOrderOf(list: MatchList, group: string): SeriesOrder {
-  return list.seriesOrder?.[group] ?? "turns";
+/**
+ * Every game's turn group, by game key; null plays on its own. Automatic groups put a best-of series with the others of
+ * its division and stage ("Mechanical Quarter"; just "Quarter" in a one-division list); single games play on their own.
+ */
+export function turnGroupMap(list: MatchList): Map<string, string | null> {
+  const divided = listDivisions(list).length > 1;
+  return new Map(
+    list.games.map((game) => {
+      if (game.kind !== "game" || game.turnGroup === OWN_TURN) return [game.id, null];
+      if (game.turnGroup) return [game.id, game.turnGroup];
+      if (game.bestOf <= 1) return [game.id, null];
+      return [game.id, divided && game.division.trim() ? `${game.division.trim()} ${stageFamily(game)}` : stageFamily(game)];
+    })
+  );
+}
+
+export function isBackToBack(list: MatchList, group: string) {
+  return (list.backToBackGroups ?? []).includes(group);
+}
+
+export type PlayOrderStep = { label: string; games: ScheduledGame[] };
+
+/**
+ * The order a turn group plays in, for the Matches page to show before it runs: taking turns, set 1 of every game,
+ * then set 2 of those still open, and so on, then any tie-breaks; back to back, each game to its end in schedule order.
+ */
+export function groupPlayOrder(list: MatchList, group: string): PlayOrderStep[] {
+  const games = turnGroups(list).find((item) => item.name === group)?.games ?? [];
+  const bestOf = Math.max(1, ...games.map((game) => game.bestOf));
+  const tiebreaks = bestOf > 1 ? [{ label: "Then, for a series still level: overtime, then one-on-ones", games: [] as ScheduledGame[] }] : [];
+  if (isBackToBack(list, group)) {
+    return games.map((game) => ({ label: game.bestOf > 1 ? `up to ${game.bestOf} sets, then its tie-break if level` : "one game", games: [game] }));
+  }
+  const rounds = Array.from({ length: bestOf }, (_, index) => {
+    const set = index + 1;
+    const playing = games.filter((game) => game.bestOf >= set);
+    const label = set === 1 ? "Set 1" : `Set ${set}, series still open`;
+    return { label, games: playing };
+  });
+  return [...rounds, ...tiebreaks];
+}
+
+/** The turn groups in a list, in schedule order, with their games. */
+export function turnGroups(list: MatchList): Array<{ name: string; games: ScheduledGame[] }> {
+  const map = turnGroupMap(list);
+  const groups = new Map<string, ScheduledGame[]>();
+  for (const game of list.games) {
+    const name = map.get(game.id);
+    if (name) groups.set(name, [...(groups.get(name) ?? []), game]);
+  }
+  return [...groups].map(([name, games]) => ({ name, games }));
 }
 
 const noScore: SeriesScore = { played: 0, left: 0, right: 0, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
@@ -248,13 +285,12 @@ export function scheduleForGame(list: MatchList, game: ScheduledGame, previous: 
 }
 
 /**
- * What Next match does with a match list. In a best-of game the set just played is recorded with the series score on
- * the board (the score carries from set to set; a set that ends on time adds nothing). Then:
- * - back to back: an open series goes on with the same teams;
- * - taking turns (the default): the next open series in the stage that has played the fewest games, in schedule
- *   order, so every series plays game 1, then those still open play game 2, and so on;
- * - otherwise the next game in the list after the stage, skipping breaks. A series already decided is skipped.
- * Without a current game in this list, it starts at the first game.
+ * What Next match does with a match list. A best-of game's set is recorded with the series score on the board (the
+ * score carries from set to set; a set that ends on time adds nothing). Then, within the game's turn group (see
+ * turnGroupMap), the open game that has had the fewest turns goes next, in schedule order: every member plays its set
+ * 1, then set 2 of those still open, then any overtimes, then one-on-ones. On its own, a series plays on to its end.
+ * Once the group is done, the list carries on from where the group started, skipping games already played. Without a
+ * current game in this list, it starts at the first game.
  */
 export function planNextMatch(schedule: ManualSchedule | null, list: MatchList, leftScore: number, rightScore: number): NextMatchPlan {
   const inList = schedule?.listId === list.id ? schedule : null;
@@ -262,68 +298,72 @@ export function planNextMatch(schedule: ManualSchedule | null, list: MatchList, 
   const currentGame = current >= 0 ? list.games[current] : null;
   let series = inList?.series ?? {};
 
-  // The game's Best of as the list says now, so a change made on the Matches page mid-series counts.
-  if (inList && currentGame && currentGame.bestOf > 1) {
-    const before = series[currentGame.id] ?? noScore;
-    let score: SeriesScore;
-    if (before.tiebreak && before.tiebreakFrom) {
-      // A tie-break is won by whoever scored since it started; still level, overtime becomes a one-on-one, and
-      // one-on-ones go on until someone scores. The score on the board is the series score either way.
-      const level = leftScore - before.tiebreakFrom.left === rightScore - before.tiebreakFrom.right;
-      score = level
-        ? {
-            ...before,
-            left: leftScore,
-            right: rightScore,
-            tiebreak: "oneOnOne",
-            tiebreakFrom: { left: leftScore, right: rightScore },
-            tiebreaksPlayed: (before.tiebreaksPlayed ?? 0) + 1
-          }
-        : { ...before, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null };
-    } else {
-      // The board shows the series score, carried from set to set, so it is the score after this set.
-      score = { played: before.played + 1, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
-      // Every set played and still level: overtime, with the same teams (straight away back to back; in turn otherwise).
-      if (score.played >= currentGame.bestOf && score.left === score.right) {
-        score = { ...score, tiebreak: "overtime", tiebreakFrom: { left: leftScore, right: rightScore } };
-      }
-    }
-    series = { ...series, [currentGame.id]: score };
-    const group = seriesGroup(currentGame);
-    const pointer = (game: ScheduledGame) => scheduleForGame(list, game, { ...inList, series });
-    // The same series again: its tie-break, or its next set.
-    const sameSeries = (): NextMatchPlan =>
-      score.tiebreak && score.tiebreakFrom
-        ? { kind: "tiebreak", game: currentGame, schedule: pointer(currentGame), tiebreak: score.tiebreak, from: score.tiebreakFrom }
-        : { kind: "series", game: currentGame, schedule: pointer(currentGame) };
+  const groups = turnGroupMap(list);
+  const groupOf = (game: ScheduledGame) => groups.get(game.id) ?? null;
+  let resumeAfter = current;
 
-    if (seriesOrderOf(list, group) === "backToBack") {
-      if (!seriesDecided(score, currentGame.bestOf)) return sameSeries();
-    } else {
-      // Every open series in the stage gets its next turn before any has another: sets first, then overtimes, then
-      // one-on-ones, each round in schedule order.
-      const open = list.games
-        .filter((game) => game.kind === "game" && game.bestOf > 1 && seriesGroup(game) === group)
-        .filter((game) => !seriesDecided(series[game.id] ?? noScore, game.bestOf));
+  // The game's Best of as the list says now, so a change made on the Matches page mid-series counts.
+  if (inList && currentGame && currentGame.kind === "game") {
+    const group = groupOf(currentGame);
+    const team = group ? list.games.filter((game) => groupOf(game) === group) : [currentGame];
+    // A single game is only recorded when it takes turns, so the group knows it has had its go.
+    if (currentGame.bestOf > 1 || team.length > 1) {
+      const before = series[currentGame.id] ?? noScore;
+      let score: SeriesScore;
+      if (before.tiebreak && before.tiebreakFrom) {
+        // A tie-break is won by whoever scored since it started; still level, overtime becomes a one-on-one, and
+        // one-on-ones go on until someone scores. The score on the board is the series score either way.
+        const level = leftScore - before.tiebreakFrom.left === rightScore - before.tiebreakFrom.right;
+        score = level
+          ? {
+              ...before,
+              left: leftScore,
+              right: rightScore,
+              tiebreak: "oneOnOne",
+              tiebreakFrom: { left: leftScore, right: rightScore },
+              tiebreaksPlayed: (before.tiebreaksPlayed ?? 0) + 1
+            }
+          : { ...before, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null };
+      } else {
+        // The board shows the series score, carried from set to set, so it is the score after this set.
+        score = { played: before.played + 1, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
+        // Every set of a best-of played and still level: overtime, with the same teams, when its turn comes.
+        if (currentGame.bestOf > 1 && score.played >= currentGame.bestOf && score.left === score.right) {
+          score = { ...score, tiebreak: "overtime", tiebreakFrom: { left: leftScore, right: rightScore } };
+        }
+      }
+      series = { ...series, [currentGame.id]: score };
+      const pointer = (game: ScheduledGame) => scheduleForGame(list, game, { ...inList, series });
+
+      // Every open game in the group gets its next turn before any has another: sets first, then overtimes, then
+      // one-on-ones, each round in schedule order. On its own, a series simply plays on (back to back).
+      const open = team.filter((game) => !seriesDecided(series[game.id] ?? noScore, game.bestOf));
       const fewest = Math.min(...open.map((game) => turnsTaken(series[game.id] ?? noScore)));
-      const next = open.find((game) => turnsTaken(series[game.id] ?? noScore) === fewest);
-      if (next) return next.id === currentGame.id ? sameSeries() : { kind: "game", game: next, schedule: pointer(next) };
+      // Back to back, the group plays its games one after another, each to its end, in schedule order.
+      const next =
+        group && isBackToBack(list, group)
+          ? (open.find((game) => game.id === currentGame.id) ?? open[0])
+          : open.find((game) => turnsTaken(series[game.id] ?? noScore) === fewest);
+      if (next && next.id === currentGame.id) {
+        return score.tiebreak && score.tiebreakFrom
+          ? { kind: "tiebreak", game: currentGame, schedule: pointer(currentGame), tiebreak: score.tiebreak, from: score.tiebreakFrom }
+          : { kind: "series", game: currentGame, schedule: pointer(currentGame) };
+      }
+      if (next) return { kind: "game", game: next, schedule: pointer(next) };
+      // The group is done: carry on from where it started, so games the schedule puts between its members (another
+      // division's 3rd place game between this one's 3rd place and final) are played, not skipped.
+      if (team.length > 1) resumeAfter = list.games.indexOf(team[0]);
     }
   }
 
-  // Past the current game, or past its whole stage when taking turns; a removed current row carries on after its
-  // game number rather than starting the list again.
-  const groupEnd =
-    currentGame && currentGame.bestOf > 1 && seriesOrderOf(list, seriesGroup(currentGame)) === "turns"
-      ? Math.max(...list.games.map((game, index) => (game.bestOf > 1 && game.kind === "game" && seriesGroup(game) === seriesGroup(currentGame) ? index : -1)))
-      : current;
+  // A removed current row carries on after its game number rather than starting the list again.
   const after =
     current >= 0
-      ? (_game: ScheduledGame, index: number) => index > groupEnd
+      ? (_game: ScheduledGame, index: number) => index > resumeAfter
       : inList?.gameId != null
         ? (game: ScheduledGame) => game.gameId !== null && game.gameId > inList.gameId!
         : () => true;
-  const isDone = (game: ScheduledGame) => game.bestOf > 1 && seriesDecided(series[game.id] ?? noScore, game.bestOf);
+  const isDone = (game: ScheduledGame) => game.id === currentGame?.id || (series[game.id] ? seriesDecided(series[game.id], game.bestOf) : false);
   const next = list.games.find((game, index) => game.kind === "game" && after(game, index) && !isDone(game));
   return next ? { kind: "game", game: next, schedule: scheduleForGame(list, next, inList ? { ...inList, series } : null) } : { kind: "end" };
 }
