@@ -50,6 +50,7 @@ import { analyzeVisibleContent, removeImageBackground } from "./imageProcessing.
 import type { BackupPreview } from "../shared/backup.js";
 import { defaultScoreboardState, type ScoreboardState } from "../shared/scoreboard.js";
 import { defaultManualMatchState, type ManualMatchState } from "../shared/manualMatch.js";
+import { defaultMatchListsState, matchListsStateSchema, type MatchListsState } from "../shared/matchList.js";
 import { runtimeBuild } from "./buildInfo.js";
 import { dataDir, isPathInside, uploadsDir } from "./runtimePaths.js";
 import { assetVersion } from "../shared/assetVersion.js";
@@ -65,7 +66,8 @@ const defaultOperationsState: OperationsState = {
   overrides: [],
   operatorTextOverrides: [],
   scoreboard: { ...defaultScoreboardState },
-  manualMatch: defaultManualMatchState
+  manualMatch: defaultManualMatchState,
+  matchLists: defaultMatchListsState
 };
 
 type StoredAssetRecord = StoredAsset & { filePath: string };
@@ -573,6 +575,16 @@ export function saveManualMatchState(next: ManualMatchState): ManualMatchState {
   const operations = getOperationsState();
   writeOperationsState({ ...operations, manualMatch: next });
   return getOperationsState().manualMatch;
+}
+
+export function getMatchListsState(): MatchListsState {
+  return getOperationsState().matchLists;
+}
+
+export function saveMatchListsState(next: MatchListsState): MatchListsState {
+  const operations = getOperationsState();
+  writeOperationsState({ ...operations, matchLists: matchListsStateSchema.parse(next) });
+  return getOperationsState().matchLists;
 }
 
 export function getOperatorTextState(): OperatorTextState {

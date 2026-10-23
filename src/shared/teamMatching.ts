@@ -110,12 +110,17 @@ export function listExplicitTeamMatchNames(team: TeamRecord): string[] {
   return [...names];
 }
 
-function buildCandidates(inputName: string, teams: TeamRecord[]): Candidate[] {
+type MatchOptions = {
+  /** Also consider switched-off teams, e.g. to suggest one from an earlier event. */
+  includeInactive?: boolean;
+};
+
+function buildCandidates(inputName: string, teams: TeamRecord[], options: MatchOptions = {}): Candidate[] {
   const normalizedInput = normalizeTeamName(inputName);
   const compactInput = compactName(normalizedInput);
 
   return teams
-    .filter((team) => team.active)
+    .filter((team) => team.active || options.includeInactive)
     .flatMap((team) =>
       generateTeamAliases(team).map((alias) => {
         const normalizedAlias = normalizeTeamName(alias);
@@ -144,7 +149,7 @@ function buildCandidates(inputName: string, teams: TeamRecord[]): Candidate[] {
     );
 }
 
-export function matchTeamName(inputName: string, teams: TeamRecord[]): TeamMatchResult {
+export function matchTeamName(inputName: string, teams: TeamRecord[], options: MatchOptions = {}): TeamMatchResult {
   const normalizedInput = normalizeTeamName(inputName);
   if (!normalizedInput) {
     return teamMatchResultSchema.parse({
@@ -160,7 +165,7 @@ export function matchTeamName(inputName: string, teams: TeamRecord[]): TeamMatch
   }
 
   const rankedByTeam = new Map<string, Candidate>();
-  for (const candidate of buildCandidates(inputName, teams)) {
+  for (const candidate of buildCandidates(inputName, teams, options)) {
     const existing = rankedByTeam.get(candidate.team.id);
     if (!existing || candidate.confidence > existing.confidence) {
       rankedByTeam.set(candidate.team.id, candidate);

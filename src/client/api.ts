@@ -24,6 +24,7 @@ import type { OverlayReport, OverlayState } from "../shared/overlayHealth";
 import type { RehearsalStatus } from "../shared/rehearsal";
 import type { ScoreboardState } from "../shared/scoreboard";
 import type { ManualMatchAction, ManualMatchView } from "../shared/manualMatch";
+import type { MatchList, MatchListsState, ParsedSchedule, ScheduledGame, TeamMappingRequest } from "../shared/matchList";
 import type { AiProviderId, AiSettingsUpdate, AiSettingsView, ThemeEditRequest, ThemeEditResponse } from "../shared/aiAssistant";
 import { REMOTE_ACCESS_CONFIRMATIONS, type LocalRemoteAccessStatus, type RemoteAccessStatus } from "../shared/remoteAccess";
 
@@ -131,6 +132,39 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ visible })
     }).then(handle<ScoreboardState>),
+  getMatchLists: () => fetch("/api/match-lists").then(handle<MatchListsState>),
+  /** Reads a schedule PDF on the server; nothing is saved until the list is created. */
+  importSchedulePdf: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch("/api/match-lists/import", { method: "POST", body: form }).then(handle<ParsedSchedule & { sourceFileName: string }>);
+  },
+  createMatchList: (body: { name: string; sourceFileName?: string | null; games: ScheduledGame[] }) =>
+    fetch("/api/match-lists", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(handle<MatchList>),
+  updateMatchList: (list: Pick<MatchList, "id" | "name" | "games" | "seriesOrder">) =>
+    fetch(`/api/match-lists/${encodeURIComponent(list.id)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: list.name, games: list.games, seriesOrder: list.seriesOrder })
+    }).then(handle<MatchList>),
+  deleteMatchList: (id: string) => fetch(`/api/match-lists/${encodeURIComponent(id)}`, { method: "DELETE" }).then(handle<void>),
+  setActiveMatchList: (listId: string | null) =>
+    fetch("/api/match-lists/active", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ listId })
+    }).then(handle<MatchListsState>),
+  /** Links, creates or keeps as text one printed team name across the whole list. */
+  mapMatchListTeam: (listId: string, request: TeamMappingRequest) =>
+    fetch(`/api/match-lists/${encodeURIComponent(listId)}/team-mapping`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }).then(handle<MatchList>),
   getManualMatch: (signal?: AbortSignal) => fetch("/api/manual", { signal }).then(handle<ManualMatchView>),
   /** One manual scoring action: a score, a clock, a break, an event or Undo. */
   manualAction: (action: ManualMatchAction) =>

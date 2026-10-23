@@ -38,7 +38,8 @@ const shared = {
   assetLibrary: sharedLoader("assetLibrary", api.getAssetLibrary),
   backups: sharedLoader("backups", api.getBackups),
   remoteAccess: sharedLoader("remoteAccess", api.getRemoteAccessStatus),
-  teams: sharedLoader("teams", api.getTeams)
+  teams: sharedLoader("teams", api.getTeams),
+  matchLists: sharedLoader("matchLists", api.getMatchLists)
 };
 
 export function useSettings() {
@@ -168,6 +169,11 @@ export function useRemoteAccessStatus() {
 
 export function useTeams() {
   return useResource(shared.teams, [], { domain: "teams", refreshOnEvents: true });
+}
+
+/** The match lists and which one manual scoring follows. */
+export function useMatchLists() {
+  return useResource(shared.matchLists, [], { domain: "matchLists", refreshOnEvents: true });
 }
 
 export function useLiveState(poll = true, pollIntervalMs = defaultSettings.pollIntervalMs) {

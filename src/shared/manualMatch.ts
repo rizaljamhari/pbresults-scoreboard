@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { manualScheduleSchema } from "./matchList.js";
 
 /**
  * Manual scoring: the operator runs the match by hand when an event has no PBResults feed. The server keeps this
@@ -42,6 +43,8 @@ export const manualMatchCoreSchema = z.object({
   gameClock: manualClockSchema.default({ remainingMs: 600_000, runningSince: null }),
   breakClock: manualClockSchema.default({ remainingMs: 0, runningSince: null }),
   teamEvent: manualTeamEventSchema.nullable().default(null),
+  /** The match list game being played, when Next match follows a list. */
+  schedule: manualScheduleSchema.nullable().default(null),
   updatedAt: z.string().nullable().default(null)
 });
 
@@ -80,7 +83,10 @@ export const manualMatchActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("resetBreakClock") }),
   z.object({ type: z.literal("finishMatch") }),
   z.object({ type: z.literal("teamEvent"), kind: z.enum(["towel", "base"]), side }),
+  /** Follows the active match list when there is one: the next game of a series, or the next game in the list. */
   z.object({ type: z.literal("nextMatch") }),
+  /** Jumps to one game of a match list: its teams, a fresh score and clock. */
+  z.object({ type: z.literal("loadScheduledGame"), listId: z.string().min(1), gameKey: z.string().min(1) }),
   z.object({ type: z.literal("undo") })
 ]);
 

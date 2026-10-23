@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AssetsPage } from "./pages/AssetsPage";
 import { MaintenancePage } from "./pages/MaintenancePage";
+import { MatchesPage } from "./pages/MatchesPage";
 import { OverlayPage } from "./pages/OverlayPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -21,6 +22,7 @@ export function App() {
         <Route path="admin/maintenance" element={<MaintenancePage />} />
         <Route path="admin/teams" element={<TeamsPage />} />
         <Route path="admin/teams/:id" element={<TeamsPage />} />
+        <Route path="admin/matches" element={<MatchesPage />} />
         <Route path="admin/assets" element={<AssetsPage />} />
         <Route path="admin/assets/:id" element={<AssetsPage />} />
         <Route path="admin/themes" element={<ThemesPage />} />

@@ -176,6 +176,144 @@ describe("manual match actions", () => {
   });
 });
 
+describe("match lists", () => {
+  const side = (label: string, teamId: string | null = null) => ({ label, teamId, name: "" });
+  const scheduled = (id: string, gameId: number, home: ReturnType<typeof side>, away: ReturnType<typeof side>, bestOf: 1 | 3 = 1) => ({
+    id,
+    gameId,
+    time: "",
+    minutes: 5,
+    division: "",
+    stage: "",
+    kind: "game" as const,
+    home,
+    away,
+    bestOf,
+    notes: ""
+  });
+  const matchLists = {
+    activeListId: "day1",
+    lists: [
+      {
+        id: "day1",
+        name: "Day 1",
+        sourceFileName: null,
+        createdAt: "",
+        updatedAt: "",
+        games: [
+          scheduled("g1", 1, side("Kuda", "kuda"), side("KOVRA UD")),
+          scheduled("g2", 2, side("Sausage", "saus"), side("Kuda", "kuda")),
+          scheduled("q1", 63, side("Rank 1"), side("Kuda", "kuda"), 3)
+        ]
+      }
+    ]
+  };
+  const play = (actions: Array<ManualMatchAction>, start: ManualMatchState = defaultManualMatchState) =>
+    actions.reduce((state, action) => applyManualAction(state, action, T0, settings, matchLists), start);
+
+  it("next match loads the list's games in order, with the game number as the round", () => {
+    const first = play([{ type: "nextMatch" }]);
+    // An unmapped team still shows by its printed name.
+    expect(first).toMatchObject({ round: 1, left: { teamId: "kuda" }, right: { teamId: null, name: "KOVRA UD" }, schedule: { gameKey: "g1" } });
+    const second = play([{ type: "adjustScore", side: "left", delta: 2 }, { type: "nextMatch" }], first);
+    expect(second).toMatchObject({ round: 2, left: { teamId: "saus", score: 0 }, right: { teamId: "kuda", score: 0 }, schedule: { gameKey: "g2" } });
+    // Undo puts the previous game back, list position included.
+    expect(play([{ type: "undo" }], second)).toMatchObject({ round: 1, left: { teamId: "kuda", score: 2 }, schedule: { gameKey: "g1" } });
+  });
+
+  it("a best-of-3 keeps its teams and its score from set to set", () => {
+    const loaded = play([{ type: "loadScheduledGame", listId: "day1", gameKey: "q1" }]);
+    // The placeholder side loads empty until its team is filled in.
+    expect(loaded).toMatchObject({ round: 63, left: { teamId: null, name: "" }, right: { teamId: "kuda" }, schedule: { bestOf: 3, seriesGame: 1 } });
+    const set2 = play([{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }], loaded);
+    // The score carries into set 2; only the clock starts again.
+    expect(set2).toMatchObject({ round: 63, right: { teamId: "kuda", score: 1 }, gameClock: { remainingMs: 600_000 }, schedule: { seriesGame: 2 } });
+    expect(set2.history.at(-1)?.label).toBe("Set 2 of 3");
+    const done = play([{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }], set2);
+    // 0–2 with one set left is over; it was the last game in the list, so the teams stay and the round moves on.
+    expect(done).toMatchObject({ round: 64, right: { teamId: "kuda", score: 0 } });
+  });
+
+  it("a series level after its last set goes to overtime keeping its score, with the overtime clock", () => {
+    const tiebreakSettings = { ...settings, manualOvertimeClockSeconds: 120, manualOneOnOneClockSeconds: 45 };
+    const step = (state: ManualMatchState, actions: ManualMatchAction[]) =>
+      actions.reduce((current, action) => applyManualAction(current, action, T0, tiebreakSettings, matchLists), state);
+    let state = step(defaultManualMatchState, [{ type: "loadScheduledGame", listId: "day1", gameKey: "q1" }]);
+    state = step(state, [{ type: "adjustScore", side: "left", delta: 1 }, { type: "nextMatch" }]); // set 1: 1–0
+    state = step(state, [{ type: "nextMatch" }]); // set 2 ends on time: still 1–0
+    expect(state).toMatchObject({ left: { score: 1 }, right: { score: 0 }, schedule: { seriesGame: 3 } });
+    state = step(state, [{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }]); // set 3: 1–1
+    expect(state).toMatchObject({
+      round: 63,
+      left: { score: 1 },
+      right: { teamId: "kuda", score: 1 },
+      gameClock: { remainingMs: 120_000, runningSince: null },
+      schedule: { tiebreak: "overtime" }
+    });
+    expect(state.history.at(-1)?.label).toBe("Overtime");
+    state = step(state, [{ type: "nextMatch" }]);
+    expect(state).toMatchObject({ left: { score: 1 }, right: { score: 1 }, gameClock: { remainingMs: 45_000 }, schedule: { tiebreak: "oneOnOne" } });
+  });
+
+  it("every set starts with a full clock, never the time left from the set before", () => {
+    const lists = (seriesOrder: Record<string, "turns" | "backToBack">) => ({
+      ...matchLists,
+      lists: [
+        {
+          ...matchLists.lists[0],
+          seriesOrder,
+          games: [
+            { ...scheduled("q1", 63, side("Kuda", "kuda"), side("Sausage", "saus"), 3), stage: "Quarter 1" },
+            { ...scheduled("q2", 64, side("Sausage", "saus"), side("Kuda", "kuda"), 3), stage: "Quarter 2" }
+          ]
+        }
+      ]
+    });
+    const clockSettings = { ...settings, manualOvertimeClockSeconds: 180, manualOneOnOneClockSeconds: 60 };
+    // Plays a set with the clock running for 3:20, a point, the set finished, then Next match.
+    const playSet = (state: ManualMatchState, list: typeof matchLists, at: number, left: number, right: number) => {
+      let next = applyManualAction(state, { type: "startGameClock" }, at, clockSettings, list);
+      if (left) next = applyManualAction(next, { type: "adjustScore", side: "left", delta: left }, at + 200_000, clockSettings, list);
+      if (right) next = applyManualAction(next, { type: "adjustScore", side: "right", delta: right }, at + 200_000, clockSettings, list);
+      if (!left && !right) next = applyManualAction(next, { type: "stopGameClock" }, at + 200_000, clockSettings, list);
+      next = applyManualAction(next, { type: "finishMatch" }, at + 200_000, clockSettings, list);
+      return applyManualAction(next, { type: "nextMatch" }, at + 210_000, clockSettings, list);
+    };
+    const fullClock = { remainingMs: 600_000, runningSince: null };
+
+    for (const order of ["turns", "backToBack"] as const) {
+      const list = lists({ quarter: order });
+      let state = applyManualAction(defaultManualMatchState, { type: "loadScheduledGame", listId: "day1", gameKey: "q1" }, T0, clockSettings, list);
+      expect(state.gameClock).toEqual(fullClock);
+      state = playSet(state, list, T0, 1, 0);
+      expect(state.gameClock, `${order}: set after a set`).toEqual(fullClock);
+      state = playSet(state, list, T0 + 300_000, 0, 1);
+      expect(state.gameClock, `${order}: next set`).toEqual(fullClock);
+    }
+
+    // Overtime and one-on-one start from their own full lengths too.
+    const list = lists({ quarter: "backToBack" });
+    let state = applyManualAction(defaultManualMatchState, { type: "loadScheduledGame", listId: "day1", gameKey: "q1" }, T0, clockSettings, list);
+    state = playSet(state, list, T0, 1, 0);
+    state = playSet(state, list, T0 + 300_000, 0, 1);
+    state = playSet(state, list, T0 + 600_000, 0, 0);
+    expect(state).toMatchObject({ schedule: { tiebreak: "overtime" }, gameClock: { remainingMs: 180_000, runningSince: null } });
+    state = playSet(state, list, T0 + 900_000, 0, 0);
+    expect(state).toMatchObject({ schedule: { tiebreak: "oneOnOne" }, gameClock: { remainingMs: 60_000, runningSince: null } });
+    state = playSet(state, list, T0 + 1_200_000, 0, 0);
+    expect(state).toMatchObject({ schedule: { tiebreak: "oneOnOne" }, gameClock: { remainingMs: 60_000, runningSince: null } });
+  });
+
+  it("without an active list, next match works as before", () => {
+    const state = applyManualAction(defaultManualMatchState, { type: "nextMatch" }, T0, settings, { ...matchLists, activeListId: null });
+    expect(state).toMatchObject({ round: 2, schedule: null });
+  });
+
+  it("refuses a game that is not in the list", () => {
+    expect(() => play([{ type: "loadScheduledGame", listId: "day1", gameKey: "nope" }])).toThrow(ManualActionError);
+  });
+});
+
 describe("chained actions", () => {
   it("a point stops the game clock; taking one back does not", () => {
     const scored = run([

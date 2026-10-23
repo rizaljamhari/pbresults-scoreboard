@@ -4,6 +4,7 @@ import { defaultFill, fillTypeValues, type FillSettings } from "./fill.js";
 import { randomUuid } from "./randomId.js";
 import { scoreboardStateSchema } from "./scoreboard.js";
 import { manualMatchStateSchema } from "./manualMatch.js";
+import { matchListsStateSchema } from "./matchList.js";
 
 /** A surface's solid colour or gradient (see `./fill.ts`); solid by default, so `backgroundColor` keeps working. */
 function fillField(defaults: FillSettings = defaultFill) {
@@ -944,6 +945,9 @@ export const settingsSchema = z.object({
   manualBreakClockSeconds: z.number().int().min(1).max(5999).default(120),
   /** Manual scoring: how much one timeout adds to the break clock. */
   manualTimeoutSeconds: z.number().int().min(1).max(3600).default(60),
+  /** Manual scoring with a match list: the clock for a level best-of series' overtime, then its one-on-one. */
+  manualOvertimeClockSeconds: z.number().int().min(1).max(5999).default(180),
+  manualOneOnOneClockSeconds: z.number().int().min(1).max(5999).default(60),
   /** Manual scoring: the game clock starts by itself when a break between points reaches 0:00. */
   manualAutoStartGameClock: z.boolean().default(true),
   autoRemoveBackgroundUploads: z.boolean().default(true),
@@ -1093,7 +1097,9 @@ export const operationsStateSchema = z.preprocess(
     overrides: z.array(teamResolutionOverrideSchema).default([]),
     operatorTextOverrides: z.array(operatorTextOverrideSchema).default([]),
     scoreboard: scoreboardStateSchema.default({}),
-    manualMatch: manualMatchStateSchema.default({})
+    manualMatch: manualMatchStateSchema.default({}),
+    /** Match lists for manual scoring; kept here so backups and restores carry them. */
+    matchLists: matchListsStateSchema.default({})
   })
 );
 
@@ -1352,6 +1358,8 @@ export const defaultSettings: AppSettings = {
   manualGameClockSeconds: 600,
   manualBreakClockSeconds: 120,
   manualTimeoutSeconds: 60,
+  manualOvertimeClockSeconds: 180,
+  manualOneOnOneClockSeconds: 60,
   manualAutoStartGameClock: true,
   autoRemoveBackgroundUploads: true,
   reduceMotion: false,

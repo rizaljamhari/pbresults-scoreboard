@@ -10,8 +10,22 @@ import {
   type ManualSide
 } from "../shared/manualMatch.js";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../shared/theme.js";
+import {
+  defaultMatchListsState,
+  planNextMatch,
+  scheduleForGame,
+  seriesScoreOf,
+  sideStatus,
+  tiebreakLabel,
+  type ManualSchedule,
+  type Tiebreak,
+  type MatchListsState,
+  type ScheduledGame,
+  type ScheduledSide
+} from "../shared/matchList.js";
 
-type ManualSettings = Pick<AppSettings, "manualGameClockSeconds" | "manualBreakClockSeconds" | "manualAutoStartGameClock">;
+type ManualSettings = Pick<AppSettings, "manualGameClockSeconds" | "manualBreakClockSeconds" | "manualAutoStartGameClock"> &
+  Partial<Pick<AppSettings, "manualOvertimeClockSeconds" | "manualOneOnOneClockSeconds">>;
 
 /** How late a break's end may be noticed and still start the game clock from the moment it ended. */
 const AUTO_START_GRACE_MS = 1_000;
@@ -60,14 +74,20 @@ function core(state: ManualMatchState): ManualMatchCore {
  * Applies one operator action. Returns the next state with the previous one on the undo stack, or the same object
  * when the action changes nothing.
  */
-export function applyManualAction(state: ManualMatchState, action: ManualMatchAction, now: number, settings: ManualSettings): ManualMatchState {
+export function applyManualAction(
+  state: ManualMatchState,
+  action: ManualMatchAction,
+  now: number,
+  settings: ManualSettings,
+  matchLists: MatchListsState = defaultMatchListsState
+): ManualMatchState {
   if (action.type === "undo") {
     const previous = state.history.at(-1);
     if (!previous) throw new ManualActionError("Nothing to undo");
     return { ...previous.state, updatedAt: new Date(now).toISOString(), history: state.history.slice(0, -1) };
   }
 
-  const result = nextCore(core(state), action, now, settings);
+  const result = nextCore(core(state), action, now, settings, matchLists);
   if (!result) return state;
   return {
     ...result.next,
@@ -99,11 +119,72 @@ export function autoStartAfterBreak(state: ManualMatchState, now: number, settin
   };
 }
 
+/** A scheduled side as manual scoring holds it. A placeholder ("Rank 1") loads empty: its team is not known yet. */
+function scheduledTeam(side: ScheduledSide): ManualMatchCore["left"] {
+  const status = sideStatus(side);
+  if (status === "linked") return { teamId: side.teamId, name: "", score: 0 };
+  if (status === "text") return { teamId: null, name: side.name, score: 0 };
+  // Not mapped yet: the printed name, so the right team still shows, just without a logo.
+  if (status === "unlinked") return { teamId: null, name: side.label.trim().slice(0, 40), score: 0 };
+  return { teamId: null, name: "", score: 0 };
+}
+
+/** A new match: fresh scores and game clock; a running break carries on into its setup. */
+function freshMatch(state: ManualMatchCore, now: number, settings: ManualSettings): ManualMatchCore {
+  return {
+    ...state,
+    left: { ...state.left, score: 0 },
+    right: { ...state.right, score: 0 },
+    phase: clockRunning(state.breakClock, now) ? "break" : "idle",
+    gameClock: { remainingMs: settings.manualGameClockSeconds * 1000, runningSince: null },
+    teamEvent: null
+  };
+}
+
+function tiebreakClockMs(tiebreak: Tiebreak, settings: ManualSettings) {
+  return (tiebreak === "overtime" ? settings.manualOvertimeClockSeconds ?? 180 : settings.manualOneOnOneClockSeconds ?? 60) * 1000;
+}
+
+/**
+ * The board for a scheduled game: its running series score (0–0 for a single game or a series not started), and a
+ * full clock, the tie-break's own length during overtime or a one-on-one. Time never carries over from a set.
+ */
+function boardFor(game: ScheduledGame, schedule: ManualSchedule, settings: ManualSettings) {
+  const score = game.bestOf > 1 ? seriesScoreOf(schedule, game.id) : { left: 0, right: 0 };
+  const clockMs = schedule.tiebreak ? tiebreakClockMs(schedule.tiebreak, settings) : settings.manualGameClockSeconds * 1000;
+  return { left: score.left, right: score.right, gameClock: { remainingMs: clockMs, runningSince: null } };
+}
+
+function loadGame(state: ManualMatchCore, game: ScheduledGame, schedule: ManualSchedule, now: number, settings: ManualSettings): ManualMatchCore {
+  const board = boardFor(game, schedule, settings);
+  return {
+    ...freshMatch(state, now, settings),
+    left: { ...scheduledTeam(game.home), score: board.left },
+    right: { ...scheduledTeam(game.away), score: board.right },
+    gameClock: board.gameClock,
+    round: game.gameId ?? state.round + 1,
+    schedule
+  };
+}
+
+/** The same series goes on (its next set, or a tie-break): the teams on the board stay, as the operator may have set them. */
+function continueSeries(state: ManualMatchCore, game: ScheduledGame, schedule: ManualSchedule, now: number, settings: ManualSettings): ManualMatchCore {
+  const board = boardFor(game, schedule, settings);
+  return {
+    ...freshMatch(state, now, settings),
+    left: { ...state.left, score: board.left },
+    right: { ...state.right, score: board.right },
+    gameClock: board.gameClock,
+    schedule
+  };
+}
+
 function nextCore(
   state: ManualMatchCore,
   action: Exclude<ManualMatchAction, { type: "undo" }>,
   now: number,
-  settings: ManualSettings
+  settings: ManualSettings,
+  matchLists: MatchListsState
 ): { next: ManualMatchCore; label: string } | null {
   switch (action.type) {
     case "setTeam": {
@@ -203,20 +284,30 @@ function nextCore(
         },
         label: `${action.kind === "towel" ? "Towel" : "Base"} ${action.side}`
       };
-    case "nextMatch":
-      return {
-        next: {
-          ...state,
-          left: { ...state.left, score: 0 },
-          right: { ...state.right, score: 0 },
-          round: state.round + 1,
-          // A running break carries on into the next match's setup.
-          phase: clockRunning(state.breakClock, now) ? "break" : "idle",
-          gameClock: { remainingMs: settings.manualGameClockSeconds * 1000, runningSince: null },
-          teamEvent: null
-        },
-        label: "Next match"
-      };
+    case "nextMatch": {
+      const list = matchLists.lists.find((item) => item.id === matchLists.activeListId);
+      const plan = list ? planNextMatch(state.schedule, list, state.left.score, state.right.score) : { kind: "end" as const };
+      if (plan.kind === "tiebreak") {
+        // The score stays and the next point wins; only the clock changes.
+        return { next: continueSeries(state, plan.game, plan.schedule, now, settings), label: tiebreakLabel(plan.tiebreak) };
+      }
+      if (plan.kind === "series") {
+        return { next: continueSeries(state, plan.game, plan.schedule, now, settings), label: `Set ${plan.schedule.seriesGame} of ${plan.game.bestOf}` };
+      }
+      if (plan.kind === "game") {
+        const what = plan.schedule.tiebreak ? `${tiebreakLabel(plan.schedule.tiebreak)}: game` : "Next match: game";
+        return { next: loadGame(state, plan.game, plan.schedule, now, settings), label: `${what} ${plan.game.gameId ?? ""}`.trim() };
+      }
+      // No list, or past its last game: the teams stay and the round moves on, as without a list.
+      return { next: { ...freshMatch(state, now, settings), round: state.round + 1 }, label: "Next match" };
+    }
+    case "loadScheduledGame": {
+      const list = matchLists.lists.find((item) => item.id === action.listId);
+      const game = list?.games.find((item) => item.id === action.gameKey);
+      if (!list || !game) throw new ManualActionError("That game is no longer in the match list.");
+      if (game.kind !== "game") throw new ManualActionError("That row is a break, not a game.");
+      return { next: loadGame(state, game, scheduleForGame(list, game, state.schedule), now, settings), label: `Load game ${game.gameId ?? ""}`.trim() };
+    }
   }
 }
 
@@ -282,6 +373,8 @@ type ManualMatchEngineOptions = {
   save: (state: ManualMatchState) => ManualMatchState;
   getTeams: () => TeamRecord[];
   getSettings: () => ManualSettings;
+  /** The match lists, read on each action so Next match follows the latest edits. */
+  getMatchLists?: () => MatchListsState;
   /** The match changed without an operator action, e.g. the game clock started when a break ended. */
   onMatchChange?: (view: ManualMatchView) => void;
   now?: () => number;
@@ -347,7 +440,7 @@ export class ManualMatchEngine {
   }
 
   apply(action: ManualMatchAction): ManualMatchView {
-    const next = applyManualAction(this.state, action, this.now(), this.options.getSettings());
+    const next = applyManualAction(this.state, action, this.now(), this.options.getSettings(), this.options.getMatchLists?.());
     if (next !== this.state) this.state = this.options.save(next);
     this.teams = this.options.getTeams();
     this.tick(true);

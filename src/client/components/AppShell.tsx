@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   ArrowUpRight,
+  CalendarDays,
   CircleAlert,
   CircleCheck,
   Globe,
@@ -23,7 +24,7 @@ import {
 import { ToastViewport } from "./ToastViewport";
 import { ConfirmHost } from "../confirm";
 import { cn } from "../lib/utils";
-import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemoteAccessStatus, useRuntimeVersionWatcher, useSettings, useTeams, useThemes } from "../hooks";
+import { useAssets, useLiveState, useNow, useOverlayState, useRehearsal, useRemoteAccessStatus, useRuntimeVersionWatcher, useMatchLists, useSettings, useTeams, useThemes } from "../hooks";
 import { formatRemaining, formatRemoteConnections, formatTime } from "./RemoteAccessRows";
 import { api } from "../api";
 import { summarizeOverlays } from "../../shared/overlayHealth";
@@ -64,6 +65,7 @@ export function AppShell() {
   const settings = useSettings();
   const themes = useThemes();
   const teams = useTeams();
+  const matchLists = useMatchLists();
   const assets = useAssets();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const focusMode = /^\/admin\/themes\/[^/]+/.test(location.pathname);
@@ -115,6 +117,7 @@ export function AppShell() {
     { to: "/admin/operations", label: "Operations", icon: RadioTower, active: location.pathname === "/admin/operations" },
     { to: "/admin/themes", label: "Themes", icon: Palette, active: location.pathname.startsWith("/admin/themes"), count: themes.data?.length },
     { to: "/admin/teams", label: "Teams", icon: Shield, active: location.pathname.startsWith("/admin/teams"), count: teams.data?.length },
+    { to: "/admin/matches", label: "Matches", icon: CalendarDays, active: location.pathname === "/admin/matches", count: matchLists.data?.lists.length },
     { to: "/admin/assets", label: "Assets", icon: Images, active: location.pathname.startsWith("/admin/assets"), count: assets.data?.length },
     { to: "/admin/maintenance", label: "Maintenance", icon: Wrench, active: location.pathname === "/admin/maintenance" },
     { to: "/admin/settings", label: "Settings", icon: Settings2, active: location.pathname === "/admin/settings" }

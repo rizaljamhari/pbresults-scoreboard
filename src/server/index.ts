@@ -27,6 +27,7 @@ import {
   exportAppPackage,
   exportTeamRegistryPackage,
   exportThemePackage,
+  getMatchListsState,
   getOperationsState,
   getOperatorTextState,
   getScoreboardState,
@@ -73,6 +74,7 @@ import { scoreboardVisibilityRequestSchema } from "../shared/scoreboard.js";
 import { manualMatchActionSchema } from "../shared/manualMatch.js";
 import { ManualActionError, ManualMatchEngine } from "./manualMatch.js";
 import { registerAssetRoutes } from "./assetRoutes.js";
+import { registerMatchListRoutes } from "./matchListRoutes.js";
 import { BackupFailure, backupService } from "./backupService.js";
 import { createFileSecretStore } from "./remoteAccessSecrets.js";
 import { RemoteAccessService } from "./remoteAccessService.js";
@@ -125,6 +127,7 @@ const manualMatch = new ManualMatchEngine({
   save: saveManualMatchState,
   getTeams: listTeamRecords,
   getSettings,
+  getMatchLists: getMatchListsState,
   onMatchChange: (view) => appEventHub.publishManualMatchState(view)
 });
 const manualScoring = () => getSettings().liveSource === "manual";
@@ -289,6 +292,7 @@ function publishFullRestore() {
   appEventHub.publish("themes.changed");
   appEventHub.publish("assets.changed");
   appEventHub.publish("teams.changed");
+  appEventHub.publish("match-lists.changed");
   scheduleVisibleContentBackfill();
 }
 
@@ -933,6 +937,11 @@ app.post("/api/themes/import", async (request, reply) => {
   appEventHub.publish("assets.changed");
   scheduleVisibleContentBackfill();
   return reply.code(201).send(imported);
+});
+
+registerMatchListRoutes(app, {
+  hub: appEventHub,
+  onTeamsChanged: () => livePoller.reconfigure()
 });
 
 registerAssetRoutes(app, {
