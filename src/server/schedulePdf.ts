@@ -83,8 +83,15 @@ function joinLines(lines: string[]) {
 }
 
 function cleanNotes(text: string) {
-  // The tournament system's own notes: how the row was made, and an internal stage id.
-  const cleaned = text.replace(generatedNote, "").replace(/stage break:\s*\S+/gi, "").replace(/\s+/g, " ").trim();
+  // The tournament system's own notes: how the row was made, internal stage ids, seeding sources and repairs.
+  const cleaned = text
+    .replace(generatedNote, "")
+    .replace(/stage break:\s*\S+/gi, "")
+    .replace(/schedule stage:.*?(?=home source:|away source:|repaired by|$)/gi, "")
+    .replace(/(home|away) source:\s*\S+/gi, "")
+    .replace(/repaired by\s*\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned === "—" || cleaned === "-" ? "" : cleaned.slice(0, 200);
 }
 

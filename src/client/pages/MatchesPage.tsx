@@ -1,18 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { ArrowDown, ArrowUp, CircleAlert, Ellipsis, FileUp, Link2, Plus, Radio, Trash2, Type, UserPlus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CircleAlert, Ellipsis, FileUp, Link2, Pencil, Plus, Radio, Repeat, Trash2, Type, UserPlus, X } from "lucide-react";
 import { api } from "../api";
 import { useAssets, useMatchLists, useTeams } from "../hooks";
 import { showToast } from "../toast";
 import { confirmAction } from "../confirm";
-import { Button, Chip, Grow, IconButton, Menu, Segmented, Toolbar } from "../components/admin/kit";
+import { Button, Chip, Grow, IconButton, Menu, Segmented, Toolbar, type MenuItem } from "../components/admin/kit";
 import { TeamPicker, type TeamChoice, type TeamLogoFor } from "../components/TeamPicker";
 import {
   gameHasPlaceholder,
   isPlaceholderLabel,
   matchBestOfValues,
-  seriesGroups,
-  seriesOrderOf,
+  OWN_TURN,
+  gameTitle,
+  groupPlayOrder,
+  isBackToBack,
+  type PlayOrderStep,
+  listDivisions,
+  turnGroupMap,
+  turnGroups,
   sideStatus,
   unlinkedLabels,
   type MatchList,
@@ -184,6 +190,20 @@ function GamesTable({
   onSave: (games: ScheduledGame[]) => void;
 }) {
   const update = (id: string, patch: Partial<ScheduledGame>) => onSave(list.games.map((game) => (game.id === id ? { ...game, ...patch } : game)));
+  const divided = listDivisions(list).length > 1;
+  const groupOf = turnGroupMap(list);
+  const groupNames = turnGroups(list).map((group) => group.name);
+  const setTurns = (game: ScheduledGame, value: string) =>
+    update(game.id, { turnGroup: value === NEW_GROUP ? newGroupName(groupNames) : value === OWN_TURN_VALUE ? OWN_TURN : value });
+  /** A single game joins a group from its row menu, so the Turns column only shows where it matters. */
+  const joinItems = (game: ScheduledGame): MenuItem[] =>
+    game.kind !== "game" || game.bestOf > 1 || groupOf.get(game.id)
+      ? []
+      : [
+          ...groupNames.map((name) => ({ label: `Take turns with ${name}`, icon: <Repeat />, onSelect: () => setTurns(game, name) })),
+          { label: "Start a new turn group", icon: <Plus />, onSelect: () => setTurns(game, NEW_GROUP) },
+          { kind: "separator" as const }
+        ];
   const move = (index: number, by: number) => {
     const games = [...list.games];
     const [game] = games.splice(index, 1);
@@ -205,7 +225,8 @@ function GamesTable({
         home: { label: "", teamId: null, name: "" },
         away: { label: "", teamId: null, name: "" },
         bestOf: 1,
-        notes: ""
+        notes: "",
+        turnGroup: null
       }
     ]);
   };
@@ -220,7 +241,8 @@ function GamesTable({
             <th className="pba-col-2nd">Stage</th>
             <th>Home</th>
             <th>Away</th>
-            <th title="Games in the series: Next match keeps the same teams until one side has won the majority">Best of</th>
+            <th title="Sets in the series. The score carries from set to set; only the clock resets.">Best of</th>
+            <th title="Which turn group a best-of series is in. Single games join a group from their row menu.">Turns</th>
             <th aria-label="Row actions" />
           </tr>
         </thead>
@@ -230,7 +252,7 @@ function GamesTable({
               <tr key={game.id} className="pba-ml-break">
                 <td className="pba-num pba-faint">—</td>
                 <td>{game.time}</td>
-                <td colSpan={4} className="pba-faint">
+                <td colSpan={5} className="pba-faint">
                   {game.notes || game.stage || "Break"}
                   {game.minutes ? ` · ${game.minutes} min` : ""}
                 </td>
@@ -240,10 +262,13 @@ function GamesTable({
               </tr>
             ) : (
               <tr key={game.id} className={gameHasPlaceholder(game) ? "is-placeholder" : undefined}>
-                <td className="pba-num">{game.gameId}</td>
+                <td className="pba-num" title={`${gameTitle(game, divided)}${game.stage ? ` · ${game.stage}` : ""}`}>
+                  {divided && game.division ? <span className="pba-ml-division">{game.division.trim().slice(0, 1).toUpperCase()}</span> : null}
+                  {game.gameId}
+                </td>
                 <td>{game.time}</td>
                 <td className="pba-col-2nd pba-ml-stage" title={game.notes || undefined}>
-                  {game.stage}
+                  {divided && game.division ? `${game.division} · ${game.stage}` : game.stage}
                 </td>
                 <td>
                   <SideCell game={game} which="home" teams={teams} lookup={lookup} onChange={(home) => update(game.id, { home })} />
@@ -254,7 +279,7 @@ function GamesTable({
                 <td>
                   <select
                     className="pba-select pba-ml-bestof"
-                    aria-label={`Best of, game ${game.gameId}`}
+                    aria-label={`Best of, ${gameTitle(game, divided)}`}
                     value={game.bestOf}
                     onChange={(event) => update(game.id, { bestOf: Number(event.target.value) as ScheduledGame["bestOf"] })}
                   >
@@ -265,8 +290,36 @@ function GamesTable({
                     ))}
                   </select>
                 </td>
+                <td>
+                  {game.bestOf > 1 || groupOf.get(game.id) ? (
+                    <select
+                      className="pba-select pba-ml-turns"
+                      aria-label={`Turns, ${gameTitle(game, divided)}`}
+                      value={groupOf.get(game.id) ?? OWN_TURN_VALUE}
+                      onChange={(event) => setTurns(game, event.target.value)}
+                    >
+                      <option value={OWN_TURN_VALUE}>{game.bestOf > 1 ? "On its own (back to back)" : "On its own"}</option>
+                      {groupNames.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                      <option value={NEW_GROUP}>New turn group</option>
+                    </select>
+                  ) : (
+                    <span className="pba-faint" title="A single game plays once. To have it take turns with a group, use its row menu.">
+                      —
+                    </span>
+                  )}
+                </td>
                 <td className="pba-ml-actions">
-                  <RowMenu index={index} count={list.games.length} onMove={move} onDelete={() => onSave(list.games.filter((item) => item.id !== game.id))} />
+                  <RowMenu
+                    index={index}
+                    count={list.games.length}
+                    extra={joinItems(game)}
+                    onMove={move}
+                    onDelete={() => onSave(list.games.filter((item) => item.id !== game.id))}
+                  />
                 </td>
               </tr>
             )
@@ -283,40 +336,297 @@ function GamesTable({
   );
 }
 
-/** Per stage: whether its best-of series take turns (game 1 of each, then game 2, ...) or play back to back. */
-function SeriesOrderBar({ list, onChange }: { list: MatchList; onChange: (seriesOrder: MatchList["seriesOrder"]) => void }) {
-  const groups = seriesGroups(list);
-  if (groups.length === 0) return null;
+/** Select values that cannot be group names (those are trimmed text). */
+const OWN_TURN_VALUE = " own";
+const NEW_GROUP = " new";
+
+function newGroupName(taken: string[]) {
+  let n = 1;
+  while (taken.includes(`Group ${n}`)) n += 1;
+  return `Group ${n}`;
+}
+
+/** A game's short code for lists of games: "51", or "M51" where game numbers repeat per division. */
+function gameCode(game: ScheduledGame, divided: boolean) {
+  return divided && game.division.trim() ? `${game.division.trim().slice(0, 1).toUpperCase()}${game.gameId}` : `${game.gameId}`;
+}
+
+/**
+ * A group's play order as one line: "Sets 1–3 in turn: M45 → M46 → M47 → M48 · a decided series sits out · then
+ * overtime, then one-on-ones", or back to back "M51 to its end → R29 → M52 to its end".
+ */
+function playOrderText(order: PlayOrderStep[], backToBack: boolean, divided: boolean) {
+  const codes = (games: ScheduledGame[]) => games.map((game) => gameCode(game, divided)).join(" → ");
+  if (backToBack) {
+    return `${order.map((step) => `${codes(step.games)}${step.games[0]?.bestOf > 1 ? " to its end" : ""}`).join(" → ")} · a series still level plays its overtime, then one-on-ones, straight away`;
+  }
+  const sets = order.filter((step) => step.games.length > 0);
+  // Rounds with the same games read as one: "Sets 2–3".
+  const runs: Array<{ from: number; to: number; games: ScheduledGame[] }> = [];
+  sets.forEach((step, index) => {
+    const last = runs.at(-1);
+    if (last && codes(last.games) === codes(step.games)) last.to = index + 1;
+    else runs.push({ from: index + 1, to: index + 1, games: step.games });
+  });
+  const parts = runs.map((run) => `${run.from === run.to ? `Set ${run.from}` : `Sets ${run.from}–${run.to}`}${run.from === 1 && run.to > 1 ? " in turn" : ""}: ${codes(run.games)}`);
+  if (sets.length > 1) parts.push("a decided series sits out");
+  if (order.length > sets.length) parts.push("then overtime, then one-on-ones, for any still level");
+  return parts.join(" · ");
+}
+
+type TurnGroupChange = { games?: ScheduledGame[]; backToBackGroups?: string[] };
+
+/** Adds a game to a group: a short searchable list of the list's games not in it yet. */
+function AddGamePicker({ list, group, divided, onAdd }: { list: MatchList; group: string; divided: boolean; onAdd: (game: ScheduledGame) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const groupOf = turnGroupMap(list);
+  const wanted = query.trim().toLowerCase();
+  const candidates = list.games
+    .filter((game) => game.kind === "game" && groupOf.get(game.id) !== group)
+    .filter((game) => {
+      if (!wanted) return true;
+      const text = `${gameCode(game, divided)} ${game.division} ${game.stage} ${game.home.label} ${game.away.label}`.toLowerCase();
+      return text.includes(wanted);
+    });
   return (
-    <div className="pba-ml-subbar pba-ml-order">
-      <span className="pba-label pba-ml-order-title" title="How Next match runs each stage's best-of series">
-        Best-of series
-      </span>
-      {groups.map(({ group, label, games }) => {
-        const numbers = games.map((game) => game.gameId).filter((id): id is number => id !== null);
-        const range = numbers.length > 1 ? `games ${Math.min(...numbers)}–${Math.max(...numbers)}` : numbers.length ? `game ${numbers[0]}` : "";
-        return (
-          <span key={group} className="pba-ml-order-item">
-            <span>
-              <b>{label}</b> <span className="pba-hint">{range}</span>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
+      <Popover.Trigger asChild>
+        <Button size="sm" variant="ghost">
+          <Plus aria-hidden />
+          Add game
+        </Button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="pba-scope pba-pop pba-ml-add-game" align="start" sideOffset={6}>
+          <input
+            className="pba-input"
+            autoFocus
+            aria-label={`Find a game to add to ${group}`}
+            placeholder="Game number, stage or team"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <ul className="pba-ml-add-list" aria-label="Games">
+            {candidates.length === 0 ? (
+              <li className="pba-hint">No game matches.</li>
+            ) : (
+              candidates.map((game) => (
+                <li key={game.id}>
+                  <button
+                    type="button"
+                    className="pba-game-pick-row"
+                    onClick={() => {
+                      setOpen(false);
+                      setQuery("");
+                      onAdd(game);
+                    }}
+                  >
+                    <span className="pba-num">{gameCode(game, divided)}</span>
+                    <span className="pba-faint">{game.time}</span>
+                    <span>
+                      {game.stage}
+                      {game.bestOf > 1 ? ` · best of ${game.bestOf}` : ""}
+                    </span>
+                    <span className="pba-faint">{groupOf.get(game.id) ?? ""}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/**
+ * One turn group: its name (renamed on request), how it plays (taking turns or back to back), its games, and the order
+ * that produces, so the operator can check it before Next match runs it on air.
+ */
+function TurnGroupRow({
+  list,
+  name,
+  games,
+  divided,
+  groupNames,
+  onChange
+}: {
+  list: MatchList;
+  name: string;
+  games: ScheduledGame[];
+  divided: boolean;
+  groupNames: string[];
+  onChange: (change: TurnGroupChange) => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const groupOf = turnGroupMap(list);
+  const backToBack = isBackToBack(list, name);
+  const order = groupPlayOrder(list, name);
+
+  async function rename(to: string) {
+    setRenaming(false);
+    const next = to.trim().slice(0, 60);
+    if (!next || next === name) return;
+    const merging = groupNames.includes(next);
+    if (
+      merging &&
+      !(await confirmAction({
+        title: `Merge “${name}” into “${next}”?`,
+        message: `Both groups' games will take turns as one group, “${next}”.`,
+        confirmLabel: "Merge groups"
+      }))
+    ) {
+      return;
+    }
+    const games = list.games.map((game) => (groupOf.get(game.id) === name ? { ...game, turnGroup: next } : game));
+    const kept = list.backToBackGroups.filter((group) => group !== name);
+    // A merge keeps the target's order; a plain rename keeps this group's.
+    const backToBackGroups = !merging && backToBack ? [...kept, next] : kept;
+    onChange({ games, backToBackGroups });
+  }
+
+  const setOrder = (order: "turns" | "backToBack") =>
+    onChange({
+      backToBackGroups: order === "backToBack" ? [...list.backToBackGroups.filter((group) => group !== name), name] : list.backToBackGroups.filter((group) => group !== name)
+    });
+  const setGroup = (game: ScheduledGame, group: string) =>
+    onChange({ games: list.games.map((item) => (item.id === game.id ? { ...item, turnGroup: group } : item)) });
+
+  return (
+    <div className="pba-ml-group">
+      <div className="pba-ml-group-head">
+        {renaming ? (
+          <input
+            className="pba-input pba-ml-group-name"
+            aria-label={`New name for ${name}`}
+            autoFocus
+            value={draft}
+            maxLength={60}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => void rename(draft)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                // Without this the same keypress would land on the merge question's first button and dismiss it.
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                setDraft(name);
+                setRenaming(false);
+              }
+            }}
+          />
+        ) : (
+          <>
+            <b className="pba-ml-group-title">{name}</b>
+            <IconButton
+              label={`Rename ${name}`}
+              onClick={() => {
+                setDraft(name);
+                setRenaming(true);
+              }}
+            >
+              <Pencil />
+            </IconButton>
+          </>
+        )}
+        {games.length > 1 ? (
+          <Segmented
+            label={`How ${name} plays`}
+            value={backToBack ? "backToBack" : "turns"}
+            onChange={setOrder}
+            options={[
+              { value: "turns", label: "Take turns", title: "Set 1 of every game, then set 2 of those still open, and so on" },
+              { value: "backToBack", label: "Back to back", title: "Each game to its end, in schedule order" }
+            ]}
+          />
+        ) : (
+          <span className="pba-hint">One game: it plays to its end</span>
+        )}
+        <span className="pba-ml-group-games">
+          {games.map((game) => (
+            <span key={game.id} className="pba-chip pba-ml-member" title={`${gameTitle(game, divided)} · ${game.stage}`}>
+              {gameCode(game, divided)}
+              <button type="button" aria-label={`Take ${gameTitle(game, divided)} out of ${name}`} onClick={() => setGroup(game, OWN_TURN)}>
+                <X aria-hidden />
+              </button>
             </span>
-            <Segmented
-              label={`${label} series order`}
-              value={seriesOrderOf(list, group)}
-              onChange={(order) => onChange({ ...list.seriesOrder, [group]: order })}
-              options={[
-                { value: "turns", label: "Take turns", title: "Game 1 of every series in this stage, then game 2 of those still open, and so on" },
-                { value: "backToBack", label: "Back to back", title: "Each series is played to the end before the next one starts" }
-              ]}
-            />
-          </span>
-        );
-      })}
+          ))}
+        </span>
+        <AddGamePicker list={list} group={name} divided={divided} onAdd={(game) => setGroup(game, name)} />
+      </div>
+      <p className="pba-ml-playorder" aria-label={`Play order for ${name}`}>
+        {playOrderText(order, backToBack, divided)}
+      </p>
     </div>
   );
 }
 
-function RowMenu({ index, count, onMove, onDelete }: { index: number; count: number; onMove: (index: number, by: number) => void; onDelete: () => void }) {
+/**
+ * The turn groups. Automatic groups put best-of series of one division and stage together; the operator can rename,
+ * merge, add or take out games, and switch a group between taking turns and back to back.
+ */
+function TurnGroupsBar({ list, onChange }: { list: MatchList; onChange: (change: TurnGroupChange) => void }) {
+  const groups = turnGroups(list);
+  const divided = listDivisions(list).length > 1;
+  const customised = list.games.some((game) => game.turnGroup !== null) || list.backToBackGroups.length > 0;
+  if (groups.length === 0 && !customised) return null;
+
+  async function reset() {
+    const ok = await confirmAction({
+      title: "Go back to automatic turn groups?",
+      message: "Your groups and back-to-back choices are cleared. Best-of series of each division and stage take turns again; single games play on their own.",
+      confirmLabel: "Use automatic groups"
+    });
+    if (!ok) return;
+    onChange({ games: list.games.map((game) => ({ ...game, turnGroup: null })), backToBackGroups: [] });
+    showToast({ kind: "success", message: "Turn groups are automatic again." });
+  }
+
+  return (
+    <section className="pba-ml-groups" aria-label="Turn groups">
+      <div className="pba-ml-groups-head">
+        <span className="pba-label pba-ml-order-title">Turn groups</span>
+        <span className="pba-hint">Games in a group take turns. Set a group to Back to back, or a series on its own, to play each one to its end.</span>
+        {customised ? (
+          <Button size="sm" variant="text" className="pba-push" onClick={() => void reset()}>
+            Back to automatic groups
+          </Button>
+        ) : null}
+      </div>
+      {groups.length ? (
+        <div className="pba-ml-group-list">
+          {groups.map(({ name, games }) => (
+            <TurnGroupRow key={name} list={list} name={name} games={games} divided={divided} groupNames={groups.map((group) => group.name)} onChange={onChange} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function RowMenu({
+  index,
+  count,
+  extra = [],
+  onMove,
+  onDelete
+}: {
+  index: number;
+  count: number;
+  /** Row-specific items shown first, such as joining a turn group. */
+  extra?: MenuItem[];
+  onMove: (index: number, by: number) => void;
+  onDelete: () => void;
+}) {
   return (
     <Menu
       trigger={
@@ -325,6 +635,7 @@ function RowMenu({ index, count, onMove, onDelete }: { index: number; count: num
         </IconButton>
       }
       items={[
+        ...extra,
         { label: "Move up", icon: <ArrowUp />, disabled: index === 0, onSelect: () => onMove(index, -1) },
         { label: "Move down", icon: <ArrowDown />, disabled: index === count - 1, onSelect: () => onMove(index, 1) },
         { kind: "separator" },
@@ -539,7 +850,8 @@ function ListDetail({
   // so a slow reply never puts back an older version over a quicker second edit.
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveCount = useRef(0);
-  function save(next: Pick<MatchList, "name" | "games" | "seriesOrder">) {
+  function save(change: Partial<Pick<MatchList, "name" | "games" | "backToBackGroups">>) {
+    const next = { name: list.name, games: list.games, backToBackGroups: list.backToBackGroups, ...change };
     const mine = ++saveCount.current;
     onChange({ ...list, ...next });
     saveQueue.current = saveQueue.current.then(async () => {
@@ -556,7 +868,7 @@ function ListDetail({
   function commitName() {
     const trimmed = name.trim();
     if (!trimmed) setName(list.name);
-    else if (trimmed !== list.name) save({ name: trimmed, games: list.games, seriesOrder: list.seriesOrder });
+    else if (trimmed !== list.name) save({ name: trimmed });
   }
 
   return (
@@ -631,8 +943,8 @@ function ListDetail({
       <div className="pba-table-wrap">
         {tab === "games" ? (
           <>
-            <SeriesOrderBar list={list} onChange={(seriesOrder) => save({ name: list.name, games: list.games, seriesOrder })} />
-            <GamesTable list={list} teams={teams} lookup={lookup} onSave={(next) => save({ name: list.name, games: next, seriesOrder: list.seriesOrder })} />
+            <TurnGroupsBar list={list} onChange={(change) => save(change)} />
+            <GamesTable list={list} teams={teams} lookup={lookup} onSave={(games) => save({ games })} />
           </>
         ) : (
           <TeamMappingTable list={list} teams={teams} lookup={lookup} onMapped={onChange} />

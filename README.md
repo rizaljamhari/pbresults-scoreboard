@@ -53,7 +53,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
   - on-air scoreboard preview and browser-source URL
   - live team resolution and operator text Take controls
   - in manual scoring: teams, scores, game and break clocks, timeouts, finish, towel and base, Undo, with keyboard shortcuts
-  - with a match list in use: Next match loads the next scheduled game's teams; a best-of series keeps one running score across its sets (only the clock resets); a stage's series take turns (set 1 of each, then set 2, ...) or play back to back, set per stage; a series level after its last set goes to overtime, then a one-on-one, in turn with the stage's other series when taking turns (score kept, next point wins)
+  - with a match list in use: Next match loads the next scheduled game's teams; a best-of series keeps one running score across its sets (only the clock resets); games in a turn group take turns (set 1 of each, then set 2, ...), with groups set per game on the Matches page and best-of series grouped by division and stage by default; a series level after its last set goes to overtime, then a one-on-one, in turn with the rest of its turn group (score kept, next point wins)
   - feed, theme, and team readiness checks
 - `/admin/themes`
   - theme gallery with live previews and Put on air
@@ -62,7 +62,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
   - team registry, logos, aliases, live match names, and side-panel editing
 - `/admin/matches`
   - match lists from schedule PDFs (Malaysia Paintball Hub layout), one per day, with the one manual scoring follows
-  - link the schedule's team names to the team list, fill knockout teams, set best-of per game
+  - link the schedule's team names to the team list, fill knockout teams, set best-of and turn groups per game
 - `/admin/settings`
   - score source (PBResults feed or manual), feed address and check interval, manual clock lengths (game, break, timeout, overtime, one-on-one), branding, upload preferences (saved together)
 - `/admin/maintenance`

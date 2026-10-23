@@ -145,11 +145,11 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body)
     }).then(handle<MatchList>),
-  updateMatchList: (list: Pick<MatchList, "id" | "name" | "games" | "seriesOrder">) =>
+  updateMatchList: (list: Pick<MatchList, "id" | "name" | "games" | "backToBackGroups">) =>
     fetch(`/api/match-lists/${encodeURIComponent(list.id)}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: list.name, games: list.games, seriesOrder: list.seriesOrder })
+      body: JSON.stringify({ name: list.name, games: list.games, backToBackGroups: list.backToBackGroups })
     }).then(handle<MatchList>),
   deleteMatchList: (id: string) => fetch(`/api/match-lists/${encodeURIComponent(id)}`, { method: "DELETE" }).then(handle<void>),
   setActiveMatchList: (listId: string | null) =>
