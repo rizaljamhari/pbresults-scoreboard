@@ -5,7 +5,7 @@ import { rehearsalStatusSchema } from "./rehearsal.js";
 import { scoreboardStateSchema } from "./scoreboard.js";
 import { manualMatchViewSchema } from "./manualMatch.js";
 
-export const appResourceDomains = ["settings", "themes", "assets", "teams", "backups", "remoteAccess"] as const;
+export const appResourceDomains = ["settings", "themes", "assets", "teams", "backups", "remoteAccess", "matchLists"] as const;
 export type AppResourceDomain = (typeof appResourceDomains)[number];
 
 export const appChangedEventTypes = [
@@ -15,7 +15,8 @@ export const appChangedEventTypes = [
   "assets.changed",
   "teams.changed",
   "backups.changed",
-  "remote-access.changed"
+  "remote-access.changed",
+  "match-lists.changed"
 ] as const;
 export type AppChangedEventType = (typeof appChangedEventTypes)[number];
 
@@ -29,7 +30,8 @@ export const appEventTypeToDomain: Record<AppChangedEventType, AppResourceDomain
   "assets.changed": "assets",
   "teams.changed": "teams",
   "backups.changed": "backups",
-  "remote-access.changed": "remoteAccess"
+  "remote-access.changed": "remoteAccess",
+  "match-lists.changed": "matchLists"
 };
 
 export const appResourceRevisionsSchema = z.object({
@@ -38,7 +40,8 @@ export const appResourceRevisionsSchema = z.object({
   assets: z.number().int().nonnegative(),
   teams: z.number().int().nonnegative(),
   backups: z.number().int().nonnegative().default(0),
-  remoteAccess: z.number().int().nonnegative().default(0)
+  remoteAccess: z.number().int().nonnegative().default(0),
+  matchLists: z.number().int().nonnegative().default(0)
 });
 
 const appEventCommonSchema = z.object({
@@ -75,7 +78,8 @@ export const appChangedEventSchema = z.discriminatedUnion("type", [
   appEventCommonSchema.extend({ type: z.literal("assets.changed"), ...changedEventFields }),
   appEventCommonSchema.extend({ type: z.literal("teams.changed"), ...changedEventFields }),
   appEventCommonSchema.extend({ type: z.literal("backups.changed"), ...changedEventFields }),
-  appEventCommonSchema.extend({ type: z.literal("remote-access.changed"), ...changedEventFields })
+  appEventCommonSchema.extend({ type: z.literal("remote-access.changed"), ...changedEventFields }),
+  appEventCommonSchema.extend({ type: z.literal("match-lists.changed"), ...changedEventFields })
 ]);
 
 export const appRealtimeEventSchema = z.discriminatedUnion("type", [
@@ -132,7 +136,8 @@ export const initialAppResourceRevisions: AppResourceRevisions = {
   assets: 0,
   teams: 0,
   backups: 0,
-  remoteAccess: 0
+  remoteAccess: 0,
+  matchLists: 0
 };
 
 export function parseAppEventMessage(eventType: string, data: string): AppEvent | null {

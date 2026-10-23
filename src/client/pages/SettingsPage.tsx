@@ -50,7 +50,9 @@ export function SettingsPage() {
   const gameClockError = draft && manualDraft ? durationError(draft.manualGameClockSeconds, 5999) : null;
   const breakClockError = draft && manualDraft ? durationError(draft.manualBreakClockSeconds, 5999) : null;
   const timeoutError = draft && manualDraft ? durationError(draft.manualTimeoutSeconds, 3600) : null;
-  const fieldError = intervalError ?? gameClockError ?? breakClockError ?? timeoutError;
+  const overtimeError = draft && manualDraft ? durationError(draft.manualOvertimeClockSeconds, 5999) : null;
+  const oneOnOneError = draft && manualDraft ? durationError(draft.manualOneOnOneClockSeconds, 5999) : null;
+  const fieldError = intervalError ?? gameClockError ?? breakClockError ?? timeoutError ?? overtimeError ?? oneOnOneError;
   const canSave = hasUnsavedChanges && !saving && !fieldError;
 
   useEffect(() => {
@@ -309,6 +311,62 @@ export function SettingsPage() {
                             aria-invalid={timeoutError ? true : undefined}
                             value={Number.isNaN(draft.manualTimeoutSeconds) ? "" : draft.manualTimeoutSeconds}
                             onChange={(event) => patch({ manualTimeoutSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>s</span>
+                        </label>
+                      </SettingRow>
+                      <SettingRow
+                        title="Overtime length"
+                        htmlFor="set-manualOvertimeClockSeconds"
+                        hint={
+                          overtimeError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {overtimeError}
+                            </span>
+                          ) : (
+                            `With a match list: the clock when a best-of series is level after its last game. The score stays; the next point wins.${Number.isFinite(draft.manualOvertimeClockSeconds) ? ` Now ${formatSeconds(draft.manualOvertimeClockSeconds)}.` : ""}`
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-manualOvertimeClockSeconds"
+                            className="pba-input"
+                            type="number"
+                            min={1}
+                            max={5999}
+                            aria-invalid={overtimeError ? true : undefined}
+                            value={Number.isNaN(draft.manualOvertimeClockSeconds) ? "" : draft.manualOvertimeClockSeconds}
+                            onChange={(event) => patch({ manualOvertimeClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
+                          />
+                          <span>s</span>
+                        </label>
+                      </SettingRow>
+                      <SettingRow
+                        title="One-on-one length"
+                        htmlFor="set-manualOneOnOneClockSeconds"
+                        hint={
+                          oneOnOneError ? (
+                            <span className="pba-inline-warning" role="alert">
+                              <CircleAlert aria-hidden />
+                              {oneOnOneError}
+                            </span>
+                          ) : (
+                            `With a match list: the clock when overtime ends level. The score stays; the next point wins.${Number.isFinite(draft.manualOneOnOneClockSeconds) ? ` Now ${formatSeconds(draft.manualOneOnOneClockSeconds)}.` : ""}`
+                          )
+                        }
+                      >
+                        <label className="pba-unit">
+                          <input
+                            id="set-manualOneOnOneClockSeconds"
+                            className="pba-input"
+                            type="number"
+                            min={1}
+                            max={5999}
+                            aria-invalid={oneOnOneError ? true : undefined}
+                            value={Number.isNaN(draft.manualOneOnOneClockSeconds) ? "" : draft.manualOneOnOneClockSeconds}
+                            onChange={(event) => patch({ manualOneOnOneClockSeconds: event.target.value === "" ? Number.NaN : Number(event.target.value) })}
                           />
                           <span>s</span>
                         </label>

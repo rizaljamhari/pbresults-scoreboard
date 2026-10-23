@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
-import { ChevronDown, Flag, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
+import { ChevronDown, CircleAlert, Flag, ListOrdered, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type { ManualClock, ManualMatchAction, ManualMatchView, ManualSide } from "../../shared/manualMatch";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../../shared/theme";
 import { ApiError, api } from "../api";
 import { confirmAction, modalPromptOpen } from "../confirm";
-import { useManualMatch, useNow } from "../hooks";
+import { useManualMatch, useMatchLists, useNow } from "../hooks";
 import { showToast } from "../toast";
 import { Button, Chip, Dot, Segmented, Switch } from "../components/admin/kit";
 import { isTypingTarget, manualActionConfirmation, manualShortcutAction, parseClockInput } from "./manualShortcuts";
-import { searchTeams } from "./teamSearch";
+import { TeamPicker } from "../components/TeamPicker";
+import {
+  gameTitle,
+  planNextMatch,
+  sideStatus,
+  seriesDecided,
+  seriesScoreOf,
+  tiebreakLabel,
+  type MatchList,
+  type NextMatchPlan,
+  type ScheduledGame,
+  type ScheduledSide,
+  type SeriesScore
+} from "../../shared/matchList";
 import { controlAllowed, controlForAction, guidedBlockMessage, manualMoment, type ManualControl, type ManualControlMode } from "./manualGuide";
 
 /** Team name slots in themes are sized for the 8 characters the PBResults tablet sends. */
@@ -71,95 +84,174 @@ function clockRunning(clock: ManualClock, now: number) {
   return Boolean(clock.runningSince) && remainingSeconds(clock, now) > 0;
 }
 
-/** Finds a registry team, or takes the typed name as it is. */
-function ManualTeamPicker({
-  side,
-  teams,
-  logoFor,
-  onChoose
-}: {
-  side: ManualSide;
-  teams: TeamRecord[];
-  logoFor: (team: Pick<TeamRecord, "logoAssetId" | "alternateLogoAssetId"> | null | undefined) => string | undefined;
-  onChoose: (choice: { teamId: string } | { name: string }) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [highlight, setHighlight] = useState(0);
-  const typed = query.trim();
-  const results = useMemo(() => searchTeams(teams, query, 6), [teams, query]);
-  const options = [
-    ...results.map((result) => ({ key: result.team.id, label: result.team.canonicalName, tag: result.via ? `as ${result.via}` : null, team: result.team as TeamRecord | null })),
-    ...(typed ? [{ key: "__typed", label: `Use “${typed}” as typed`, tag: "no logo", team: null }] : [])
-  ];
-  const listId = `manual-picker-${side}`;
+/** A scheduled side in words: its team, its typed name, or what the schedule printed. */
+function scheduledSideName(side: ScheduledSide, teams: TeamRecord[]) {
+  if (side.teamId) return teams.find((team) => team.id === side.teamId)?.canonicalName ?? side.label;
+  return side.name || side.label || "?";
+}
 
-  function choose(index: number) {
-    const option = options[index];
-    if (!option) return;
-    onChoose(option.team ? { teamId: option.team.id } : { name: typed });
+function gameTeams(game: ScheduledGame, teams: TeamRecord[]) {
+  return `${scheduledSideName(game.home, teams)} vs ${scheduledSideName(game.away, teams)}`;
+}
+
+/** A best-of game's series so far, for the game list: "set 2 · 1–0", "done 1–0", or nothing before it starts. */
+function seriesNote(game: ScheduledGame, series: Record<string, SeriesScore>) {
+  const score = series[game.id];
+  if (game.bestOf <= 1 || !score?.played) return "";
+  const board = `${score.left}–${score.right}`;
+  if (score.tiebreak) return `${tiebreakLabel(score.tiebreak).toLowerCase()} ${board}`;
+  return seriesDecided(score, game.bestOf) ? `done ${board}` : `set ${score.played + 1} · ${board}`;
+}
+
+/** Sides Next match cannot fill properly: a seeding reference ("Rank 1") or a name not linked to the team list. */
+function gameGaps(game: ScheduledGame, teams: TeamRecord[]) {
+  const known = new Set(teams.map((team) => team.id));
+  const statuses = [sideStatus(game.home, known), sideStatus(game.away, known)];
+  return { placeholder: statuses.includes("placeholder"), unlinked: statuses.includes("unlinked") };
+}
+
+/** What Next match will do, for its question and the schedule strip. */
+function describePlan(plan: NextMatchPlan, teams: TeamRecord[], settings: Pick<AppSettings, "manualOvertimeClockSeconds" | "manualOneOnOneClockSeconds">) {
+  if (plan.kind === "tiebreak") {
+    const label = tiebreakLabel(plan.tiebreak);
+    const seconds = plan.tiebreak === "overtime" ? settings.manualOvertimeClockSeconds : settings.manualOneOnOneClockSeconds;
+    const level = `${plan.from.left}–${plan.from.right}`;
+    return {
+      // Worked out from the score now, so it reads as what happens if the game ends like this.
+      short: `if it ends ${level}, ${label.toLowerCase()} (next point wins)`,
+      message: `${plan.tiebreak === "overtime" ? "The series is level." : "Overtime ended level."} ${label} with the same teams: the score stays at ${level} and the next point wins the series. The clock is set to ${formatClock(seconds)}.`
+    };
   }
+  if (plan.kind === "series") {
+    const { left, right } = seriesScoreOf(plan.schedule, plan.game.id);
+    const set = `set ${plan.schedule.seriesGame} of ${plan.game.bestOf}`;
+    return {
+      short: `${set[0].toUpperCase()}${set.slice(1)}, same teams, score stays ${left}–${right}`,
+      message: `Starts ${set} with the same teams. The score stays at ${left}–${right}; the game clock resets.`
+    };
+  }
+  if (plan.kind === "game") {
+    const { seriesGame } = plan.schedule;
+    const { left, right } = seriesScoreOf(plan.schedule, plan.game.id);
+    const seriesText =
+      plan.game.bestOf <= 1
+        ? ""
+        : plan.schedule.tiebreak
+          ? ` (${tiebreakLabel(plan.schedule.tiebreak).toLowerCase()}, score stays ${left}–${right}, next point wins)`
+          : ` (set ${seriesGame} of ${plan.game.bestOf}${seriesGame > 1 ? `, score ${left}–${right}` : ""})`;
+    const teamsText = gameTeams(plan.game, teams);
+    const gaps = gameGaps(plan.game, teams);
+    const warning = gaps.placeholder
+      ? ` ${gameTitle(plan.game)} teams aren't set yet; fill them on the Matches page.`
+      : gaps.unlinked
+        ? " A team isn't linked to the team list, so it shows without a logo."
+        : "";
+    return {
+      short: `${gameTitle(plan.game)}${seriesText}: ${teamsText}`,
+      message: `Loads ${gameTitle(plan.game).toLowerCase()}${seriesText}: ${teamsText}.${warning}`
+    };
+  }
+  return { short: "End of the list", message: "That was the last game in the list. Scores go back to 0, the round moves on and the teams stay." };
+}
+
+/** Where manual scoring is in the match list it follows, what Next match does, and a way to jump to any game. */
+function ScheduleStrip({
+  list,
+  view,
+  teams,
+  settings,
+  disabled,
+  onLoad
+}: {
+  list: MatchList;
+  view: ManualMatchView;
+  teams: TeamRecord[];
+  settings: AppSettings;
+  disabled: boolean;
+  onLoad: (game: ScheduledGame) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const schedule = view.schedule?.listId === list.id ? view.schedule : null;
+  const current = schedule ? list.games.find((game) => game.id === schedule.gameKey) ?? null : null;
+  const plan = planNextMatch(schedule, list, view.left.score, view.right.score);
+  const next = describePlan(plan, teams, settings);
+  const nextGaps = plan.kind === "game" ? gameGaps(plan.game, teams) : null;
+  const games = list.games.filter((game) => game.kind === "game");
 
   return (
-    <div className="pba-picker">
-      <input
-        className="pba-input"
-        role="combobox"
-        aria-expanded={options.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-label={`Team for the ${side} side`}
-        aria-activedescendant={options[highlight] ? `${listId}-${options[highlight].key}` : undefined}
-        autoComplete="off"
-        autoFocus
-        placeholder="Search teams or type a name"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setHighlight(0);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" && options.length) {
-            event.preventDefault();
-            setHighlight((current) => (current + 1) % options.length);
-          } else if (event.key === "ArrowUp" && options.length) {
-            event.preventDefault();
-            setHighlight((current) => (current - 1 + options.length) % options.length);
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            choose(highlight);
-          }
-        }}
-      />
-      <ul id={listId} role="listbox" className="pba-picker-list" aria-label="Teams">
-        {options.length === 0 ? (
-          <li className="pba-picker-empty">Type to search the team registry, or to use a name that is not in it.</li>
+    <div className="pba-manual-schedule" aria-label="Match list">
+      <div className="pba-manual-schedule-line">
+        <ListOrdered className="pba-faint" aria-hidden size={15} />
+        <b className="pba-manual-schedule-name" title={list.name}>
+          {list.name}
+        </b>
+        {current ? (
+          <span>
+            {gameTitle(current)}
+            {current.time ? ` · ${current.time}` : ""}
+            {current.stage ? ` · ${current.stage}` : ""}
+            {schedule && current.bestOf > 1
+              ? schedule.tiebreak
+                ? ` · ${tiebreakLabel(schedule.tiebreak)}`
+                : ` · set ${schedule.seriesGame} of ${current.bestOf}`
+              : ""}
+          </span>
         ) : (
-          options.map((option, index) => {
-            const logo = option.team ? logoFor(option.team) : undefined;
-            return (
-              <li
-                key={option.key}
-                id={`${listId}-${option.key}`}
-                role="option"
-                aria-selected={index === highlight}
-                className="pba-picker-option"
-                onMouseEnter={() => setHighlight(index)}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  choose(index);
-                }}
-              >
-                <span className="pba-picker-logo">{logo ? <img src={logo} alt="" /> : null}</span>
-                <span className="pba-picker-name">{option.label}</span>
-                {option.tag ? <span className="pba-picker-tag">{option.tag}</span> : null}
-              </li>
-            );
-          })
+          <span className="pba-muted">Not started: choose the first game</span>
         )}
-      </ul>
-      {typed.length > NAME_FIT && !results.length ? (
-        <p className="pba-hint">Longer than {NAME_FIT} characters: it may not fit the theme's name slot.</p>
-      ) : null}
+      </div>
+      <div className="pba-manual-schedule-line">
+        <span className="pba-muted pba-manual-schedule-next">Next match: {next.short}</span>
+        {nextGaps?.placeholder || nextGaps?.unlinked ? (
+          <CircleAlert className="pba-ml-warn" aria-label={nextGaps.placeholder ? "Teams not set yet" : "A team is not linked"} />
+        ) : null}
+        <span className="pba-push" />
+        <Popover.Root open={open} onOpenChange={setOpen}>
+          <Popover.Trigger asChild>
+            <Button size="sm" variant="ghost" disabled={disabled || games.length === 0}>
+              Choose game
+              <ChevronDown aria-hidden />
+            </Button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              className="pba-scope pba-pop pba-game-pick"
+              align="end"
+              sideOffset={6}
+              aria-label="Games"
+              onOpenAutoFocus={(event) => {
+                // Open at the game being played (or the first one), not always at the top of a 70-game list.
+                const row = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('[aria-current="true"]');
+                if (!row) return;
+                event.preventDefault();
+                row.focus();
+                row.scrollIntoView({ block: "center" });
+              }}
+            >
+              {games.map((game) => (
+                <button
+                  key={game.id}
+                  type="button"
+                  className="pba-game-pick-row"
+                  aria-current={game.id === current?.id ? "true" : undefined}
+                  onClick={() => {
+                    setOpen(false);
+                    onLoad(game);
+                  }}
+                >
+                  <span className="pba-num">{game.gameId}</span>
+                  <span className="pba-faint">{game.time}</span>
+                  <span title={gameTeams(game, teams)}>{gameTeams(game, teams)}</span>
+                  <span className="pba-faint">{seriesNote(game, view.schedule?.listId === list.id ? view.schedule.series : {})}</span>
+                </button>
+              ))}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+        <Link className="pba-btn pba-btn--text pba-btn--sm" to="/admin/matches">
+          Edit list
+        </Link>
+      </div>
     </div>
   );
 }
@@ -208,10 +300,14 @@ function ManualTeamSide({
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content className="pba-scope pba-pop pba-picker-pop" align="end" sideOffset={6}>
-              <ManualTeamPicker
-                side={side}
+              <TeamPicker
+                id={side}
+                label={`Team for the ${side} side`}
                 teams={teams}
                 logoFor={logoFor}
+                footer={(typed, hasResults) =>
+                  typed.length > NAME_FIT && !hasResults ? <p className="pba-hint">Longer than {NAME_FIT} characters: it may not fit the theme's name slot.</p> : null
+                }
                 onChoose={(choice) => {
                   setOpen(false);
                   onAction("teamId" in choice ? { type: "setTeam", side, teamId: choice.teamId, name: "" } : { type: "setTeam", side, teamId: null, name: choice.name });
@@ -374,6 +470,8 @@ export function ManualMatchPanel({
 }) {
   const manual = useManualMatch();
   const view = manual.data;
+  const matchLists = useMatchLists();
+  const activeList = matchLists.data?.lists.find((list) => list.id === matchLists.data?.activeListId) ?? null;
   const now = useNow(250);
   const disabled = rehearsing || !view;
   // Actions go out one at a time, in the order pressed, so a quick double tap scores twice and never out of order.
@@ -449,12 +547,24 @@ export function ManualMatchPanel({
   }, []);
 
   async function nextMatch() {
+    const plan = activeList && view ? planNextMatch(view.schedule, activeList, view.left.score, view.right.score) : null;
     const ok = await confirmAction({
       title: "Start the next match?",
-      message: "Scores go back to 0, the round moves on and the game clock resets. The teams stay until you change them.",
+      message: plan
+        ? `${describePlan(plan, teams, settings).message}${plan.kind === "tiebreak" || plan.kind === "series" ? "" : " The game clock resets."}`
+        : "Scores go back to 0, the round moves on and the game clock resets. The teams stay until you change them.",
       confirmLabel: "Next match"
     });
     if (ok) void run({ type: "nextMatch" });
+  }
+
+  async function loadGame(list: MatchList, game: ScheduledGame) {
+    const ok = await confirmAction({
+      title: `Load ${gameTitle(game).toLowerCase()}?`,
+      message: `${gameTeams(game, teams)}. Scores go back to 0 and the game clock resets.`,
+      confirmLabel: `Load ${gameTitle(game).toLowerCase()}`
+    });
+    if (ok) void run({ type: "loadScheduledGame", listId: list.id, gameKey: game.id });
   }
 
   // A mid-match call (points starting late), so it is switchable here as well as in Settings. Same shared setting.
@@ -511,6 +621,8 @@ export function ManualMatchPanel({
           {phase ? `Match ${phase.label.toLowerCase()}` : ""}
         </span>
         {view ? <span className="pba-hint pba-manual-round">Round {view.round}</span> : null}
+        {/* A tie-break changes what a point means (it wins the series), so it is called out beside the phase. */}
+        {view?.schedule?.tiebreak ? <Chip tone="warning">{tiebreakLabel(view.schedule.tiebreak)}: next point wins</Chip> : null}
         <Segmented
           label="Panel controls"
           className="pba-push"
@@ -539,6 +651,9 @@ export function ManualMatchPanel({
         <p className="pba-hint pba-section">Loading the match…</p>
       ) : (
         <>
+          {activeList ? (
+            <ScheduleStrip list={activeList} view={view} teams={teams} settings={settings} disabled={disabled} onLoad={(game) => void loadGame(activeList, game)} />
+          ) : null}
           <div className="pba-resolve">
             <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />
             <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />

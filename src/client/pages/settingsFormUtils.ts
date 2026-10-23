@@ -8,6 +8,8 @@ export const settingsFormFields = [
   "manualGameClockSeconds",
   "manualBreakClockSeconds",
   "manualTimeoutSeconds",
+  "manualOvertimeClockSeconds",
+  "manualOneOnOneClockSeconds",
   "manualAutoStartGameClock",
   "autoRemoveBackgroundUploads",
   "brandName",

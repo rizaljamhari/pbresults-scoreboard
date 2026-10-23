@@ -53,14 +53,18 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
   - on-air scoreboard preview and browser-source URL
   - live team resolution and operator text Take controls
   - in manual scoring: teams, scores, game and break clocks, timeouts, finish, towel and base, Undo, with keyboard shortcuts
+  - with a match list in use: Next match loads the next scheduled game's teams; a best-of series keeps one running score across its sets (only the clock resets); a stage's series take turns (set 1 of each, then set 2, ...) or play back to back, set per stage; a series level after its last set goes to overtime, then a one-on-one, in turn with the stage's other series when taking turns (score kept, next point wins)
   - feed, theme, and team readiness checks
 - `/admin/themes`
   - theme gallery with live previews and Put on air
   - full-window theme editor with Properties, Layers, and Preview as controls
 - `/admin/teams`
   - team registry, logos, aliases, live match names, and side-panel editing
+- `/admin/matches`
+  - match lists from schedule PDFs (Malaysia Paintball Hub layout), one per day, with the one manual scoring follows
+  - link the schedule's team names to the team list, fill knockout teams, set best-of per game
 - `/admin/settings`
-  - score source (PBResults feed or manual), feed address and check interval, manual clock lengths, branding, upload preferences (saved together)
+  - score source (PBResults feed or manual), feed address and check interval, manual clock lengths (game, break, timeout, overtime, one-on-one), branding, upload preferences (saved together)
 - `/admin/maintenance`
   - backup and restore, software updates, remote access (each action applies right away)
 - `/overlay/live`
