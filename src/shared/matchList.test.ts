@@ -4,9 +4,11 @@ import {
   isPlaceholderLabel,
   planNextMatch,
   scheduleForGame,
-  seriesGroups,
+  OWN_TURN,
+  groupPlayOrder,
   seriesScoreOf,
   sideStatus,
+  turnGroups,
   unlinkedLabels,
   type ManualSchedule,
   type MatchList,
@@ -25,7 +27,8 @@ function game(id: string, gameId: number | null, home: string, away: string, bes
     home: { label: home, teamId: null, name: "" },
     away: { label: away, teamId: null, name: "" },
     bestOf,
-    notes: ""
+    notes: "",
+    turnGroup: null
   };
 }
 
@@ -33,7 +36,7 @@ const list: MatchList = {
   id: "day1",
   name: "Day 1",
   sourceFileName: null,
-  seriesOrder: {},
+  backToBackGroups: [],
   createdAt: "",
   updatedAt: "",
   games: [game("g1", 1, "KOVRA UD", "K INTIKAM"), game("b1", null, "Break", ""), game("g2", 2, "Loco Legion", "EJPC JR"), game("q1", 63, "Rank 1", "Rank 8", 3)]
@@ -225,8 +228,10 @@ describe("planNextMatch", () => {
   it("back to back, a tie-break follows its series straight away", () => {
     const semis: MatchList = {
       ...list,
-      seriesOrder: { semi: "backToBack" },
-      games: [{ ...game("s1", 67, "W1", "W2", 3), stage: "Semi 1" }, { ...game("s2", 68, "W3", "W4", 3), stage: "Semi 2" }]
+      games: [
+        { ...game("s1", 67, "W1", "W2", 3), stage: "Semi 1", turnGroup: OWN_TURN },
+        { ...game("s2", 68, "W3", "W4", 3), stage: "Semi 2", turnGroup: OWN_TURN }
+      ]
     };
     let schedule: ManualSchedule = scheduleForGame(semis, semis.games[0]);
     for (const [left, right] of [[1, 0], [1, 0]] as Array<[number, number]>) {
@@ -249,8 +254,8 @@ describe("planNextMatch", () => {
     expect(seriesScoreOf(backToThird.schedule, "f")).toMatchObject({ left: 0, right: 1 });
   });
 
-  it("plays a series back to back when the stage is set that way", () => {
-    const backToBack = { ...knockout, seriesOrder: { quarter: "backToBack" as const } };
+  it("plays a series back to back when it has its own turn", () => {
+    const backToBack = { ...knockout, games: knockout.games.map((item) => (item.id.startsWith("q") ? { ...item, turnGroup: OWN_TURN } : item)) };
     const { loaded } = playThrough(backToBack, [
       [1, 0], // p1
       [1, 0], // q1 set 1
@@ -280,8 +285,7 @@ describe("planNextMatch", () => {
     const pointer = scheduleForGame(list, list.games[2]);
     const bestOfThree = {
       ...list,
-      seriesOrder: { prelim: "backToBack" as const },
-      games: list.games.map((item) => (item.id === "g2" ? { ...item, bestOf: 3 as const } : item))
+      games: list.games.map((item) => (item.id === "g2" ? { ...item, bestOf: 3 as const, turnGroup: OWN_TURN } : item))
     };
     expect(planNextMatch(pointer, bestOfThree, 1, 0)).toMatchObject({ kind: "series", schedule: { bestOf: 3, seriesGame: 2 } });
   });
@@ -290,11 +294,77 @@ describe("planNextMatch", () => {
     expect(planNextMatch(scheduleForGame(list, list.games[3], null), { ...list, games: list.games.slice(0, 3) }, 0, 0)).toEqual({ kind: "end" });
   });
 
-  it("names the series groups", () => {
-    expect(seriesGroups(knockout).map((group) => [group.group, group.label, group.games.length])).toEqual([
-      ["quarter", "Quarter", 3],
-      ["semi", "Semi", 1],
-      ["finals", "3rd place & Final", 2]
+  it("names the automatic turn groups", () => {
+    expect(turnGroups(knockout).map((group) => [group.name, group.games.length])).toEqual([
+      ["Quarter", 3],
+      ["Semi", 1],
+      ["3rd place & Final", 2]
     ]);
   });
+
+  // Sunday's end of day: two divisions, game numbers repeating per division.
+  const twoDivisions: MatchList = {
+    ...list,
+    games: [
+      { ...game("m51", 51, "L1", "L2", 3), division: "Mechanical", stage: "3rd Place" },
+      { ...game("r29", 29, "L1", "L2"), division: "Rookie", stage: "3rd Place" },
+      { ...game("m52", 52, "W1", "W2", 3), division: "Mechanical", stage: "Final" },
+      { ...game("r30", 30, "W1", "W2"), division: "Rookie", stage: "Final" }
+    ]
+  };
+  function walk(target: MatchList) {
+    let schedule: ManualSchedule = scheduleForGame(target, target.games[0]);
+    const order = [`${schedule.gameKey} ${schedule.seriesGame}`];
+    for (let step = 0; step < 12; step += 1) {
+      // Left wins every set, so a best-of-3 is over after two.
+      const plan = planNextMatch(schedule, target, seriesScoreOf(schedule, schedule.gameKey).left + 1, 0);
+      if (plan.kind === "end") break;
+      schedule = plan.schedule;
+      order.push(`${schedule.gameKey} ${schedule.seriesGame}`);
+    }
+    return order;
+  }
+
+  it("groups by division, and plays a game the schedule puts between a group's members", () => {
+    expect(turnGroups(twoDivisions).map((group) => group.name)).toEqual(["Mechanical 3rd place & Final"]);
+    expect(walk(twoDivisions)).toEqual(["m51 1", "m52 1", "m51 2", "m52 2", "r29 1", "r30 1"]);
+  });
+
+  it("lets any game join a group: a single game takes its turn in the first round", () => {
+    const together = { ...twoDivisions, games: twoDivisions.games.map((item) => (item.id === "r29" ? { ...item, turnGroup: "Mechanical 3rd place & Final" } : item)) };
+    expect(walk(together)).toEqual(["m51 1", "r29 1", "m52 1", "m51 2", "m52 2", "r30 1"]);
+  });
+
+  it("a group set to back to back plays each game to its end, in schedule order", () => {
+    const group = "Mechanical 3rd place & Final";
+    const together = {
+      ...twoDivisions,
+      backToBackGroups: [group],
+      games: twoDivisions.games.map((item) => (item.id === "r29" ? { ...item, turnGroup: group } : item))
+    };
+    expect(walk(together)).toEqual(["m51 1", "m51 2", "r29 1", "m52 1", "m52 2", "r30 1"]);
+  });
+
+  it("describes a group's play order before it runs", () => {
+    const group = "Mechanical 3rd place & Final";
+    const withRookie = { ...twoDivisions, games: twoDivisions.games.map((item) => (item.id === "r29" ? { ...item, turnGroup: group } : item)) };
+    const ids = (steps: ReturnType<typeof groupPlayOrder>) => steps.map((step) => [step.label, step.games.map((item) => item.id)]);
+    expect(ids(groupPlayOrder(withRookie, group))).toEqual([
+      ["Set 1", ["m51", "r29", "m52"]],
+      ["Set 2, series still open", ["m51", "m52"]],
+      ["Set 3, series still open", ["m51", "m52"]],
+      ["Then, for a series still level: overtime, then one-on-ones", []]
+    ]);
+    expect(ids(groupPlayOrder({ ...withRookie, backToBackGroups: [group] }, group))).toEqual([
+      ["up to 3 sets, then its tie-break if level", ["m51"]],
+      ["one game", ["r29"]],
+      ["up to 3 sets, then its tie-break if level", ["m52"]]
+    ]);
+  });
+
+  it("plays in printed order when every game has its own turn", () => {
+    const printed = { ...twoDivisions, games: twoDivisions.games.map((item) => ({ ...item, turnGroup: OWN_TURN })) };
+    expect(walk(printed)).toEqual(["m51 1", "m51 2", "r29 1", "m52 1", "m52 2", "r30 1"]);
+  });
+
 });

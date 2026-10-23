@@ -3940,7 +3940,7 @@ tr[aria-selected="true"] .pba-row-open {
 
 .pba-ml-side-btn {
   display: flex;
-  max-width: 210px;
+  max-width: 160px;
   margin-left: -6px;
   padding: 3px 6px;
   border-radius: 7px;
@@ -4113,4 +4113,126 @@ tr[aria-selected="true"] .pba-row-open {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.pba-ml-turns {
+  width: 150px;
+}
+
+/* The games table keeps Home, Away, Best of and Turns in view at 1280px; the stage moves to the game number's tooltip. */
+@container (max-width: 1000px) {
+  .pba-ml-table .pba-col-2nd {
+    display: none;
+  }
+}
+
+.pba-ml-group-name {
+  width: 260px;
+  font-weight: 600;
+}
+
+/* The division's initial before a game number, where numbers repeat per division. */
+.pba-ml-division {
+  margin-right: 4px;
+  color: var(--ad-faint);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Turn groups: one row per group, its order switch and games, then the play order it produces. */
+.pba-ml-groups {
+  padding: 10px 20px 12px;
+  border-bottom: 1px solid var(--ad-line);
+}
+
+.pba-ml-groups-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+
+.pba-ml-group-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pba-ml-group {
+  padding: 8px 10px;
+  border: 1px solid var(--ad-line);
+  border-radius: 8px;
+  background: var(--ad-field);
+}
+
+.pba-ml-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.pba-ml-group-title {
+  font-weight: 650;
+}
+
+.pba-ml-group-head > .pba-icon-btn {
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+}
+
+.pba-ml-group-games {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pba-ml-member {
+  gap: 2px;
+  padding-right: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pba-ml-member button {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--ad-faint);
+}
+
+.pba-ml-member button:hover {
+  background: var(--ad-line-strong);
+  color: var(--ad-text);
+}
+
+.pba-ml-member button svg.lucide {
+  width: 11px;
+  height: 11px;
+}
+
+.pba-ml-playorder {
+  margin-top: 6px;
+  color: var(--ad-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pba-ml-add-game {
+  width: 380px;
+  padding: 8px;
+}
+
+.pba-ml-add-list {
+  max-height: 300px;
+  padding: 0;
+  list-style: none;
+  margin-top: 6px;
+  overflow: auto;
+}
+
+.pba-ml-add-list .pba-game-pick-row {
+  grid-template-columns: 40px 44px minmax(0, 1fr) auto;
 }

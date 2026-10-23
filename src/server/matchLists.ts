@@ -88,14 +88,14 @@ export function createMatchList(input: { name: string; sourceFileName?: string |
   return list;
 }
 
-export function updateMatchList(id: string, input: { name: string; games: ScheduledGame[]; seriesOrder?: MatchList["seriesOrder"] }): MatchList {
+export function updateMatchList(id: string, input: { name: string; games: ScheduledGame[]; backToBackGroups?: string[] }): MatchList {
   const state = getMatchListsState();
   const current = requireList(state, id);
   const list = matchListSchema.parse({
     ...current,
     name: input.name,
     games: input.games,
-    seriesOrder: input.seriesOrder ?? current.seriesOrder,
+    backToBackGroups: input.backToBackGroups ?? current.backToBackGroups,
     updatedAt: new Date().toISOString()
   });
   saveMatchListsState(replaceList(state, list));

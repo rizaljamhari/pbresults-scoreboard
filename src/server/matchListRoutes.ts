@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { AppChangedEventType } from "../shared/appEvents.js";
-import { scheduledGameSchema, seriesOrderValues, teamMappingRequestSchema } from "../shared/matchList.js";
+import { scheduledGameSchema, teamMappingRequestSchema } from "../shared/matchList.js";
 import { MatchListError, applyTeamMapping, createMatchList, deleteMatchList, setActiveMatchList, updateMatchList } from "./matchLists.js";
 import { SchedulePdfError, parseSchedulePdf } from "./schedulePdf.js";
 import { getMatchListsState } from "./storage.js";
@@ -16,7 +16,7 @@ const listBodySchema = z.object({
   name: z.string().trim().min(1).max(80),
   sourceFileName: z.string().max(200).nullable().optional(),
   games: z.array(scheduledGameSchema).max(500),
-  seriesOrder: z.record(z.enum(seriesOrderValues)).optional()
+  backToBackGroups: z.array(z.string().max(60)).max(100).optional()
 });
 
 function sendError(reply: FastifyReply, error: unknown) {

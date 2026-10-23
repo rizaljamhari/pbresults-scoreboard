@@ -14,6 +14,8 @@ import {
   defaultMatchListsState,
   planNextMatch,
   scheduleForGame,
+  gameTitle,
+  listDivisions,
   seriesScoreOf,
   sideStatus,
   tiebreakLabel,
@@ -295,8 +297,10 @@ function nextCore(
         return { next: continueSeries(state, plan.game, plan.schedule, now, settings), label: `Set ${plan.schedule.seriesGame} of ${plan.game.bestOf}` };
       }
       if (plan.kind === "game") {
-        const what = plan.schedule.tiebreak ? `${tiebreakLabel(plan.schedule.tiebreak)}: game` : "Next match: game";
-        return { next: loadGame(state, plan.game, plan.schedule, now, settings), label: `${what} ${plan.game.gameId ?? ""}`.trim() };
+        // Game numbers repeat per division, so the label names the division when the list has more than one.
+        const title = gameTitle(plan.game, listDivisions(list!).length > 1).replace(/^Game /, "game ");
+        const what = plan.schedule.tiebreak ? tiebreakLabel(plan.schedule.tiebreak) : "Next match";
+        return { next: loadGame(state, plan.game, plan.schedule, now, settings), label: `${what}: ${title}` };
       }
       // No list, or past its last game: the teams stay and the round moves on, as without a list.
       return { next: { ...freshMatch(state, now, settings), round: state.round + 1 }, label: "Next match" };
@@ -306,7 +310,7 @@ function nextCore(
       const game = list?.games.find((item) => item.id === action.gameKey);
       if (!list || !game) throw new ManualActionError("That game is no longer in the match list.");
       if (game.kind !== "game") throw new ManualActionError("That row is a break, not a game.");
-      return { next: loadGame(state, game, scheduleForGame(list, game, state.schedule), now, settings), label: `Load game ${game.gameId ?? ""}`.trim() };
+      return { next: loadGame(state, game, scheduleForGame(list, game, state.schedule), now, settings), label: `Load ${gameTitle(game, listDivisions(list).length > 1).replace(/^Game /, "game ")}` };
     }
   }
 }
