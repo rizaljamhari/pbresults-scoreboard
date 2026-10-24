@@ -4236,3 +4236,16 @@ tr[aria-selected="true"] .pba-row-open {
 .pba-ml-add-list .pba-game-pick-row {
   grid-template-columns: 40px 44px minmax(0, 1fr) auto;
 }
+
+/* Manual scoring: which team is home on each side, since best-of series switch ends between sets. */
+.pba-manual-home-tag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ad-hover);
+  color: var(--ad-muted);
+  font-size: 11px;
+  font-weight: 550;
+  text-transform: none;
+  letter-spacing: 0;
+}

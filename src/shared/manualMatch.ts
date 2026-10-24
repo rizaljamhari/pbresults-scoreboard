@@ -38,6 +38,11 @@ export const manualMatchCoreSchema = z.object({
   left: manualTeamSchema.default({}),
   right: manualTeamSchema.default({}),
   round: z.number().int().min(0).default(1),
+  /**
+   * The teams have changed ends: the home team is on the right. Left and right always mean the sides as seen, so scores
+   * and towel or base calls follow the team that is there; this tells the overlay which of them is home.
+   */
+  sidesSwitched: z.boolean().default(false),
   /** `finished` is a match that ended; a break can run after it, as PBResults does between matches. */
   phase: z.enum(["idle", "game", "break", "finished"]).default("idle"),
   gameClock: manualClockSchema.default({ remainingMs: 600_000, runningSince: null }),
@@ -85,6 +90,8 @@ export const manualMatchActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("teamEvent"), kind: z.enum(["towel", "base"]), side }),
   /** Follows the active match list when there is one: the next game of a series, or the next game in the list. */
   z.object({ type: z.literal("nextMatch") }),
+  /** The teams change ends: they swap sides on the board with their scores. Automatic in a best-of after a set with a point. */
+  z.object({ type: z.literal("switchSides") }),
   /** Jumps to one game of a match list: its teams, a fresh score and clock. */
   z.object({ type: z.literal("loadScheduledGame"), listId: z.string().min(1), gameKey: z.string().min(1) }),
   z.object({ type: z.literal("undo") })

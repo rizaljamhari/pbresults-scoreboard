@@ -6,6 +6,8 @@ import {
   scheduleForGame,
   OWN_TURN,
   groupPlayOrder,
+  manualScheduleSchema,
+  withSeriesSwitched,
   seriesScoreOf,
   sideStatus,
   turnGroups,
@@ -66,6 +68,21 @@ describe("match list helpers", () => {
     expect(unlinkedLabels(mapped)).toEqual(["KOVRA UD", "K INTIKAM", "Loco Legion", "EJPC JR"]);
     expect(sideStatus({ label: "Rank 1", teamId: null, name: "" })).toBe("placeholder");
     expect(sideStatus({ label: "3Q", teamId: null, name: "3Q" })).toBe("text");
+  });
+});
+
+describe("saved series from before sides could switch", () => {
+  it("reads left and right as home and away, tie-break start included", () => {
+    const old = { played: 3, left: 1, right: 1, tiebreak: "overtime", tiebreakFrom: { left: 1, right: 1 }, tiebreaksPlayed: 0 };
+    expect(manualScheduleSchema.parse({ listId: "l", gameKey: "g", gameId: 1, series: { g: old } }).series.g).toEqual({
+      played: 3,
+      home: 1,
+      away: 1,
+      switched: false,
+      tiebreak: "overtime",
+      tiebreakFrom: { home: 1, away: 1 },
+      tiebreaksPlayed: 0
+    });
   });
 });
 
@@ -151,7 +168,7 @@ describe("planNextMatch", () => {
     ]);
     expect(plans.map((plan) => plan.kind)).toEqual(["series", "series", "game"]);
     expect(plans[0]).toMatchObject({ schedule: { seriesGame: 2 } });
-    expect(seriesScoreOf(schedule, "s1")).toMatchObject({ played: 3, left: 1, right: 0, tiebreak: null });
+    expect(seriesScoreOf(schedule, "s1")).toMatchObject({ played: 3, home: 1, away: 0, tiebreak: null });
   });
 
   it("1–0, a set on time, then 1–1: overtime, then a one-on-one, keeping the score", () => {
@@ -162,10 +179,27 @@ describe("planNextMatch", () => {
       [1, 1], // nobody scores in overtime
       [1, 2] // right scores in the one-on-one
     ]);
-    expect(plans[2]).toMatchObject({ kind: "tiebreak", tiebreak: "overtime", from: { left: 1, right: 1 }, schedule: { tiebreak: "overtime", seriesGame: 3 } });
-    expect(plans[3]).toMatchObject({ kind: "tiebreak", tiebreak: "oneOnOne", from: { left: 1, right: 1 } });
+    expect(plans[2]).toMatchObject({ kind: "tiebreak", tiebreak: "overtime", from: { home: 1, away: 1 }, schedule: { tiebreak: "overtime", seriesGame: 3 } });
+    expect(plans[3]).toMatchObject({ kind: "tiebreak", tiebreak: "oneOnOne", from: { home: 1, away: 1 } });
     expect(plans[4]).toMatchObject({ kind: "game", game: { id: "n" } });
-    expect(seriesScoreOf(schedule, "s1")).toMatchObject({ left: 1, right: 2, tiebreak: null });
+    expect(seriesScoreOf(schedule, "s1")).toMatchObject({ home: 1, away: 2, tiebreak: null });
+  });
+
+  it("switches a series' sides after a set with a point, and keeps them after a set on time", () => {
+    const { plans } = playSeries([
+      [1, 0], // a point: switch
+      [1, 0], // on time: stay
+      [1, 1], // a point: switch, and the series is level
+      [2, 1] // overtime point: decided
+    ]);
+    const switched = plans.slice(0, 3).map((plan) => (plan.kind === "end" ? null : seriesScoreOf(plan.schedule, "s1").switched));
+    expect(switched).toEqual([true, true, false]);
+    expect(plans[2]).toMatchObject({ kind: "tiebreak", tiebreak: "overtime" });
+  });
+
+  it("records a switch by hand on the current game, even one loaded as a single game", () => {
+    const loadedAsSingle = scheduleForGame(list, list.games[0]);
+    expect(withSeriesSwitched(loadedAsSingle, true).series.g1).toMatchObject({ switched: true, played: 0, home: 0, away: 0 });
   });
 
   it("ends a series early only when the trailing side cannot catch up", () => {
@@ -222,7 +256,7 @@ describe("planNextMatch", () => {
     }
     expect(order).toEqual(["s2 set 1", "s1 set 2", "s2 set 2", "s1 set 3", "s2 set 3", "s1 overtime", "s2 overtime", "s1 oneOnOne", "s2 oneOnOne"]);
     // A tie-break loaded from another series keeps that series' level score.
-    expect(seriesScoreOf(schedule, "s2")).toMatchObject({ left: 1, right: 1, tiebreak: "oneOnOne" });
+    expect(seriesScoreOf(schedule, "s2")).toMatchObject({ home: 1, away: 1, tiebreak: "oneOnOne" });
   });
 
   it("back to back, a tie-break follows its series straight away", () => {
@@ -250,8 +284,8 @@ describe("planNextMatch", () => {
     const backToThird = planNextMatch(afterThird.schedule, knockout, 0, 1);
     expect(backToThird).toMatchObject({ kind: "game", game: { id: "t" }, schedule: { seriesGame: 2 } });
     if (backToThird.kind === "end") throw new Error("expected a game");
-    expect(seriesScoreOf(backToThird.schedule, "t")).toMatchObject({ left: 1, right: 0 });
-    expect(seriesScoreOf(backToThird.schedule, "f")).toMatchObject({ left: 0, right: 1 });
+    expect(seriesScoreOf(backToThird.schedule, "t")).toMatchObject({ home: 1, away: 0 });
+    expect(seriesScoreOf(backToThird.schedule, "f")).toMatchObject({ home: 0, away: 1 });
   });
 
   it("plays a series back to back when it has its own turn", () => {
@@ -269,7 +303,7 @@ describe("planNextMatch", () => {
   it("a set that ends on time adds nothing, but counts as played", () => {
     const start = scheduleForGame(knockout, knockout.games[1]);
     const plan = planNextMatch(start, knockout, 0, 0);
-    expect(plan.kind !== "end" && seriesScoreOf(plan.schedule, "q1")).toMatchObject({ played: 1, left: 0, right: 0 });
+    expect(plan.kind !== "end" && seriesScoreOf(plan.schedule, "q1")).toMatchObject({ played: 1, home: 0, away: 0 });
   });
 
   it("keeps series scores when jumping to another game", () => {
@@ -278,7 +312,7 @@ describe("planNextMatch", () => {
     if (after.kind === "end") throw new Error("expected a game");
     const back = scheduleForGame(knockout, knockout.games[1], after.schedule);
     expect(back.seriesGame).toBe(2);
-    expect(seriesScoreOf(back, "q1")).toMatchObject({ left: 1, right: 0 });
+    expect(seriesScoreOf(back, "q1")).toMatchObject({ home: 1, away: 0 });
   });
 
   it("uses the game's best-of as the list says now", () => {
@@ -317,7 +351,7 @@ describe("planNextMatch", () => {
     const order = [`${schedule.gameKey} ${schedule.seriesGame}`];
     for (let step = 0; step < 12; step += 1) {
       // Left wins every set, so a best-of-3 is over after two.
-      const plan = planNextMatch(schedule, target, seriesScoreOf(schedule, schedule.gameKey).left + 1, 0);
+      const plan = planNextMatch(schedule, target, seriesScoreOf(schedule, schedule.gameKey).home + 1, 0);
       if (plan.kind === "end") break;
       schedule = plan.schedule;
       order.push(`${schedule.gameKey} ${schedule.seriesGame}`);

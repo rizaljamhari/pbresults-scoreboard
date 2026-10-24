@@ -84,7 +84,7 @@ describe("parseSchedulePdf with two divisions (SMPL Sunday)", () => {
     for (let step = 0; step < 40; step += 1) {
       const current = games.find((game) => game.id === schedule.gameKey)!;
       // Left takes every set, so each best-of-3 is over after two sets.
-      const left = current.bestOf > 1 ? seriesScoreOf(schedule, current.id).left + 1 : 1;
+      const left = current.bestOf > 1 ? seriesScoreOf(schedule, current.id).home + 1 : 1;
       const plan = planNextMatch(schedule, list, left, 0);
       if (plan.kind === "end") break;
       schedule = plan.schedule;

@@ -18,6 +18,7 @@ import {
   listDivisions,
   seriesScoreOf,
   sideStatus,
+  withSeriesSwitched,
   tiebreakLabel,
   type ManualSchedule,
   type Tiebreak,
@@ -148,22 +149,38 @@ function tiebreakClockMs(tiebreak: Tiebreak, settings: ManualSettings) {
 }
 
 /**
- * The board for a scheduled game: its running series score (0–0 for a single game or a series not started), and a
- * full clock, the tie-break's own length during overtime or a one-on-one. Time never carries over from a set.
+ * The board for a scheduled game: its teams on the sides their series is playing (home on the left unless the series
+ * has switched), its running series score (0–0 for a single game or a series not started), and a full clock, the
+ * tie-break's own length during overtime or a one-on-one. Time never carries over from a set.
  */
-function boardFor(game: ScheduledGame, schedule: ManualSchedule, settings: ManualSettings) {
-  const score = game.bestOf > 1 ? seriesScoreOf(schedule, game.id) : { left: 0, right: 0 };
+function boardFor(
+  game: ScheduledGame,
+  schedule: ManualSchedule,
+  settings: ManualSettings,
+  teams: { home: ManualMatchCore["left"]; away: ManualMatchCore["left"] }
+): Pick<ManualMatchCore, "left" | "right" | "gameClock" | "sidesSwitched"> {
+  const series = game.bestOf > 1 ? seriesScoreOf(schedule, game.id) : null;
+  const home = { ...teams.home, score: series?.home ?? 0 };
+  const away = { ...teams.away, score: series?.away ?? 0 };
+  const switched = series?.switched ?? false;
   const clockMs = schedule.tiebreak ? tiebreakClockMs(schedule.tiebreak, settings) : settings.manualGameClockSeconds * 1000;
-  return { left: score.left, right: score.right, gameClock: { remainingMs: clockMs, runningSince: null } };
+  return {
+    left: switched ? away : home,
+    right: switched ? home : away,
+    sidesSwitched: switched,
+    gameClock: { remainingMs: clockMs, runningSince: null }
+  };
+}
+
+/** The home and away teams on the board now, wherever they stand. */
+function homeAway(state: ManualMatchCore) {
+  return state.sidesSwitched ? { home: state.right, away: state.left } : { home: state.left, away: state.right };
 }
 
 function loadGame(state: ManualMatchCore, game: ScheduledGame, schedule: ManualSchedule, now: number, settings: ManualSettings): ManualMatchCore {
-  const board = boardFor(game, schedule, settings);
   return {
     ...freshMatch(state, now, settings),
-    left: { ...scheduledTeam(game.home), score: board.left },
-    right: { ...scheduledTeam(game.away), score: board.right },
-    gameClock: board.gameClock,
+    ...boardFor(game, schedule, settings, { home: scheduledTeam(game.home), away: scheduledTeam(game.away) }),
     round: game.gameId ?? state.round + 1,
     schedule
   };
@@ -171,14 +188,7 @@ function loadGame(state: ManualMatchCore, game: ScheduledGame, schedule: ManualS
 
 /** The same series goes on (its next set, or a tie-break): the teams on the board stay, as the operator may have set them. */
 function continueSeries(state: ManualMatchCore, game: ScheduledGame, schedule: ManualSchedule, now: number, settings: ManualSettings): ManualMatchCore {
-  const board = boardFor(game, schedule, settings);
-  return {
-    ...freshMatch(state, now, settings),
-    left: { ...state.left, score: board.left },
-    right: { ...state.right, score: board.right },
-    gameClock: board.gameClock,
-    schedule
-  };
+  return { ...freshMatch(state, now, settings), ...boardFor(game, schedule, settings, homeAway(state)), schedule };
 }
 
 function nextCore(
@@ -276,6 +286,21 @@ function nextCore(
     case "finishMatch":
       if (state.phase === "finished") return null;
       return { next: { ...state, phase: "finished", gameClock: stopped(state.gameClock, now), teamEvent: null }, label: "Finish match" };
+    case "switchSides": {
+      // A correction by hand, recorded on the series too, so its next automatic switch starts from here.
+      const sidesSwitched = !state.sidesSwitched;
+      return {
+        next: {
+          ...state,
+          left: state.right,
+          right: state.left,
+          sidesSwitched,
+          teamEvent: null,
+          schedule: state.schedule ? withSeriesSwitched(state.schedule, sidesSwitched) : null
+        },
+        label: "Switch sides"
+      };
+    }
     case "teamEvent":
       return {
         // A towel or a base hit ends the point: the game clock stops.
@@ -288,7 +313,8 @@ function nextCore(
       };
     case "nextMatch": {
       const list = matchLists.lists.find((item) => item.id === matchLists.activeListId);
-      const plan = list ? planNextMatch(state.schedule, list, state.left.score, state.right.score) : { kind: "end" as const };
+      const board = homeAway(state);
+      const plan = list ? planNextMatch(state.schedule, list, board.home.score, board.away.score) : { kind: "end" as const };
       if (plan.kind === "tiebreak") {
         // The score stays and the next point wins; only the clock changes.
         return { next: continueSeries(state, plan.game, plan.schedule, now, settings), label: tiebreakLabel(plan.tiebreak) };
@@ -319,10 +345,12 @@ function teamEventActive(state: ManualMatchCore, now: number) {
   return state.teamEvent && Date.parse(state.teamEvent.until) > now ? state.teamEvent : null;
 }
 
-/** The codes PBResults uses: TOWEL1 shows on the left (home), BASE1 on the right (away). */
-function teamEventCode(event: NonNullable<ManualMatchCore["teamEvent"]>) {
-  if (event.kind === "towel") return event.side === "left" ? "TOWEL1" : "TOWEL2";
-  return event.side === "left" ? "BASE2" : "BASE1";
+/** The codes PBResults uses name the team: TOWEL1 and BASE2 are home's, TOWEL2 and BASE1 away's, wherever they stand. */
+function teamEventCode(event: NonNullable<ManualMatchCore["teamEvent"]>, sidesSwitched: boolean) {
+  // The feed's codes name home and away (TOWEL1 is home's); the call was made against a side.
+  const home = (event.side === "left") !== sidesSwitched;
+  if (event.kind === "towel") return home ? "TOWEL1" : "TOWEL2";
+  return home ? "BASE2" : "BASE1";
 }
 
 export function resolveManualTeam(team: ManualMatchCore["left"], teams: TeamRecord[]): TeamRecord | null {
@@ -335,10 +363,10 @@ export function manualToRaw(state: ManualMatchCore, teams: TeamRecord[], now: nu
   const inBreak = state.phase === "break" || state.phase === "finished";
   const name = (side: ManualSide) => resolveManualTeam(state[side], teams)?.canonicalName ?? state[side].name;
   return {
-    state: event ? teamEventCode(event) : state.phase === "finished" ? "END" : clockRunning(state.gameClock, now) ? "RUNNING" : "STOPPED",
+    state: event ? teamEventCode(event, state.sidesSwitched) : state.phase === "finished" ? "END" : clockRunning(state.gameClock, now) ? "RUNNING" : "STOPPED",
     period: inBreak ? "BREAK" : "GAME",
     round: state.round,
-    sidesSwitched: 0,
+    sidesSwitched: state.sidesSwitched ? 1 : 0,
     secondGame: false,
     mainGame: [
       { name: name("left"), score: state.left.score },

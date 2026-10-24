@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
-import { ChevronDown, CircleAlert, Flag, ListOrdered, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, CircleAlert, Flag, ListOrdered, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type { ManualClock, ManualMatchAction, ManualMatchView, ManualSide } from "../../shared/manualMatch";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../../shared/theme";
@@ -99,7 +99,7 @@ function gameTeams(game: ScheduledGame, teams: TeamRecord[]) {
 function seriesNote(game: ScheduledGame, series: Record<string, SeriesScore>) {
   const score = series[game.id];
   if (game.bestOf <= 1 || !score?.played) return "";
-  const board = `${score.left}–${score.right}`;
+  const board = `${score.home}–${score.away}`;
   if (score.tiebreak) return `${tiebreakLabel(score.tiebreak).toLowerCase()} ${board}`;
   return seriesDecided(score, game.bestOf) ? `done ${board}` : `set ${score.played + 1} · ${board}`;
 }
@@ -109,6 +109,11 @@ function gameGaps(game: ScheduledGame, teams: TeamRecord[]) {
   const known = new Set(teams.map((team) => team.id));
   const statuses = [sideStatus(game.home, known), sideStatus(game.away, known)];
   return { placeholder: statuses.includes("placeholder"), unlinked: statuses.includes("unlinked") };
+}
+
+/** The board's scores as home and away, which side each team stands on aside. */
+function homeAwayScores(view: ManualMatchView): [number, number] {
+  return view.sidesSwitched ? [view.right.score, view.left.score] : [view.left.score, view.right.score];
 }
 
 /** "Game 23" reads "game 23" mid-sentence; a division name ("Rookie 23") keeps its capital. */
@@ -121,35 +126,41 @@ function describePlan(
   plan: NextMatchPlan,
   teams: TeamRecord[],
   settings: Pick<AppSettings, "manualOvertimeClockSeconds" | "manualOneOnOneClockSeconds">,
-  divided: boolean
+  divided: boolean,
+  /** Whether the teams on the board now have switched ends, to say if the next set changes that. */
+  sidesSwitchedNow: boolean
 ) {
+  // Scores are given home first, as the teams are ("KOVRA UD vs 3Q"), whichever side each stands on.
+  const sides = (switched: boolean) => (switched === sidesSwitchedNow ? "same sides" : "teams switch sides");
   if (plan.kind === "tiebreak") {
     const label = tiebreakLabel(plan.tiebreak);
     const seconds = plan.tiebreak === "overtime" ? settings.manualOvertimeClockSeconds : settings.manualOneOnOneClockSeconds;
-    const level = `${plan.from.left}–${plan.from.right}`;
+    const level = `${plan.from.home}–${plan.from.away}`;
+    const switching = seriesScoreOf(plan.schedule, plan.game.id).switched !== sidesSwitchedNow;
     return {
       // Worked out from the score now, so it reads as what happens if the game ends like this.
       short: `if it ends ${level}, ${label.toLowerCase()} (next point wins)`,
-      message: `${plan.tiebreak === "overtime" ? "The series is level." : "Overtime ended level."} ${label} with the same teams: the score stays at ${level} and the next point wins the series. The clock is set to ${formatClock(seconds)}.`
+      message: `${plan.tiebreak === "overtime" ? "The series is level." : "Overtime ended level."} ${label} with the same teams${switching ? ", who switch sides" : ""}: the score stays at ${level} and the next point wins the series. The clock is set to ${formatClock(seconds)}.`
     };
   }
   if (plan.kind === "series") {
-    const { left, right } = seriesScoreOf(plan.schedule, plan.game.id);
+    const { home, away, switched } = seriesScoreOf(plan.schedule, plan.game.id);
     const set = `set ${plan.schedule.seriesGame} of ${plan.game.bestOf}`;
     return {
-      short: `${set[0].toUpperCase()}${set.slice(1)}, same teams, score stays ${left}–${right}`,
-      message: `Starts ${set} with the same teams. The score stays at ${left}–${right}; the game clock resets.`
+      short: `${set[0].toUpperCase()}${set.slice(1)}, ${sides(switched)}, score stays ${home}–${away}`,
+      message: `Starts ${set} with the same teams${switched === sidesSwitchedNow ? ", on the same sides" : ", who switch sides (a point was scored)"}. The score stays at ${home}–${away}; the game clock resets.`
     };
   }
   if (plan.kind === "game") {
     const { seriesGame } = plan.schedule;
-    const { left, right } = seriesScoreOf(plan.schedule, plan.game.id);
+    const { home, away, switched } = seriesScoreOf(plan.schedule, plan.game.id);
+    const ends = switched ? ", home team on the right" : "";
     const seriesText =
       plan.game.bestOf <= 1
         ? ""
         : plan.schedule.tiebreak
-          ? ` (${tiebreakLabel(plan.schedule.tiebreak).toLowerCase()}, score stays ${left}–${right}, next point wins)`
-          : ` (set ${seriesGame} of ${plan.game.bestOf}${seriesGame > 1 ? `, score ${left}–${right}` : ""})`;
+          ? ` (${tiebreakLabel(plan.schedule.tiebreak).toLowerCase()}, score stays ${home}–${away}, next point wins${ends})`
+          : ` (set ${seriesGame} of ${plan.game.bestOf}${seriesGame > 1 ? `, score ${home}–${away}${ends}` : ""})`;
     const teamsText = gameTeams(plan.game, teams);
     const gaps = gameGaps(plan.game, teams);
     const warning = gaps.placeholder
@@ -185,8 +196,8 @@ function ScheduleStrip({
   const schedule = view.schedule?.listId === list.id ? view.schedule : null;
   const divided = listDivisions(list).length > 1;
   const current = schedule ? list.games.find((game) => game.id === schedule.gameKey) ?? null : null;
-  const plan = planNextMatch(schedule, list, view.left.score, view.right.score);
-  const next = describePlan(plan, teams, settings, divided);
+  const plan = planNextMatch(schedule, list, ...homeAwayScores(view));
+  const next = describePlan(plan, teams, settings, divided, view.sidesSwitched);
   const nextGaps = plan.kind === "game" ? gameGaps(plan.game, teams) : null;
   const games = list.games.filter((game) => game.kind === "game");
 
@@ -306,6 +317,8 @@ function ManualTeamSide({
     <div className="pba-team-side pba-manual-side">
       <div className="pba-side-label">
         {side === "left" ? "Left" : "Right"}
+        {/* Which team is home, as the overlay's towel and base calls are made for home or away. */}
+        <span className="pba-manual-home-tag">{(side === "left") !== view.sidesSwitched ? "Home" : "Away"}</span>
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>
             <Button variant="text" size="sm" className="pba-push" disabled={disabled}>
@@ -534,7 +547,7 @@ export function ManualMatchPanel({
 
   /** Runs an action, first asking when it would finish the match or reopen a finished one. */
   async function act(action: ManualMatchAction, options: { skipConfirm?: boolean } = {}) {
-    const question = view && !options.skipConfirm ? manualActionConfirmation(action, view.phase) : null;
+    const question = view && !options.skipConfirm ? manualActionConfirmation(action, view.phase, { gameClockRunning: gameRunning }) : null;
     if (question && !(await confirmAction(question))) return;
     void run(action);
   }
@@ -562,11 +575,11 @@ export function ManualMatchPanel({
   }, []);
 
   async function nextMatch() {
-    const plan = activeList && view ? planNextMatch(view.schedule, activeList, view.left.score, view.right.score) : null;
+    const plan = activeList && view ? planNextMatch(view.schedule, activeList, ...homeAwayScores(view)) : null;
     const ok = await confirmAction({
       title: "Start the next match?",
-      message: plan
-        ? `${describePlan(plan, teams, settings, divided).message}${plan.kind === "tiebreak" || plan.kind === "series" ? "" : " The game clock resets."}`
+      message: plan && view
+        ? `${describePlan(plan, teams, settings, divided, view.sidesSwitched).message}${plan.kind === "tiebreak" || plan.kind === "series" ? "" : " The game clock resets."}`
         : "Scores go back to 0, the round moves on and the game clock resets. The teams stay until you change them.",
       confirmLabel: "Next match"
     });
@@ -749,6 +762,23 @@ export function ManualMatchPanel({
             <Button className={slot("next")} variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
               <SkipForward aria-hidden />
               Next match
+            </Button>
+            {/* Always offered: a correction when the teams changed ends and the board did not follow, or the reverse. */}
+            <Button
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => void act({ type: "switchSides" })}
+              title={
+                `The teams swap sides on the board with their scores (S). ${
+                  view.schedule && view.schedule.bestOf > 1 ? "In a best-of this happens by itself after a set with a point. " : ""
+                }Asks first while the game clock is running.`
+              }
+            >
+              <ArrowLeftRight aria-hidden />
+              Switch sides
+              <kbd className="pba-kbd" aria-hidden>
+                S
+              </kbd>
             </Button>
             {/* The only keys not printed on a button. */}
             <span className="pba-hint pba-push pba-manual-hidden-keys">

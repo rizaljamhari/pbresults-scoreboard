@@ -53,6 +53,7 @@ Design directly on the broadcast frame, adjust the selected piece in Properties,
   - on-air scoreboard preview and browser-source URL
   - live team resolution and operator text Take controls
   - in manual scoring: teams, scores, game and break clocks, timeouts, finish, towel and base, Undo, with keyboard shortcuts
+  - switch sides: automatic in a best-of after a set with a point (the teams and scores swap ends; a set on time keeps them), plus a Switch sides button for corrections
   - with a match list in use: Next match loads the next scheduled game's teams; a best-of series keeps one running score across its sets (only the clock resets); games in a turn group take turns (set 1 of each, then set 2, ...), with groups set per game on the Matches page and best-of series grouped by division and stage by default; a series level after its last set goes to overtime, then a one-on-one, in turn with the rest of its turn group (score kept, next point wins)
   - feed, theme, and team readiness checks
 - `/admin/themes`
