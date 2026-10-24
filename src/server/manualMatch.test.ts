@@ -221,17 +221,24 @@ describe("match lists", () => {
     expect(play([{ type: "undo" }], second)).toMatchObject({ round: 1, left: { teamId: "kuda", score: 2 }, schedule: { gameKey: "g1" } });
   });
 
-  it("a best-of-3 keeps its teams and its score from set to set", () => {
+  it("a best-of-3 keeps its teams and score from set to set, switching sides after a point", () => {
     const loaded = play([{ type: "loadScheduledGame", listId: "day1", gameKey: "q1" }]);
-    // The placeholder side loads empty until its team is filled in.
-    expect(loaded).toMatchObject({ round: 63, left: { teamId: null, name: "" }, right: { teamId: "kuda" }, schedule: { bestOf: 3, seriesGame: 1 } });
+    // Home (a placeholder, empty until filled in) on the left, away on the right.
+    expect(loaded).toMatchObject({ round: 63, sidesSwitched: false, left: { teamId: null, name: "" }, right: { teamId: "kuda" }, schedule: { bestOf: 3, seriesGame: 1 } });
     const set2 = play([{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }], loaded);
-    // The score carries into set 2; only the clock starts again.
-    expect(set2).toMatchObject({ round: 63, right: { teamId: "kuda", score: 1 }, gameClock: { remainingMs: 600_000 }, schedule: { seriesGame: 2 } });
+    // A point was scored, so the teams change ends; the score carries into set 2 and only the clock starts again.
+    expect(set2).toMatchObject({
+      round: 63,
+      sidesSwitched: true,
+      left: { teamId: "kuda", score: 1 },
+      right: { teamId: null, score: 0 },
+      gameClock: { remainingMs: 600_000 },
+      schedule: { seriesGame: 2 }
+    });
     expect(set2.history.at(-1)?.label).toBe("Set 2 of 3");
-    const done = play([{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }], set2);
-    // 0–2 with one set left is over; it was the last game in the list, so the teams stay and the round moves on.
-    expect(done).toMatchObject({ round: 64, right: { teamId: "kuda", score: 0 } });
+    const done = play([{ type: "adjustScore", side: "left", delta: 1 }, { type: "nextMatch" }], set2);
+    // Away leads 2–0 with one set left, so it is over; it was the last game in the list, so the board stays and the round moves on.
+    expect(done).toMatchObject({ round: 64, left: { teamId: "kuda", score: 0 } });
   });
 
   it("a series level after its last set goes to overtime keeping its score, with the overtime clock", () => {
@@ -239,20 +246,41 @@ describe("match lists", () => {
     const step = (state: ManualMatchState, actions: ManualMatchAction[]) =>
       actions.reduce((current, action) => applyManualAction(current, action, T0, tiebreakSettings, matchLists), state);
     let state = step(defaultManualMatchState, [{ type: "loadScheduledGame", listId: "day1", gameKey: "q1" }]);
-    state = step(state, [{ type: "adjustScore", side: "left", delta: 1 }, { type: "nextMatch" }]); // set 1: 1–0
-    state = step(state, [{ type: "nextMatch" }]); // set 2 ends on time: still 1–0
-    expect(state).toMatchObject({ left: { score: 1 }, right: { score: 0 }, schedule: { seriesGame: 3 } });
-    state = step(state, [{ type: "adjustScore", side: "right", delta: 1 }, { type: "nextMatch" }]); // set 3: 1–1
+    state = step(state, [{ type: "adjustScore", side: "left", delta: 1 }, { type: "nextMatch" }]); // set 1: home scores
+    expect(state).toMatchObject({ sidesSwitched: true, left: { teamId: "kuda", score: 0 }, right: { score: 1 } });
+    state = step(state, [{ type: "nextMatch" }]); // set 2 ends on time: no point, same sides
+    expect(state).toMatchObject({ sidesSwitched: true, left: { score: 0 }, right: { score: 1 }, schedule: { seriesGame: 3 } });
+    state = step(state, [{ type: "adjustScore", side: "left", delta: 1 }, { type: "nextMatch" }]); // set 3: away scores, 1–1
     expect(state).toMatchObject({
       round: 63,
-      left: { score: 1 },
+      sidesSwitched: false,
+      left: { teamId: null, score: 1 },
       right: { teamId: "kuda", score: 1 },
       gameClock: { remainingMs: 120_000, runningSince: null },
       schedule: { tiebreak: "overtime" }
     });
     expect(state.history.at(-1)?.label).toBe("Overtime");
-    state = step(state, [{ type: "nextMatch" }]);
-    expect(state).toMatchObject({ left: { score: 1 }, right: { score: 1 }, gameClock: { remainingMs: 45_000 }, schedule: { tiebreak: "oneOnOne" } });
+    state = step(state, [{ type: "nextMatch" }]); // nobody scores in overtime: same sides for the one-on-one
+    expect(state).toMatchObject({ sidesSwitched: false, left: { score: 1 }, right: { score: 1 }, gameClock: { remainingMs: 45_000 }, schedule: { tiebreak: "oneOnOne" } });
+  });
+
+  it("switching sides by hand swaps the teams and scores, and the series carries on from there", () => {
+    let state = play([{ type: "loadScheduledGame", listId: "day1", gameKey: "q1" }, { type: "adjustScore", side: "right", delta: 1 }]);
+    state = play([{ type: "switchSides" }], state);
+    expect(state).toMatchObject({ sidesSwitched: true, left: { teamId: "kuda", score: 1 }, right: { teamId: null, score: 0 } });
+    expect(state.history.at(-1)?.label).toBe("Switch sides");
+    // The set had a point, so the series switches again from where the operator put it: back to home on the left.
+    state = play([{ type: "nextMatch" }], state);
+    expect(state).toMatchObject({ sidesSwitched: false, left: { teamId: null, score: 0 }, right: { teamId: "kuda", score: 1 } });
+  });
+
+  it("with sides switched, a towel or base call still names the team that made it", () => {
+    let state = play([{ type: "setTeam", side: "left", teamId: "kuda", name: "" }, { type: "setTeam", side: "right", teamId: "saus", name: "" }, { type: "switchSides" }]);
+    expect(state).toMatchObject({ left: { teamId: "saus" }, right: { teamId: "kuda" } });
+    state = play([{ type: "teamEvent", kind: "towel", side: "left" }], state);
+    // Sausage (away) is on the left now: an away towel, and the overlay is told the sides are switched.
+    expect(manualToRaw(state, teams, T0)).toMatchObject({ state: "TOWEL2", sidesSwitched: 1, mainGame: [{ name: "Sausage" }, { name: "Kuda" }] });
+    expect(manualToLiveState(state, teams, T0)).toMatchObject({ teamEvent: "towel-away", sidesSwitched: 1 });
   });
 
   it("every set starts with a full clock, never the time left from the set before", () => {
@@ -269,12 +297,15 @@ describe("match lists", () => {
       ]
     });
     const clockSettings = { ...settings, manualOvertimeClockSeconds: 180, manualOneOnOneClockSeconds: 60 };
-    // Plays a set with the clock running for 3:20, a point, the set finished, then Next match.
-    const playSet = (state: ManualMatchState, list: typeof matchLists, at: number, left: number, right: number) => {
+    // Plays a set with the clock running for 3:20, points for home and away (wherever they stand), the set finished,
+    // then Next match.
+    const playSet = (state: ManualMatchState, list: typeof matchLists, at: number, home: number, away: number) => {
+      const homeSide = state.sidesSwitched ? "right" : "left";
+      const awaySide = state.sidesSwitched ? "left" : "right";
       let next = applyManualAction(state, { type: "startGameClock" }, at, clockSettings, list);
-      if (left) next = applyManualAction(next, { type: "adjustScore", side: "left", delta: left }, at + 200_000, clockSettings, list);
-      if (right) next = applyManualAction(next, { type: "adjustScore", side: "right", delta: right }, at + 200_000, clockSettings, list);
-      if (!left && !right) next = applyManualAction(next, { type: "stopGameClock" }, at + 200_000, clockSettings, list);
+      if (home) next = applyManualAction(next, { type: "adjustScore", side: homeSide, delta: home }, at + 200_000, clockSettings, list);
+      if (away) next = applyManualAction(next, { type: "adjustScore", side: awaySide, delta: away }, at + 200_000, clockSettings, list);
+      if (!home && !away) next = applyManualAction(next, { type: "stopGameClock" }, at + 200_000, clockSettings, list);
       next = applyManualAction(next, { type: "finishMatch" }, at + 200_000, clockSettings, list);
       return applyManualAction(next, { type: "nextMatch" }, at + 210_000, clockSettings, list);
     };

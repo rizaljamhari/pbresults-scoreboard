@@ -13,6 +13,7 @@ describe("manual scoring shortcuts", () => {
     expect(manualShortcutAction(key("t"), context)).toEqual({ type: "addBreakTime", seconds: 60 });
     expect(manualShortcutAction(key("b"), context)).toEqual({ type: "startBreak" });
     expect(manualShortcutAction(key("f"), context)).toEqual({ type: "finishMatch" });
+    expect(manualShortcutAction(key("S"), context)).toEqual({ type: "switchSides" });
   });
 
   it("toggles the game clock with Space", () => {
@@ -58,6 +59,12 @@ describe("parseClockInput", () => {
 });
 
 describe("manualActionConfirmation", () => {
+  it("asks before switching sides only while play is running", () => {
+    expect(manualActionConfirmation({ type: "switchSides" }, "game", { gameClockRunning: true })).toMatchObject({ confirmLabel: "Switch sides" });
+    expect(manualActionConfirmation({ type: "switchSides" }, "game", { gameClockRunning: false })).toBeNull();
+    expect(manualActionConfirmation({ type: "switchSides" }, "break")).toBeNull();
+  });
+
   it("always asks before finishing", () => {
     expect(manualActionConfirmation({ type: "finishMatch" }, "game")?.confirmLabel).toBe("Finish match");
   });

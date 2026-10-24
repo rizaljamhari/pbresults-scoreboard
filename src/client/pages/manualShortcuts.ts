@@ -34,6 +34,8 @@ export function manualShortcutAction(event: KeyInput, context: { gameClockRunnin
       return { type: "addBreakTime", seconds: context.timeoutSeconds };
     case "f":
       return { type: "finishMatch" };
+    case "s":
+      return { type: "switchSides" };
     default:
       return null;
   }
@@ -44,8 +46,23 @@ export type ManualConfirmation = { title: string; message: string; confirmLabel:
 /**
  * The question an action needs before it goes on air, or null when it can go straight away. Finishing puts the winner
  * on air, and changing a finished match reopens it, so both ask; Shift+F is the deliberate way to finish without asking.
+ * Switching sides asks only while play is running.
  */
-export function manualActionConfirmation(action: ManualMatchAction, phase: ManualMatchView["phase"]): ManualConfirmation | null {
+export function manualActionConfirmation(
+  action: ManualMatchAction,
+  phase: ManualMatchView["phase"],
+  context: { gameClockRunning?: boolean } = {}
+): ManualConfirmation | null {
+  // Swapping both teams on air in the middle of a point is almost always a slip; between points it goes straight away.
+  if (action.type === "switchSides") {
+    return context.gameClockRunning
+      ? {
+          title: "Switch sides during play?",
+          message: "The game clock is running. Both teams and their scores swap sides on air now. Undo takes it back.",
+          confirmLabel: "Switch sides"
+        }
+      : null;
+  }
   if (action.type === "finishMatch") {
     return {
       title: "Finish the match?",

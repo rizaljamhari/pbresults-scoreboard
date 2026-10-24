@@ -63,18 +63,39 @@ export type Tiebreak = (typeof tiebreakValues)[number];
  * One best-of series so far. The score runs across its sets (home is left, away is right): a set ends with a point or
  * on time, and only the clock starts again for the next set.
  */
-export const seriesScoreSchema = z.object({
-  /** Sets finished. */
-  played: z.number().int().min(0).default(0),
-  left: z.number().int().min(0).default(0),
-  right: z.number().int().min(0).default(0),
-  /** A series still level after its last set is decided by overtime, then a one-on-one, with the same teams. */
-  tiebreak: z.enum(tiebreakValues).nullable().default(null),
-  /** The score when the tie-break started. The score stays on screen and the next point wins. */
-  tiebreakFrom: z.object({ left: z.number().int().min(0), right: z.number().int().min(0) }).nullable().default(null),
-  /** Tie-breaks finished level (overtime, then each one-on-one), so taking turns can tell whose go it is. */
-  tiebreaksPlayed: z.number().int().min(0).default(0)
-});
+/**
+ * Series records saved before sides could switch kept left and right, with home always on the left. They read as
+ * home and away, so a match saved mid-series by an older version carries on after an update.
+ */
+function migrateSeriesScore(input: unknown): unknown {
+  if (!input || typeof input !== "object") return input;
+  const record = input as Record<string, unknown>;
+  const fromSides = (value: unknown) =>
+    value && typeof value === "object" && "left" in value && !("home" in value)
+      ? { home: (value as { left: unknown }).left, away: (value as { right?: unknown }).right }
+      : value;
+  const migrated = fromSides(record) as Record<string, unknown>;
+  return { ...record, ...(migrated === record ? {} : migrated), tiebreakFrom: fromSides(record.tiebreakFrom) };
+}
+
+export const seriesScoreSchema = z.preprocess(
+  migrateSeriesScore,
+  z.object({
+    /** Sets finished. */
+    played: z.number().int().min(0).default(0),
+    /** Points so far, by team rather than by side, so switching sides never mixes them up. */
+    home: z.number().int().min(0).default(0),
+    away: z.number().int().min(0).default(0),
+    /** The home team is on the right for this series' next set. Sides switch after a set in which a point was scored. */
+    switched: z.boolean().default(false),
+    /** A series still level after its last set is decided by overtime, then a one-on-one, with the same teams. */
+    tiebreak: z.enum(tiebreakValues).nullable().default(null),
+    /** The score when the tie-break started. The score stays on screen and the next point wins. */
+    tiebreakFrom: z.object({ home: z.number().int().min(0), away: z.number().int().min(0) }).nullable().default(null),
+    /** Tie-breaks finished level (overtime, then each one-on-one), so taking turns can tell whose go it is. */
+    tiebreaksPlayed: z.number().int().min(0).default(0)
+  })
+);
 
 /** Where manual scoring is in a list. Part of the match state, so Undo puts it back too. */
 export const manualScheduleSchema = z.object({
@@ -234,7 +255,7 @@ export function turnGroups(list: MatchList): Array<{ name: string; games: Schedu
   return [...groups].map(([name, games]) => ({ name, games }));
 }
 
-const noScore: SeriesScore = { played: 0, left: 0, right: 0, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
+const noScore: SeriesScore = { played: 0, home: 0, away: 0, switched: false, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
 
 /** Turns a series has had: its sets, then its tie-breaks. Taking turns plays the series with the fewest next. */
 function turnsTaken(score: SeriesScore) {
@@ -252,7 +273,7 @@ export function seriesScoreOf(schedule: ManualSchedule | null | undefined, gameK
  */
 export function seriesDecided(score: SeriesScore, bestOf: number) {
   if (score.tiebreak) return false;
-  const lead = Math.abs(score.left - score.right);
+  const lead = Math.abs(score.home - score.away);
   const setsLeft = Math.max(0, bestOf - score.played);
   return score.played >= bestOf || lead > setsLeft;
 }
@@ -261,11 +282,18 @@ export function tiebreakLabel(tiebreak: Tiebreak) {
   return tiebreak === "overtime" ? "Overtime" : "One-on-one";
 }
 
+/** The record after the operator switches sides by hand during a series, so its next automatic switch starts from there. */
+export function withSeriesSwitched(schedule: ManualSchedule, switched: boolean): ManualSchedule {
+  // Recorded whatever Best of the game had when it was loaded: it may have become a best-of since on the Matches page.
+  const score = schedule.series[schedule.gameKey] ?? noScore;
+  return { ...schedule, series: { ...schedule.series, [schedule.gameKey]: { ...score, switched } } };
+}
+
 export type NextMatchPlan =
   /** The same series goes on with the same teams (back to back). */
   | { kind: "series"; game: ScheduledGame; schedule: ManualSchedule }
   /** The series is level after its last game: same teams, the score stays, the next point wins. */
-  | { kind: "tiebreak"; game: ScheduledGame; schedule: ManualSchedule; tiebreak: Tiebreak; from: { left: number; right: number } }
+  | { kind: "tiebreak"; game: ScheduledGame; schedule: ManualSchedule; tiebreak: Tiebreak; from: { home: number; away: number } }
   | { kind: "game"; game: ScheduledGame; schedule: ManualSchedule }
   | { kind: "end" };
 
@@ -285,14 +313,15 @@ export function scheduleForGame(list: MatchList, game: ScheduledGame, previous: 
 }
 
 /**
- * What Next match does with a match list. A best-of game's set is recorded with the series score on the board (the
- * score carries from set to set; a set that ends on time adds nothing). Then, within the game's turn group (see
+ * What Next match does with a match list, given the home and away scores on the board. A best-of game's set is
+ * recorded with the series score (it carries from set to set; a set that ends on time adds nothing), and the series
+ * switches sides for its next set when a point was scored in this one. Then, within the game's turn group (see
  * turnGroupMap), the open game that has had the fewest turns goes next, in schedule order: every member plays its set
  * 1, then set 2 of those still open, then any overtimes, then one-on-ones. On its own, a series plays on to its end.
  * Once the group is done, the list carries on from where the group started, skipping games already played. Without a
  * current game in this list, it starts at the first game.
  */
-export function planNextMatch(schedule: ManualSchedule | null, list: MatchList, leftScore: number, rightScore: number): NextMatchPlan {
+export function planNextMatch(schedule: ManualSchedule | null, list: MatchList, homeScore: number, awayScore: number): NextMatchPlan {
   const inList = schedule?.listId === list.id ? schedule : null;
   const current = inList ? list.games.findIndex((game) => game.id === inList.gameKey) : -1;
   const currentGame = current >= 0 ? list.games[current] : null;
@@ -310,26 +339,31 @@ export function planNextMatch(schedule: ManualSchedule | null, list: MatchList, 
     if (currentGame.bestOf > 1 || team.length > 1) {
       const before = series[currentGame.id] ?? noScore;
       let score: SeriesScore;
+      // A point in this set (or tie-break) means the teams change ends for the next one; a set that ends on time
+      // keeps them where they are.
+      const scored = homeScore + awayScore > before.home + before.away;
+      const switched = currentGame.bestOf > 1 && scored ? !before.switched : before.switched;
       if (before.tiebreak && before.tiebreakFrom) {
         // A tie-break is won by whoever scored since it started; still level, overtime becomes a one-on-one, and
         // one-on-ones go on until someone scores. The score on the board is the series score either way.
-        const level = leftScore - before.tiebreakFrom.left === rightScore - before.tiebreakFrom.right;
+        const level = homeScore - before.tiebreakFrom.home === awayScore - before.tiebreakFrom.away;
         score = level
           ? {
               ...before,
-              left: leftScore,
-              right: rightScore,
+              home: homeScore,
+              away: awayScore,
+              switched,
               tiebreak: "oneOnOne",
-              tiebreakFrom: { left: leftScore, right: rightScore },
+              tiebreakFrom: { home: homeScore, away: awayScore },
               tiebreaksPlayed: (before.tiebreaksPlayed ?? 0) + 1
             }
-          : { ...before, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null };
+          : { ...before, home: homeScore, away: awayScore, switched, tiebreak: null, tiebreakFrom: null };
       } else {
         // The board shows the series score, carried from set to set, so it is the score after this set.
-        score = { played: before.played + 1, left: leftScore, right: rightScore, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
+        score = { played: before.played + 1, home: homeScore, away: awayScore, switched, tiebreak: null, tiebreakFrom: null, tiebreaksPlayed: 0 };
         // Every set of a best-of played and still level: overtime, with the same teams, when its turn comes.
-        if (currentGame.bestOf > 1 && score.played >= currentGame.bestOf && score.left === score.right) {
-          score = { ...score, tiebreak: "overtime", tiebreakFrom: { left: leftScore, right: rightScore } };
+        if (currentGame.bestOf > 1 && score.played >= currentGame.bestOf && score.home === score.away) {
+          score = { ...score, tiebreak: "overtime", tiebreakFrom: { home: homeScore, away: awayScore } };
         }
       }
       series = { ...series, [currentGame.id]: score };
