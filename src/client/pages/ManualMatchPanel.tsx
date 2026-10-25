@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
-import { ArrowLeftRight, ChevronDown, CircleAlert, Flag, ListOrdered, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, CircleAlert, Flag, ListOrdered, Minus, Pause, Play, Plus, RotateCcw, SkipForward, SlidersHorizontal, Timer, Undo2 } from "lucide-react";
 import { formatClock } from "../../shared/normalize";
 import type { ManualClock, ManualMatchAction, ManualMatchView, ManualSide } from "../../shared/manualMatch";
 import type { AppSettings, NormalizedLiveState, TeamRecord } from "../../shared/theme";
@@ -181,14 +181,12 @@ function ScheduleStrip({
   list,
   view,
   teams,
-  settings,
   disabled,
   onLoad
 }: {
   list: MatchList;
   view: ManualMatchView;
   teams: TeamRecord[];
-  settings: AppSettings;
   disabled: boolean;
   onLoad: (game: ScheduledGame) => void;
 }) {
@@ -196,9 +194,6 @@ function ScheduleStrip({
   const schedule = view.schedule?.listId === list.id ? view.schedule : null;
   const divided = listDivisions(list).length > 1;
   const current = schedule ? list.games.find((game) => game.id === schedule.gameKey) ?? null : null;
-  const plan = planNextMatch(schedule, list, ...homeAwayScores(view));
-  const next = describePlan(plan, teams, settings, divided, view.sidesSwitched);
-  const nextGaps = plan.kind === "game" ? gameGaps(plan.game, teams) : null;
   const games = list.games.filter((game) => game.kind === "game");
 
   return (
@@ -222,12 +217,7 @@ function ScheduleStrip({
         ) : (
           <span className="pba-muted">Not started: choose the first game</span>
         )}
-      </div>
-      <div className="pba-manual-schedule-line">
-        <span className="pba-muted pba-manual-schedule-next">Next match: {next.short}</span>
-        {nextGaps?.placeholder || nextGaps?.unlinked ? (
-          <CircleAlert className="pba-ml-warn" aria-label={nextGaps.placeholder ? "Teams not set yet" : "A team is not linked"} />
-        ) : null}
+        {/* What Next match does is shown on the end-of-set bar, where it is pressed. */}
         <span className="pba-push" />
         <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>
@@ -617,6 +607,17 @@ export function ManualMatchPanel({
   }
 
   const phase = view ? phaseStatus(view.phase, gameRunning) : null;
+  const finished = view?.phase === "finished";
+  // A best-of is played in sets; a single game is a match.
+  const unit = view?.schedule && view.schedule.bestOf > 1 ? "set" : "match";
+  const nextPlan = activeList && view ? planNextMatch(view.schedule, activeList, ...homeAwayScores(view)) : null;
+  const nextPreview =
+    nextPlan && view
+      ? describePlan(nextPlan, teams, settings, divided, view.sidesSwitched).short
+      : view
+        ? `Round ${view.round + 1}, same teams, scores back to 0`
+        : "";
+  const nextGaps = nextPlan?.kind === "game" ? gameGaps(nextPlan.game, teams) : null;
   const timeoutLabel = shortDuration(settings.manualTimeoutSeconds);
   const gameNote =
     view?.phase === "finished" ? "Match finished" : gameRunning ? "Running" : gameSeconds === 0 ? "At 0:00: set or reset it in Adjust clocks" : "Stopped";
@@ -680,10 +681,28 @@ export function ManualMatchPanel({
       ) : (
         <>
           {activeList ? (
-            <ScheduleStrip list={activeList} view={view} teams={teams} settings={settings} disabled={disabled} onLoad={(game) => void loadGame(activeList, game)} />
+            <ScheduleStrip list={activeList} view={view} teams={teams} disabled={disabled} onLoad={(game) => void loadGame(activeList, game)} />
           ) : null}
-          <div className="pba-resolve">
+          <div className="pba-resolve pba-resolve--manual">
             <ManualTeamSide side="left" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />
+            {/* Between the teams, as it moves them: always offered, a correction when the teams changed ends and the board did not follow. */}
+            <div className="pba-manual-switch">
+              <button
+                type="button"
+                className="pba-manual-switch-btn"
+                disabled={disabled}
+                onClick={() => void act({ type: "switchSides" })}
+                title={`The teams swap sides on the board with their scores. ${
+                  view.schedule && view.schedule.bestOf > 1 ? "In a best-of this happens by itself after a set with a point. " : ""
+                }Asks first while the game clock is running.`}
+              >
+                <ArrowLeftRight aria-hidden />
+                <span>Switch sides</span>
+                <kbd className="pba-kbd" aria-hidden>
+                  S
+                </kbd>
+              </button>
+            </div>
             <ManualTeamSide side="right" view={view} live={live} teams={teams} logoFor={logoFor} disabled={disabled} slot={slot} onAction={(action) => void act(action)} />
           </div>
           <div className="pba-manual-clocks">
@@ -745,45 +764,70 @@ export function ManualMatchPanel({
 
             </div>
           </div>
-          <div className="pba-manual-match">
-            <Button
-              className={slot("finish")}
-              disabled={disabled || view.phase === "finished"}
-              onClick={(event) => void act({ type: "finishMatch" }, { skipConfirm: event.shiftKey })}
-              title="Ends the match: the theme's game finished and winner cards show. Asks first; Shift skips the question."
-            >
-              <Flag aria-hidden />
-              Finish match
-              <kbd className="pba-kbd" aria-hidden>
-                F
-              </kbd>
-            </Button>
-            {/* Once the match is finished, Next match is the obvious next step. */}
-            <Button className={slot("next")} variant={view.phase === "finished" ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
-              <SkipForward aria-hidden />
-              Next match
-            </Button>
-            {/* Always offered: a correction when the teams changed ends and the board did not follow, or the reverse. */}
-            <Button
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => void act({ type: "switchSides" })}
-              title={
-                `The teams swap sides on the board with their scores (S). ${
-                  view.schedule && view.schedule.bestOf > 1 ? "In a best-of this happens by itself after a set with a point. " : ""
-                }Asks first while the game clock is running.`
-              }
-            >
-              <ArrowLeftRight aria-hidden />
-              Switch sides
-              <kbd className="pba-kbd" aria-hidden>
-                S
-              </kbd>
-            </Button>
+          {/* The end of a set or match as two steps in order: the one due now is emphasised, and Next match says what it
+              will do. In Guided, a step that does not fit the moment shows as a label instead of a button. */}
+          <div className="pba-manual-flow" role="group" aria-label={`End of ${unit}`}>
+            <div className="pba-manual-step">
+              <span className="pba-manual-step-cap">1 · End this {unit}</span>
+              {finished ? (
+                <span className="pba-manual-step-idle">
+                  <Check aria-hidden />
+                  Finished
+                </span>
+              ) : can("finish") ? (
+                <Button
+                  className="pba-manual-step-now"
+                  disabled={disabled}
+                  onClick={(event) => void act({ type: "finishMatch" }, { skipConfirm: event.shiftKey })}
+                  title={`Ends the ${unit}: the theme's game finished and winner cards show. Asks first; Shift skips the question.`}
+                >
+                  <Flag aria-hidden />
+                  Finish {unit}
+                  <kbd className="pba-kbd" aria-hidden>
+                    F
+                  </kbd>
+                </Button>
+              ) : (
+                <span className="pba-manual-step-idle">
+                  <Flag aria-hidden />
+                  Finish {unit}
+                </span>
+              )}
+            </div>
+            <ChevronRight className="pba-manual-step-arrow" aria-hidden />
+            <div className="pba-manual-step pba-manual-step--next">
+              <span className="pba-manual-step-cap">{finished ? "2 · Next" : "2 · Then"}</span>
+              <span className="pba-manual-step-line">
+                {can("next") ? (
+                  <Button className={finished ? "pba-manual-step-now" : undefined} variant={finished ? "default" : "ghost"} disabled={disabled} onClick={() => void nextMatch()}>
+                    <SkipForward aria-hidden />
+                    Next match
+                  </Button>
+                ) : (
+                  <span className="pba-manual-step-idle">
+                    <SkipForward aria-hidden />
+                    Next match
+                  </span>
+                )}
+                <span className="pba-manual-step-preview" title={nextPreview}>
+                  {nextPreview}
+                </span>
+                {nextGaps?.placeholder || nextGaps?.unlinked ? (
+                  <CircleAlert
+                    className="pba-ml-warn"
+                    aria-label={nextGaps.placeholder ? "Teams not set yet: fill them on the Matches page" : "A team is not linked to the team list"}
+                  />
+                ) : null}
+              </span>
+            </div>
             {/* The only keys not printed on a button. */}
             <span className="pba-hint pba-push pba-manual-hidden-keys">
-              <kbd className="pba-kbd">Shift</kbd> <kbd className="pba-kbd">F</kbd> finish now · <kbd className="pba-kbd">Ctrl</kbd>{" "}
-              <kbd className="pba-kbd">Z</kbd> undo
+              {finished ? null : (
+                <>
+                  <kbd className="pba-kbd">Shift</kbd> <kbd className="pba-kbd">F</kbd> finish now ·{" "}
+                </>
+              )}
+              <kbd className="pba-kbd">Ctrl</kbd> <kbd className="pba-kbd">Z</kbd> undo
             </span>
           </div>
           {/* Corrections, not live controls: kept closed so the live controls fit on a laptop screen. */}
