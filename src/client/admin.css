@@ -3620,13 +3620,136 @@ tr[aria-selected="true"] .pba-row-open {
   width: 72px;
 }
 
-.pba-manual-match {
+/* Manual scoring: the two team halves with Switch sides on the divider between them, as it moves the teams. */
+.pba-resolve--manual {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.pba-resolve--manual > .pba-team-side + .pba-manual-switch + .pba-team-side,
+.pba-resolve--manual > .pba-team-side + .pba-team-side {
+  border-left: 0;
+}
+
+.pba-manual-switch {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--ad-line);
+  border-left: 1px solid var(--ad-line);
+}
+
+.pba-manual-switch-btn {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 64px;
+  padding: 10px 4px;
+  margin: 0 4px;
+  border-radius: 9px;
+  color: var(--ad-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.pba-manual-switch-btn:hover:not(:disabled) {
+  background: var(--ad-hover);
+  color: var(--ad-text);
+}
+
+.pba-manual-switch-btn:disabled {
+  opacity: 0.5;
+}
+
+.pba-manual-switch-btn svg.lucide {
+  width: 18px;
+  height: 18px;
+}
+
+/* The end of a set or match: two steps in order on their own band, the one due now in selection blue. */
+.pba-manual-flow {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--ad-line);
+  background: var(--ad-field);
+}
+
+.pba-manual-step {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pba-manual-step--next {
+  flex: 0 1 auto;
+}
+
+.pba-manual-step-cap {
+  color: var(--ad-faint);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.pba-manual-step-line {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--ad-line);
+}
+
+.pba-manual-step-preview {
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  color: var(--ad-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pba-btn.pba-manual-step-now {
+  border-color: var(--ad-accent);
+  background: var(--ad-accent-soft);
+  color: var(--ad-accent-ink);
+}
+
+.pba-btn.pba-manual-step-now:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ad-accent-soft) 70%, var(--ad-accent) 30%);
+}
+
+.pba-btn.pba-manual-step-now svg.lucide {
+  color: var(--ad-accent-ink);
+}
+
+/* A step that is not due: what it is, without a button to press by mistake. */
+.pba-manual-step-idle {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  color: var(--ad-faint);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pba-manual-step-idle svg.lucide {
+  width: 16px;
+  height: 16px;
+}
+
+.pba-manual-step-arrow {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 7px;
+  color: var(--ad-faint);
+}
+
+.pba-manual-flow .pba-manual-hidden-keys {
+  margin-bottom: 8px;
 }
 
 .pba-btn .pba-kbd {
@@ -3693,8 +3816,12 @@ tr[aria-selected="true"] .pba-row-open {
     padding: 10px 16px;
   }
 
-  .pba-manual-match {
-    padding: 8px 16px;
+  .pba-manual-flow {
+    padding: 6px 16px 8px;
+  }
+
+  .pba-manual-switch-btn {
+    padding: 6px 4px;
   }
 }
 
